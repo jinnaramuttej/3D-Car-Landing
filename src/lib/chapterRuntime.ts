@@ -11,15 +11,17 @@ import {
   CHAPTERS,
   chapterById,
   chapterIndexAt,
+  type DistrictId,
   DRIFT,
   driftLocal,
   type Env,
   type FrameKind,
   FINALE,
+  getDistrictFrame,
   getParkedFrame,
   getStartFrame,
   IGNITION,
-  MARKERS,
+  isDistrict,
   type Waypoint,
 } from './chapters';
 
@@ -30,6 +32,7 @@ const NUM_KEYS = [
   'fog',
   'exposure',
   'clouds',
+  'enclosed',
   'sunIntensity',
   'sunAzimuth',
   'sunElevation',
@@ -83,8 +86,8 @@ export const chapterState = {
   /** 0 = engine off and dark .. 1 = lights fully up (chapter II ignition). */
   ignition: 0,
   engineOn: false,
-  /** Schedule mile markers: 0..1 each, shown as the camera reaches them. */
-  markers: [0, 0, 0],
+  /** 0..1 bell across a chapter-to-chapter move (peaks halfway): extra fog, lights dip. */
+  transition: 0,
   /** One frame: the camera should cut (and the frame cross-dissolve). */
   cut: false,
   /** One frame: progress jumped (mini-map): everything snaps. */
@@ -106,6 +109,7 @@ function targetEnv(ci: number, local: number, out: EnvState) {
   const next = CHAPTERS[ci + 1];
   const w = next ? smoothstep(local, 1 - c.blend, 1) : 0;
   const u = smoothstep(local, 0.04, 0.92);
+  chapterState.transition = Math.sin(Math.PI * w);
   const end = (k: keyof Env) => (c.envEnd?.[k] ?? c.env[k]) as never;
   for (const k of NUM_KEYS) {
     const v = lerp(c.env[k], end(k), u);
@@ -115,6 +119,18 @@ function targetEnv(ci: number, local: number, out: EnvState) {
     _ca.set(c.env[k]).lerp(_cb.set(end(k)), u);
     if (next) _ca.lerp(_cb.set(next.env[k]), w);
     out[k].copy(_ca);
+  }
+  // A move between districts lifts out of the hall into morning mist over the water and
+  // back down into the next one: the fog and light cross-fade through that in-between.
+  if (next && (c.district || next.district)) {
+    const t = chapterState.transition;
+    const d = CONFIG.districts;
+    out.enclosed = lerp(out.enclosed, 0.2, t * 0.9);
+    out.fog = lerp(out.fog, d.transitionFog, t);
+    out.fogColor.lerp(_cb.set(d.transitionFogColor), t * 0.85);
+    out.hemi = lerp(out.hemi, 0.9, t);
+    out.sunIntensity = lerp(out.sunIntensity, 1.2, t * 0.8);
+    out.exposure *= 1 - 0.1 * t;
   }
   return out;
 }
@@ -138,6 +154,23 @@ function targetLook(bi: number, local: number, out: BeatLook) {
 const _f = new Vector3();
 const _d = new Vector3();
 const JUMP = 0.04;
+
+/** Chapter index of each district. */
+const DISTRICT_CHAPTER = Object.fromEntries(CHAPTERS.map((c, i) => [c.district ?? '', i])) as Record<DistrictId, number>;
+
+/** Is this district's set worth drawing (its chapter or a neighbour, i.e. during a move)? */
+export function districtVisible(id: DistrictId) {
+  return Math.abs(chapterState.chapter - DISTRICT_CHAPTER[id]) <= 1;
+}
+
+/** 0..1: how much this district is the one on screen (fades across the move). */
+export function districtWeight(id: DistrictId) {
+  const i = DISTRICT_CHAPTER[id];
+  const c = chapterState.chapter;
+  if (c === i) return 1 - (CHAPTERS[i + 1] ? smoothstep(chapterState.chapterLocal, 1 - CHAPTERS[i].blend * 0.5, 1) : 0);
+  if (c === i - 1) return smoothstep(chapterState.chapterLocal, 1 - CHAPTERS[c].blend * 0.5, 1);
+  return 0;
+}
 
 /** Advances chapterState from the raw global progress. `cameraPos` = last frame's camera. */
 export function stepChapters(raw: number, dt: number, cameraPos: Vector3) {
@@ -245,17 +278,6 @@ export function stepChapters(raw: number, dt: number, cameraPos: Vector3) {
   }
   st.extraS = approach + launchS;
 
-  // Mile markers show up as the camera reaches them (and stay up afterwards)
-  const frame = getParkedFrame();
-  forwardOf(frame.heading, _f);
-  const camZ = _d.copy(cameraPos).sub(frame.origin).dot(_f);
-  const markersBeat = BEATS.findIndex((b) => b.id === 'markers');
-  st.markers.forEach((_, i) => {
-    const z = MARKERS.firstZ + i * MARKERS.spacing;
-    st.markers[i] =
-      bi > markersBeat ? 1 : bi === markersBeat ? smoothstep(camZ, z - MARKERS.showFrom, z - MARKERS.showTo) : 0;
-  });
-
   st.initialized = true;
 }
 
@@ -287,6 +309,7 @@ const followFrame: Frame = { origin: new Vector3(), heading: 0 };
 export function frameFor(kind: FrameKind): Frame {
   if (kind === 'start') return getStartFrame();
   if (kind === 'parked') return getParkedFrame();
+  if (isDistrict(kind)) return getDistrictFrame(kind);
   // 'follow' matches the drift's 'path' frame, so the launch hands over without a seam
   followFrame.origin.copy(carState.position);
   followFrame.heading = carState.pathHeading;
@@ -365,6 +388,8 @@ export type BeatTarget = {
 
 const _next = localPose();
 const _cur = localPose();
+const _w1 = new Vector3();
+const _w2 = new Vector3();
 
 /** Where the camera wants to be for the current beat (frame-local). */
 export function beatCameraTarget(mobile: boolean, out: BeatTarget) {
@@ -375,12 +400,21 @@ export function beatCameraTarget(mobile: boolean, out: BeatTarget) {
   samplePath(pathOf(bi, mobile), local, _cur, b.move);
   let dof = b.dof ?? 0;
   let focusRange = b.focusRange ?? 3;
-  // ease into the next beat's first waypoint (same frame and no dissolve only)
-  if (next && next.frame === b.frame && next.enter !== 'dissolve') {
+  // ease into the next beat's first waypoint; across frames (a district hop) it's a
+  // straight move through the fog, carried into this beat's frame
+  if (next && next.enter !== 'dissolve' && !(b.id === 'launch')) {
     const w = smoothstep(local, 1 - (b.blend ?? 0.18), 1);
     if (w > 0) {
       samplePath(pathOf(bi + 1, mobile), 0, _next);
-      lerpPose({ pos: _cur.pos.clone(), look: _cur.look.clone(), fov: _cur.fov, shift: _cur.shift }, _next, w, _cur);
+      const across = next.frame !== b.frame;
+      if (across) {
+        const from = frameFor(next.frame);
+        const to = frameFor(b.frame);
+        worldToFrame(to, frameToWorld(from, _next.pos, _w1), _next.pos);
+        worldToFrame(to, frameToWorld(from, _next.look, _w2), _next.look);
+      }
+      const ww = across ? w * w * (3 - 2 * w) : w;
+      lerpPose({ pos: _cur.pos.clone(), look: _cur.look.clone(), fov: _cur.fov, shift: _cur.shift }, _next, ww, _cur, across ? 'line' : 'orbit');
       dof = lerp(dof, next.dof ?? 0, w);
       focusRange = lerp(focusRange, next.focusRange ?? 3, w);
     }

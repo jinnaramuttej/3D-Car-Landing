@@ -18,14 +18,42 @@ import type { Env } from '@/lib/chapters';
  * scene.environment over to it under the smoke at the start of chapter IV.
  */
 export function createDayEnvironment(gl: WebGLRenderer, env: Env, sunDir: Vector3): Texture {
+  return bake(gl, {
+    top: new Color(env.skyTop),
+    horizon: new Color(env.skyHorizon),
+    glow: new Color(env.skyGlow),
+    ground: new Color('#3d3a36'),
+    sun: new Color(env.sun).multiplyScalar(40),
+    sunDir,
+  });
+}
+
+/**
+ * Inside the district halls: a dark room with a soft light overhead, so steel and
+ * polished floors don't reflect an outdoor sky. Swapped in mid-move, under the fog.
+ */
+export function createHallEnvironment(gl: WebGLRenderer): Texture {
+  return bake(gl, {
+    top: new Color('#3a3e48'),
+    horizon: new Color('#101115'),
+    glow: new Color('#000000'),
+    ground: new Color('#060607'),
+    sun: new Color('#000000'),
+    sunDir: new Vector3(0, 1, 0),
+  });
+}
+
+type Sky = { top: Color; horizon: Color; glow: Color; ground: Color; sun: Color; sunDir: Vector3 };
+
+function bake(gl: WebGLRenderer, sky: Sky): Texture {
   const material = new ShaderMaterial({
     uniforms: {
-      uTop: { value: new Color(env.skyTop) },
-      uHorizon: { value: new Color(env.skyHorizon) },
-      uGlow: { value: new Color(env.skyGlow) },
-      uGround: { value: new Color('#3d3a36') },
-      uSun: { value: new Color(env.sun).multiplyScalar(40) },
-      uSunDir: { value: sunDir.clone().normalize() },
+      uTop: { value: sky.top },
+      uHorizon: { value: sky.horizon },
+      uGlow: { value: sky.glow },
+      uGround: { value: sky.ground },
+      uSun: { value: sky.sun },
+      uSunDir: { value: sky.sunDir.clone().normalize() },
     },
     vertexShader: /* glsl */ `
       varying vec3 vDir;

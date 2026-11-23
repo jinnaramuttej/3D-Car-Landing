@@ -14,7 +14,14 @@ import { Car } from './Car';
 import { CameraRig } from './CameraRig';
 import { ChapterProps } from './ChapterProps';
 import { Cityscape } from './Cityscape';
-import { createDayEnvironment } from './dayEnvironment';
+import { createDayEnvironment, createHallEnvironment } from './dayEnvironment';
+import { Arena } from './districts/Arena';
+import { Chamber } from './districts/Chamber';
+import { Expo } from './districts/Expo';
+import { Heartbeat } from './districts/Heartbeat';
+import { PitLane } from './districts/PitLane';
+import { DistrictLights } from './districts/shared';
+import { Voices } from './districts/Voices';
 import { Effects } from './Effects';
 import { Interaction } from './Interaction';
 import { Rain } from './Rain';
@@ -33,7 +40,7 @@ const _sun = new Vector3();
  *   -3  Scene      global progress -> chapterState (stepChapters), then the car's
  *                  kinematics (stepDrive), then the chapter's light, fog and env map
  *   -2  Car        applies carState, publishes wheel contacts and headlight beams
- *   -1  Smoke, Rain, SkidMarks, ChapterProps, CameraRig, Interaction
+ *   -1  Smoke, Rain, SkidMarks, ChapterProps, the district sets, CameraRig, Interaction
  */
 export function Scene() {
   const camera = useThree((s) => s.camera);
@@ -43,7 +50,7 @@ export function Scene() {
   const fog = useMemo(() => new FogExp2('#0c1016', 0.009), []);
   const sun = useRef<DirectionalLight>(null!);
   const hemi = useRef<HemisphereLight>(null!);
-  const envs = useRef<{ night: Texture | null; day: Texture | null }>({ night: null, day: null });
+  const envs = useRef<{ night: Texture | null; day: Texture | null; hall: Texture | null }>({ night: null, day: null, hall: null });
   const sunTarget = useMemo(() => new THREE.Object3D(), []);
 
   useLayoutEffect(() => {
@@ -59,10 +66,14 @@ export function Scene() {
     // daylight environment for chapters IV-V, generated once
     const morning = chapterById('arrival').env;
     const day = createDayEnvironment(gl, morning, sunDirection(morning.sunAzimuth, morning.sunElevation, new Vector3()));
+    const hall = createHallEnvironment(gl);
     envs.current.day = day;
+    envs.current.hall = hall;
     return () => {
       day.dispose();
+      hall.dispose();
       envs.current.day = null;
+      envs.current.hall = null;
     };
   }, [gl]);
 
@@ -93,10 +104,11 @@ export function Scene() {
     fog.color.copy(e.fogColor);
     fog.density = e.fog;
 
-    // night HDRI (drei sets it) until chapter IV, then the generated daylight sky
+    // night HDRI (drei sets it) until chapter IV, then the generated daylight sky; inside
+    // the district halls a dark room (switched halfway through the move, under the fog)
     const E = envs.current;
-    if (!E.night && scene.environment && scene.environment !== E.day) E.night = scene.environment;
-    const want = e.day > 0.5 && E.day ? E.day : E.night;
+    if (!E.night && scene.environment && scene.environment !== E.day && scene.environment !== E.hall) E.night = scene.environment;
+    const want = e.enclosed > 0.5 && E.hall ? E.hall : e.day > 0.5 && E.day ? E.day : E.night;
     if (want && scene.environment !== want) scene.environment = want;
     scene.environmentIntensity = e.env;
 
@@ -138,6 +150,14 @@ export function Scene() {
       <Smoke />
       <Rain />
       <ChapterProps />
+      {/* chapters VI-XI: sets out over the water (src/scene/districts) */}
+      <Arena />
+      <PitLane />
+      <Voices />
+      <Expo />
+      <Heartbeat />
+      <Chamber />
+      <DistrictLights />
       <CameraRig />
       <Interaction />
       <Effects />

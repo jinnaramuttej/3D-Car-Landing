@@ -9,6 +9,7 @@ import {
   BufferGeometry,
   Color,
   InstancedBufferAttribute,
+  type Group,
   type InstancedMesh,
   LineBasicMaterial,
   MathUtils,
@@ -49,6 +50,8 @@ uniform vec3 uSunDir;
 uniform vec3 uSunColor;
 uniform float uSunGlow;
 uniform float uClouds;
+uniform vec3 uFogColor;
+uniform float uEnclosed;
 varying vec3 vDir;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -66,13 +69,14 @@ void main() {
   col += uGlow * low * (0.3 + 0.7 * city);
   // the sun (dawn and morning): a soft halo low on the city side and a small disc
   float sd = max(dot(d, uSunDir), 0.0);
-  col += uSunColor * uSunGlow * (pow(sd, 8.0) * 0.6 + pow(sd, 64.0) * 1.5 + pow(sd, 2400.0) * 40.0);
+  col += uSunColor * uSunGlow * (pow(sd, 8.0) * 0.25 + pow(sd, 64.0) * 0.9 + pow(sd, 2400.0) * 30.0);
   // clouds: dark rain clouds at night, thin broken ones by morning
   vec2 cuv = d.xz / max(h + 0.18, 0.05) * 1.4 + vec2(uTime * 0.004, uTime * 0.002);
   float cl = fbm(cuv);
   col *= mix(1.0, 0.8 + 0.45 * cl, uClouds * smoothstep(-0.02, 0.25, h));
   col = mix(col, col * 0.75 + uHorizon * 0.35, (1.0 - uClouds) * smoothstep(0.55, 0.8, cl) * smoothstep(0.02, 0.3, h));
   if (h < 0.0) col = uHorizon;
+  col = mix(col, uFogColor, uEnclosed); // inside a district hall
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }
@@ -93,6 +97,8 @@ function Sky({ cityDir }: { cityDir: Vector2 }) {
           uSunColor: { value: new Color() },
           uSunGlow: { value: 0 },
           uClouds: { value: 1 },
+          uFogColor: { value: new Color() },
+          uEnclosed: { value: 0 },
         },
         vertexShader: skyVert,
         fragmentShader: skyFrag,
@@ -114,6 +120,8 @@ function Sky({ cityDir }: { cityDir: Vector2 }) {
     (u.uSunColor.value as Color).copy(e.sun);
     u.uSunGlow.value = MathUtils.smoothstep(e.sunIntensity, 0.4, 1.6);
     u.uClouds.value = e.clouds;
+    (u.uFogColor.value as Color).copy(e.fogColor);
+    u.uEnclosed.value = e.enclosed;
     u.uTime.value = state.clock.elapsedTime;
     mesh.current.position.copy(state.camera.position);
   });
@@ -203,7 +211,7 @@ function LightSpritesInner({ sprites, intensity }: { sprites: Sprite[]; intensit
   }, [sprites]);
   useFrame((state) => {
     material.uniforms.uTime.value = state.clock.elapsedTime;
-    material.uniforms.uIntensity.value = intensity() * chapterState.env.city;
+    material.uniforms.uIntensity.value = intensity() * chapterState.env.city * (1 - chapterState.env.enclosed);
     material.uniforms.uHaze.value = CONFIG.coast.haze * 0.6;
   });
   return <instancedMesh ref={mesh} args={[geometry, material, sprites.length]} frustumCulled={false} />;
@@ -377,7 +385,7 @@ function Buildings({ layout }: { layout: CityLayout }) {
   useFrame(() => {
     const e = chapterState.env;
     uniforms.glow.value = CONFIG.coast.windowGlow * e.city;
-    uniforms.haze.value = CONFIG.coast.haze;
+    uniforms.haze.value = CONFIG.coast.haze + e.enclosed * 0.06; // gone inside a district hall
     uniforms.hazeColor.value.copy(e.fogColor);
     material.color.copy(e.buildings);
   });
@@ -458,7 +466,7 @@ function Bridge({ b }: { b: BridgeLayout }) {
   useFrame(() => {
     // hazy grey against the morning sky, a near-black cut-out at night
     const e = chapterState.env;
-    solids.silhouette.color.copy(e.buildings).lerp(e.fogColor, 0.55);
+    solids.silhouette.color.copy(e.buildings).lerp(e.fogColor, 0.55 + 0.45 * e.enclosed);
   });
 
   return (
@@ -553,15 +561,23 @@ export function Cityscape() {
     return { cityDir, layout, bridge, shore, bridgeLights };
   }, [track, mobile]);
 
+  // inside a district hall the world outside is fog anyway: skip drawing it
+  const outside = useRef<Group>(null!);
+  useFrame(() => {
+    outside.current.visible = chapterState.env.enclosed < 0.985;
+  });
+
   return (
     <group>
       <Sky cityDir={cityDir} />
-      <Buildings layout={layout} />
-      <NeonSigns layout={layout} />
-      <Bridge b={bridge} />
-      <LightSprites sprites={bridgeLights} intensity={() => CONFIG.coast.bridgeLights} />
-      <LightSprites sprites={shore} intensity={() => CONFIG.coast.shoreLights} />
-      <LightSprites sprites={layout.aviation} intensity={() => CONFIG.coast.bridgeLights} />
+      <group ref={outside}>
+        <Buildings layout={layout} />
+        <NeonSigns layout={layout} />
+        <Bridge b={bridge} />
+        <LightSprites sprites={bridgeLights} intensity={() => CONFIG.coast.bridgeLights} />
+        <LightSprites sprites={shore} intensity={() => CONFIG.coast.shoreLights} />
+        <LightSprites sprites={layout.aviation} intensity={() => CONFIG.coast.bridgeLights} />
+      </group>
     </group>
   );
 }

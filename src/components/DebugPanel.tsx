@@ -7,7 +7,9 @@ import { advance } from '@react-three/fiber';
 import { CONFIG, RANGES, type Config } from '@/lib/config';
 import { carState } from '@/lib/motion';
 import { SHOTS } from '@/lib/script';
-import { BEATS, CHAPTERS, DRIFT, fromDriftLocal } from '@/lib/chapters';
+import { BEATS, CHAPTERS, DISTRICTS, DRIFT, fromDriftLocal, getDistrictFrame } from '@/lib/chapters';
+import { insidePolygon, landPolygon } from '@/lib/coast';
+import { getTrack } from '@/lib/motion';
 import { chapterState } from '@/lib/chapterRuntime';
 import { interaction } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
@@ -130,7 +132,29 @@ export function DebugPanel() {
     // Console access while debugging: __gt3r.store.getState().setProgress(0.5)
     // `advance(performance.now())` renders one frame by hand (useful when the tab is throttled).
     const w = window as unknown as { __gt3r?: unknown };
-    w.__gt3r = { store: useStore, config: CONFIG, carState, cameraState, chapterState, interaction, advance };
+    w.__gt3r = {
+      store: useStore,
+      config: CONFIG,
+      carState,
+      cameraState,
+      chapterState,
+      interaction,
+      advance,
+      // is each district platform out over the water? (debug only)
+      checkDistricts: () => {
+        const land = landPolygon(getTrack());
+        return Object.entries(DISTRICTS).map(([id, d]) => {
+          const o = getDistrictFrame(id as keyof typeof DISTRICTS).origin;
+          let onLand = 0;
+          for (let a = 0; a < 16; a++) {
+            const x = o.x + Math.cos((a / 16) * Math.PI * 2) * d.radius;
+            const z = o.z + Math.sin((a / 16) * Math.PI * 2) * d.radius;
+            if (insidePolygon(land, x, z)) onLand++;
+          }
+          return { id, onLand, centreOnLand: insidePolygon(land, o.x, o.z) };
+        });
+      },
+    };
 
     // HUD: which drift shot or section is on screen right now
     const id = window.setInterval(() => {

@@ -133,13 +133,14 @@ export function Effects() {
 
     fx.sanitize.exposure.value = chapterState.env.exposure;
 
-    // Cross-dissolve: a dissolve beat or a mini-map jump, or the camera jumping between
-    // the drift and the chapter cameras. The drift's own hard cuts stay hard.
+    // Cross-dissolve: a mini-map jump, or the camera jumping between the drift and the
+    // chapter cameras. District hops are real camera moves (fast ones included), and the
+    // drift's own hard cuts stay hard.
     camera.getWorldPosition(_pos);
     fx.dissolve.duration = p.dissolve;
     const modeChanged = motion.mode !== cameraState.mode;
     const jumped = motion.has && _pos.distanceTo(motion.prev) > p.cutDistance;
-    if (motion.has && (chapterState.cut || (jumped && (modeChanged || cameraState.mode === 'beat')))) fx.dissolve.trigger();
+    if (motion.has && (chapterState.cut || (jumped && modeChanged))) fx.dissolve.trigger();
     motion.mode = cameraState.mode;
 
     const mb = fx.motionBlur;

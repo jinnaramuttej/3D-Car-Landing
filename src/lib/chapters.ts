@@ -11,7 +11,18 @@ import type { Vec3 } from './script';
  *   II   Ignition    lights and engine come on, the car pulls away into the first bend
  *   III  The Turn    the drift scene (src/lib/script.ts), untouched, at its original pace
  *   IV   Clearing    the smoke settles, the rain thins, dawn breaks, the title forms
- *   V    Arrival     warm morning; the festival content, then the car leaves
+ *   V    Arrival     warm morning beside the parked car
+ *   VI   Arena       Robowars: dark steel, orange rim light, a robot you can resize
+ *   VII  Pit Lane    the competitions as garage bays
+ *   VIII Voices      past speakers on a globe
+ *   IX   Expo        four holographic pedestals
+ *   X    Heartbeat   the stem cell donor drive: slow, warm, quiet
+ *   XI   Chamber     the MUN in a purple hall
+ *        Finale      back at the car; it leaves into the sunrise
+ *
+ * Chapters VI-XI are DISTRICTS: sets on platforms out over the sea, a hop of roughly
+ * 100 m apart. Moving between them is always a camera move with a fog/light cross-fade
+ * (the fog thickens mid-move), never a cut.
  *
  * Each chapter has a scroll length in viewport heights (`pages`), an environment at its
  * start (`env`) and optionally at its end (`envEnd`). The runtime eases from one chapter's
@@ -19,26 +30,19 @@ import type { Vec3 } from './script';
  * colour and exposure never jump.
  *
  * Every chapter except III is made of camera BEATS: waypoints in a frame (x = left,
- * y = up, z = forward, metres), like the old sections. Frames:
- *   start   where the car waits before the drift (chapters I and II)
- *   follow  rides with the car along the road, facing down it (the launch in II)
- *   parked  where the drift leaves the car (chapters IV and V)
- * `enter: 'dissolve'` cuts the camera to the beat and cross-dissolves over the cut.
+ * y = up, z = forward, metres). Frames:
+ *   start    where the car waits before the drift (chapters I and II)
+ *   follow   rides with the car along the road, facing down it (the launch in II)
+ *   parked   where the drift leaves the car (IV, V and the finale)
+ *   <district id>  the district's own platform (VI-XI)
+ * A beat eases into the next beat's first waypoint over its last `blend`, across frames
+ * too, so the camera always travels. (A mini-map jump still cross-dissolves.)
  */
 
-export type ChapterId = 'stillness' | 'ignition' | 'turn' | 'clearing' | 'arrival';
-export type BeatId =
-  | 'still'
-  | 'ignite'
-  | 'launch'
-  | 'clearing'
-  | 'arrive'
-  | 'numbers'
-  | 'pitlane'
-  | 'markers'
-  | 'partners'
-  | 'finale';
-export type FrameKind = 'start' | 'follow' | 'parked';
+export type DistrictId = 'arena' | 'pitlane' | 'voices' | 'expo' | 'heartbeat' | 'chamber';
+export type ChapterId = 'stillness' | 'ignition' | 'turn' | 'clearing' | 'arrival' | DistrictId | 'finale';
+export type BeatId = 'still' | 'ignite' | 'launch' | 'clearing' | 'arrive' | DistrictId | 'finale';
+export type FrameKind = 'start' | 'follow' | 'parked' | DistrictId;
 
 /** Everything about the world that changes from night to morning. Colours are hex. */
 export type Env = {
@@ -54,6 +58,8 @@ export type Env = {
   skyGlow: string;
   /** Cloud cover in the sky shader, 0 clear .. 1 rain clouds. */
   clouds: number;
+  /** 0 outdoors .. 1 inside a district hall: the sky, the far city and the bridge go to fog. */
+  enclosed: number;
   sun: string;
   sunIntensity: number;
   /** Degrees, 0 = straight down the road from the parked car, negative = over the city. */
@@ -137,6 +143,8 @@ export type Chapter = {
   envEnd?: Partial<Env>;
   /** Fraction of the chapter spent easing into the next chapter's environment. */
   blend: number;
+  /** Districts (VI-XI): the set this chapter lives in. */
+  district?: DistrictId;
   start: number;
   end: number;
 };
@@ -152,6 +160,7 @@ const NIGHT: Env = {
   skyHorizon: '#131922',
   skyGlow: '#4a2f1d',
   clouds: 1,
+  enclosed: 0,
   sun: '#9fc2d6',
   sunIntensity: 0.25,
   sunAzimuth: 140,
@@ -229,6 +238,62 @@ const MORNING: Env = {
   bloom: 0.55,
 } as Env;
 
+/** Inside a district hall: no sky, no sun, no rain; its own fog and a little sky light. */
+const hall = (fog: number, fogColor: string, hemiSky: string, hemiGround: string, extra: Partial<Env> = {}): Env => ({
+  ...MORNING,
+  rain: 0,
+  enclosed: 1,
+  fog,
+  fogColor,
+  clouds: 0,
+  sunIntensity: 0,
+  hemiSky,
+  hemiGround,
+  hemi: 0.3,
+  env: 0.6, // of the dark hall env map (see dayEnvironment.ts)
+  lamps: 0,
+  city: 0,
+  wet: 0,
+  groundEnv: 0,
+  exposure: 1.05,
+  bloom: 1.1,
+  ...extra,
+});
+
+const ARENA = hall(0.03, '#0d0a09', '#4a4f58', '#1a0f08', { hemi: 0.22, env: 0.9, bloom: 1.2 });
+const PITLANE = hall(0.022, '#16181c', '#9aa4b0', '#2a2620', { hemi: 0.5, env: 0.7, bloom: 0.9 });
+const VOICES_HALL = hall(0.028, '#060914', '#3b4c7a', '#0a0c14', { hemi: 0.2, bloom: 1.25 });
+const EXPO_HALL = hall(0.026, '#04090c', '#3a6a7a', '#05080a', { hemi: 0.2, bloom: 1.3 });
+const HEARTBEAT_HALL = hall(0.03, '#1e0c09', '#7a4636', '#140806', { hemi: 0.32, exposure: 1 });
+const CHAMBER_HALL = hall(0.026, '#120a1c', '#6a4a9a', '#0e0814', { hemi: 0.3, bloom: 1.15 });
+
+/** The finale: back outside, the sun just up, straight down the road. */
+const SUNRISE: Env = {
+  ...MORNING,
+  enclosed: 0,
+  fog: 0.0028,
+  fogColor: '#b98a6c',
+  exposure: 0.9,
+  skyTop: '#2f4874',
+  skyHorizon: '#e89a6a',
+  skyGlow: '#ff8a4a',
+  clouds: 0.35,
+  sun: '#ffb070',
+  sunIntensity: 2.1,
+  sunAzimuth: 0,
+  sunElevation: 3,
+  hemiSky: '#9fb4d6',
+  hemiGround: '#6a4a38',
+  hemi: 1.1,
+  env: 0.9,
+  buildings: '#7a7068',
+  ground: '#2a2624',
+  wet: 0.75,
+  groundEnv: 0.28,
+  seaEnv: 0.9,
+  bloom: 0.45,
+};
+
 /* ---------------------------------------------------------------- chapters */
 
 const chapterList: Omit<Chapter, 'start' | 'end'>[] = [
@@ -245,7 +310,14 @@ const chapterList: Omit<Chapter, 'start' | 'end'>[] = [
     envEnd: DAWN,
     blend: 0.25,
   },
-  { id: 'arrival', numeral: 'V', title: 'Arrival', pages: 9.6, env: MORNING, envEnd: { sunElevation: 18, sunIntensity: 2.8, fog: 0.004 }, blend: 0 },
+  { id: 'arrival', numeral: 'V', title: 'Arrival', pages: 1.8, env: MORNING, blend: 0.3 },
+  { id: 'arena', numeral: 'VI', title: 'Arena', pages: 2.4, env: ARENA, blend: 0.3, district: 'arena' },
+  { id: 'pitlane', numeral: 'VII', title: 'Pit Lane', pages: 2.8, env: PITLANE, blend: 0.25, district: 'pitlane' },
+  { id: 'voices', numeral: 'VIII', title: 'Hall of Voices', pages: 2.4, env: VOICES_HALL, blend: 0.3, district: 'voices' },
+  { id: 'expo', numeral: 'IX', title: 'Expo', pages: 3, env: EXPO_HALL, blend: 0.25, district: 'expo' },
+  { id: 'heartbeat', numeral: 'X', title: 'Heartbeat', pages: 2.2, env: HEARTBEAT_HALL, blend: 0.3, district: 'heartbeat' },
+  { id: 'chamber', numeral: 'XI', title: 'Chamber', pages: 2.2, env: CHAMBER_HALL, blend: 0.35, district: 'chamber' },
+  { id: 'finale', numeral: 'Fin', title: 'Finale', pages: 2, env: SUNRISE, blend: 0 },
 ];
 
 const beatList: Omit<Beat, 'start' | 'end'>[] = [
@@ -311,91 +383,124 @@ const beatList: Omit<Beat, 'start' | 'end'>[] = [
     anchor: 0.62,
   },
   {
-    // Slow orbit from the front-left to the rear-left.
+    // Slow orbit from the front-left to the rear-left; leaves toward the arena.
     id: 'arrive',
     chapter: 'arrival',
-    pages: 1.4,
+    pages: 1.8,
     frame: 'parked',
     camera: [
       { position: [6.85, 1.5, 5.58], lookAt: [0, 0.7, 0], fov: 32, screenShift: 1.9 },
       { position: [8.38, 1.8, -1.52], lookAt: [0, 0.7, 0], fov: 32, screenShift: 1.9 },
-      { position: [4.32, 2.0, -7.87], lookAt: [0, 0.7, 0], fov: 32, screenShift: 1.9 },
     ],
     mobileCamera: { position: [7.32, 1.9, 4.18], lookAt: [0, 0.6, 0], fov: 36 },
+    blend: 0.3,
     look: { headlights: 0.8, accent: 0.6, smoke: 0 },
-    anchor: 0.3,
-  },
-  {
-    // Tight on the headlight while the numbers come up.
-    id: 'numbers',
-    chapter: 'arrival',
-    pages: 1.2,
-    frame: 'parked',
-    camera: [
-      { position: [2.15, 0.7, 3.05], lookAt: [0.62, 0.84, 1.85], fov: 30, screenShift: 0.32 },
-      { position: [1.85, 0.68, 2.8], lookAt: [0.62, 0.82, 1.85], fov: 28, screenShift: 0.32 },
-    ],
-    mobileCamera: { position: [1.85, 0.9, 5.13], lookAt: [0.3, 0.6, 1.8], fov: 34 },
-    look: { headlights: 1, accent: 0.3, smoke: 0 },
-    dof: 1.8,
-    focusRange: 0.8,
-    anchor: 0.35,
-  },
-  {
-    // Pinned: the garage bays slide sideways while the camera tracks the flank.
-    id: 'pitlane',
-    chapter: 'arrival',
-    pages: 2.4,
-    frame: 'parked',
-    camera: [
-      { position: [3.9, 1.35, 3.88], lookAt: [0.3, 0.55, 2.2], fov: 32 },
-      { position: [3.9, 1.45, -3.68], lookAt: [0.3, 0.65, -2.0], fov: 32 },
-    ],
-    move: 'line',
-    mobileCamera: { position: [5.69, 2.2, 1.35], lookAt: [0, 0.4, 0], fov: 38 },
-    look: { headlights: 0.8, accent: 0.5, smoke: 0 },
-    dof: 1.4,
-    focusRange: 2.5,
-    anchor: 0.12,
-  },
-  {
-    // Down the road past one mile marker per day.
-    id: 'markers',
-    chapter: 'arrival',
-    pages: 1.6,
-    frame: 'parked',
-    camera: [
-      { position: [-3, 1.3, -6], lookAt: [-6.5, 0.8, 22], fov: 36 },
-      { position: [-3, 1.4, 58], lookAt: [-6.5, 0.8, 86], fov: 36 },
-    ],
-    move: 'line',
-    mobileCamera: { position: [-3.2, 1.6, -5], lookAt: [-7, 1.0, 30], fov: 40 },
-    blend: 0.2,
-    look: { headlights: 0.8, accent: 0, smoke: 0 },
-    anchor: 0.15,
-  },
-  {
-    // On down the road past the partner billboards.
-    id: 'partners',
-    chapter: 'arrival',
-    pages: 1.4,
-    frame: 'parked',
-    camera: [
-      { position: [-2.8, 1.5, 60], lookAt: [-9, 3.4, 92], fov: 34 },
-      { position: [-2.6, 1.7, 112], lookAt: [-10, 3.6, 150], fov: 34 },
-    ],
-    move: 'line',
-    mobileCamera: { position: [-3, 1.8, 62], lookAt: [-10, 3.4, 104], fov: 40 },
-    look: { headlights: 0.8, accent: 0, smoke: 0 },
     anchor: 0.2,
   },
   {
-    // Back at the car (dissolve): rev, flare, it leaves toward the sun.
+    // Round the octagon; the robot sits centre-right of frame.
+    id: 'arena',
+    chapter: 'arena',
+    pages: 2.4,
+    frame: 'arena',
+    camera: [
+      { position: [0, 3.4, 13.5], lookAt: [0, 0.7, 0], fov: 32, screenShift: 1.4 },
+      { position: [6.5, 2.8, 10.5], lookAt: [0, 0.7, 0], fov: 30, screenShift: 1.4 },
+    ],
+    mobileCamera: { position: [0, 4.4, 15], lookAt: [0, 0.6, 0], fov: 38 },
+    blend: 0.3,
+    look: { headlights: 0, accent: 0, smoke: 0 },
+    dof: 1.2,
+    focusRange: 4,
+    anchor: 0.25,
+  },
+  {
+    // Down the row of garages while the bays slide past.
+    id: 'pitlane',
+    chapter: 'pitlane',
+    pages: 2.8,
+    frame: 'pitlane',
+    camera: [
+      { position: [12, 1.7, 8], lookAt: [8, 1.3, -3], fov: 32 },
+      { position: [-12, 1.7, 8], lookAt: [-16, 1.3, -3], fov: 32 },
+    ],
+    move: 'line',
+    mobileCamera: { position: [0, 2.4, 14], lookAt: [0, 1.4, -3], fov: 40 },
+    blend: 0.25,
+    look: { headlights: 0, accent: 0, smoke: 0 },
+    anchor: 0.1,
+  },
+  {
+    // The globe right of frame, the speakers' panel on the left.
+    id: 'voices',
+    chapter: 'voices',
+    pages: 2.4,
+    frame: 'voices',
+    camera: [
+      { position: [0, 3.2, 12], lookAt: [0, 3, 0], fov: 32, screenShift: 1.8 },
+      { position: [1.8, 3.3, 11], lookAt: [0, 3, 0], fov: 30, screenShift: 1.8 },
+    ],
+    mobileCamera: { position: [0, 3.2, 12], lookAt: [0, 3, 0], fov: 38 },
+    blend: 0.3,
+    look: { headlights: 0, accent: 0, smoke: 0 },
+    anchor: 0.25,
+  },
+  {
+    // A dolly along the four pedestals, a beat at each.
+    id: 'expo',
+    chapter: 'expo',
+    pages: 3,
+    frame: 'expo',
+    camera: [
+      { t: 0, position: [-9, 2.2, 7.6], lookAt: [-9, 1.95, 0], fov: 32 },
+      { t: 0.33, position: [-3, 2.2, 7.6], lookAt: [-3, 1.95, 0], fov: 32 },
+      { t: 0.66, position: [3, 2.2, 7.6], lookAt: [3, 1.95, 0], fov: 32 },
+      { t: 1, position: [9, 2.2, 7.6], lookAt: [9, 1.95, 0], fov: 32 },
+    ],
+    move: 'line',
+    mobileCamera: { position: [0, 2.6, 15], lookAt: [0, 1.6, 0], fov: 40 },
+    blend: 0.25,
+    look: { headlights: 0, accent: 0, smoke: 0 },
+    dof: 1.4,
+    focusRange: 2.5,
+    anchor: 0.08,
+  },
+  {
+    // A slow push toward the pulse. Nothing else moves.
+    id: 'heartbeat',
+    chapter: 'heartbeat',
+    pages: 2.2,
+    frame: 'heartbeat',
+    camera: [
+      { position: [0, 1.5, 9], lookAt: [0, 1.5, 0], fov: 32, screenShift: -1.6 },
+      { position: [0, 1.5, 7.2], lookAt: [0, 1.5, 0], fov: 30, screenShift: -1.6 },
+    ],
+    mobileCamera: { position: [0, 1.8, 10], lookAt: [0, 1.5, 0], fov: 38 },
+    blend: 0.3,
+    look: { headlights: 0, accent: 0, smoke: 0 },
+    anchor: 0.25,
+  },
+  {
+    // The chamber from the back benches, drifting toward the dais.
+    id: 'chamber',
+    chapter: 'chamber',
+    pages: 2.2,
+    frame: 'chamber',
+    camera: [
+      { position: [0, 2.6, 12], lookAt: [0, 1.4, -4], fov: 34 },
+      { position: [4.5, 2.3, 8], lookAt: [0, 1.4, -4], fov: 32 },
+    ],
+    mobileCamera: { position: [0, 3, 14], lookAt: [0, 1.4, -4], fov: 40 },
+    blend: 0.35,
+    look: { headlights: 0, accent: 0, smoke: 0 },
+    anchor: 0.25,
+  },
+  {
+    // Back at the car: rev, flare, and it leaves into the sunrise.
     id: 'finale',
-    chapter: 'arrival',
-    pages: 1.6,
+    chapter: 'finale',
+    pages: 2,
     frame: 'parked',
-    enter: 'dissolve',
     camera: [
       { t: 0, position: [4.52, 0.8, 8.26], lookAt: [0, 0.65, 0.4], fov: 34 },
       { t: 0.18, position: [3.72, 0.72, 7.0], lookAt: [0, 0.65, 0.4], fov: 32 },
@@ -504,15 +609,24 @@ export const FINALE = {
 /** Chapter II: when the engine catches and the lights come up (0..1 of the ignite beat). */
 export const IGNITION = { at: 0.32, lightsIn: 0.22 };
 
-/** Mile markers (schedule), parked-car frame: right-hand roadside, one per day. */
-export const MARKERS = { x: -8.4, firstZ: 18, spacing: 18, showFrom: 16, showTo: 8 };
-
-/** Partner billboards, parked-car frame, on the city side. */
-export const BILLBOARDS = { x: -12.5, firstZ: 82, spacing: 26, yawDeg: 28 };
+/**
+ * Where the district platforms sit, in the parked car's frame (x = left toward the sea,
+ * z = down the road), and how each set is turned. A loop out over the water and back:
+ * car -> arena -> pit lane -> voices -> expo -> heartbeat -> chamber -> car.
+ */
+export const DISTRICTS: Record<DistrictId, { x: number; z: number; yawDeg: number; radius: number }> = {
+  arena: { x: 62, z: 70, yawDeg: 0, radius: 16 },
+  pitlane: { x: 82, z: 178, yawDeg: 0, radius: 24 },
+  voices: { x: 178, z: 218, yawDeg: 0, radius: 16 },
+  expo: { x: 205, z: 110, yawDeg: 0, radius: 20 },
+  heartbeat: { x: 172, z: 12, yawDeg: 0, radius: 14 },
+  chamber: { x: 104, z: 24, yawDeg: 0, radius: 18 },
+};
 
 /* ------------------------------------------------------------------ frames */
 
 const startFrame: Frame & { key: string } = { origin: new Vector3(), heading: 0, key: '' };
+const districtFrames = new Map<DistrictId, Frame & { key: string }>();
 const parkedFrame: Frame & { key: string } = { origin: new Vector3(), heading: 0, key: '' };
 
 /** Where the car waits before the drift (chapters I and II). */
@@ -534,3 +648,25 @@ export function getParkedFrame(): Frame {
   }
   return parkedFrame;
 }
+
+/** A district's set: origin and heading in the world. */
+export function getDistrictFrame(id: DistrictId): Frame {
+  const track = getTrack();
+  let f = districtFrames.get(id);
+  if (!f) {
+    f = { origin: new Vector3(), heading: 0, key: '' };
+    districtFrames.set(id, f);
+  }
+  if (f.key !== track.key) {
+    const p = getParkedFrame();
+    const d = DISTRICTS[id];
+    const fwd = new Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
+    const left = new Vector3(Math.cos(p.heading), 0, -Math.sin(p.heading));
+    f.origin.copy(p.origin).addScaledVector(left, d.x).addScaledVector(fwd, d.z).setY(0);
+    f.heading = p.heading + (d.yawDeg * Math.PI) / 180;
+    f.key = track.key;
+  }
+  return f;
+}
+
+export const isDistrict = (k: string): k is DistrictId => k in DISTRICTS;

@@ -196,6 +196,18 @@ export const CONFIG = {
     liveryTime: 0.6, // seconds to change livery
   },
 
+  /** Chapters VI-XI (src/scene/districts). */
+  districts: {
+    transitionFog: 0.013, // fog density halfway through a move between districts (morning mist)
+    transitionFogColor: '#5f5c5a',
+    sparks: 140, // spark particles per click in the arena (halved on mobile)
+    robotSpin: 22, // rad/s on the robot's spinner
+    globeSpin: 0.08, // rad/s, the Hall of Voices globe
+    hologram: 1, // hologram brightness in the expo
+    heartbeatBpm: 56,
+    heartbeatLight: 1, // how much the warm light swells on each beat
+  },
+
   /** Post chain (src/scene/Effects.tsx). Mobile skips DOF, motion blur, streaks and lens drops. */
   post: {
     focusOnCar: true, // during the drift, keep the car in focus even when the shot looks past it
@@ -363,6 +375,15 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     splashOpacity: [0, 2, 0.01],
     beamOpacity: [0, 0.5, 0.005],
     beamLength: [2, 40, 0.5],
+  },
+  districts: {
+    transitionFog: [0, 0.06, 0.001],
+    sparks: [0, 400, 1],
+    robotSpin: [0, 60, 0.5],
+    globeSpin: [0, 1, 0.01],
+    hologram: [0, 3, 0.01],
+    heartbeatBpm: [30, 120, 1],
+    heartbeatLight: [0, 3, 0.01],
   },
   interaction: {
     revRise: [0.01, 1, 0.01],

@@ -25,6 +25,11 @@ export function toggleHeadlights() {
  */
 export function Interaction() {
   const camera = useThree((s) => s.camera);
+  const raycaster = useThree((s) => s.raycaster);
+  // the district sets live on layer 1 (out of the road reflection): let pointer events reach them
+  useEffect(() => {
+    raycaster.layers.enable(1);
+  }, [raycaster]);
   const mobile = useMemo(() => isMobile(), []);
   const state = useMemo(
     () => ({

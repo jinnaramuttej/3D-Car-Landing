@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useGLTF, useTexture } from '@react-three/drei';
+import { ContactShadows, useGLTF, useTexture } from '@react-three/drei';
 import {
   Box3,
   Group,
@@ -20,9 +20,10 @@ import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { carState } from '@/lib/motion';
 import { sectionState } from '@/lib/sectionRuntime';
-import { createBlobShadowTexture } from '@/lib/textures';
 import {
+  createGlassMaterial,
   createPaintMaterial,
+  createTyreMaterial,
   fixMaterial,
   LIVERY_URL,
   LIVERY_URL_MOBILE,
@@ -60,6 +61,8 @@ type Rig = {
   head: GlowMat[];
   tail: GlowMat[];
   paint: MeshPhysicalMaterial | null;
+  glass: MeshPhysicalMaterial[];
+  tyre: MeshPhysicalMaterial | null;
   rims: MeshStandardMaterial[];
   calipers: MeshStandardMaterial[];
 };
@@ -92,7 +95,7 @@ function materialsOf(mesh: Mesh) {
  * tyre, drop a pivot at the hub and re-parent the wheel under it with `attach`
  * (keeps world position), so rotation.x spins and rotation.y steers.
  */
-function buildRig(source: Object3D, livery: Texture): Rig {
+function buildRig(source: Object3D, livery: Texture, mobile: boolean): Rig {
   const verbose = process.env.NODE_ENV !== 'production' && !logged.has(source);
   logged.add(source);
   if (verbose) logNodes(source);
@@ -173,14 +176,37 @@ function buildRig(source: Object3D, livery: Texture): Rig {
   const tail = new Map<MeshStandardMaterial, number>();
   const roles: MaterialRoles = { rims: [], calipers: [] };
   let paint: MeshPhysicalMaterial | null = null;
+  // (typed initialisers: these are assigned inside the traverse callback)
+  let glassOuter = null as MeshPhysicalMaterial | null;
+  let glassInner = null as MeshPhysicalMaterial | null;
+  let tyre = null as MeshPhysicalMaterial | null;
   // Wheels, discs and calipers were re-parented under `wheels` above, so walk both.
   const visit = (o: Object3D) => {
     const m = o as Mesh;
     if (!m.isMesh) return;
+    const first = materialsOf(m)[0];
+    const name = first?.name ?? '';
     // The bodywork gets the livery on a clear-coated material (one shared instance).
     if (materialsOf(m).some((mat) => mat.name?.includes('Carpaint'))) {
-      paint ??= createPaintMaterial(livery, materialsOf(m)[0]);
+      paint ??= createPaintMaterial(livery, first);
       m.material = paint;
+      return;
+    }
+    // Outer windows: real transmissive glass (cheap tinted glass on mobile)
+    if (/^EXT_Windows/.test(name)) {
+      glassOuter ??= createGlassMaterial(first, !mobile);
+      m.material = glassOuter;
+      return;
+    }
+    // Inner glass layers: tinted only, so there's one transmission render, not two
+    if (/^INT_(Windows|Windshield|Glass)/.test(name)) {
+      glassInner ??= createGlassMaterial(first, false);
+      m.material = glassInner;
+      return;
+    }
+    if (/^MI_Tyre/.test(name)) {
+      tyre ??= createTyreMaterial(first);
+      m.material = tyre;
       return;
     }
     for (const mat of materialsOf(m)) {
@@ -211,6 +237,8 @@ function buildRig(source: Object3D, livery: Texture): Rig {
     head: [...head].map(([mat, factor]) => ({ mat, factor })),
     tail: [...tail].map(([mat, factor]) => ({ mat, factor })),
     paint,
+    glass: [glassOuter, glassInner].filter(Boolean) as MeshPhysicalMaterial[],
+    tyre,
     rims: roles.rims,
     calipers: roles.calipers,
   };
@@ -249,7 +277,8 @@ export function Car() {
     () => prepareLivery(liveryTex, Math.min(8, gl.capabilities.getMaxAnisotropy())),
     [liveryTex, gl],
   );
-  const rig = useMemo(() => buildRig(scene, livery), [scene, livery]);
+  const mobile = useMemo(() => isMobile(), []);
+  const rig = useMemo(() => buildRig(scene, livery, mobile), [scene, livery, mobile]);
 
   const car = useRef<Group>(null!);
   const body = useRef<Group>(null!);
@@ -257,7 +286,6 @@ export function Car() {
   const beamR = useRef<SpotLight>(null!);
   const tailGlow = useRef<PointLight>(null!);
   const beamTargets = useMemo(() => [new Object3D(), new Object3D()] as const, []);
-  const shadowTex = useMemo(() => createBlobShadowTexture(), []);
 
   useLayoutEffect(() => {
     carState.frontRadius = rig.frontRadius;
@@ -297,19 +325,33 @@ export function Car() {
     const hl = sectionState.active ? sectionState.look.headlights : 1;
     for (const h of rig.head) h.mat.emissiveIntensity = c.headlightEmissive * h.factor * hl;
     for (const h of rig.tail) h.mat.emissiveIntensity = c.tailLightEmissive * h.factor * brake;
+    // Explicit envMap so envMapIntensity counts (three ignores it with scene.environment).
+    const env = state.scene.environment;
+    const withEnv = (m: MeshStandardMaterial, intensity: number) => {
+      if (env && m.envMap !== env) {
+        m.envMap = env;
+        m.needsUpdate = true;
+      }
+      m.envMapIntensity = intensity;
+    };
     const paint = rig.paint;
     if (paint) {
-      // Explicit envMap so envMapIntensity counts (three ignores it with scene.environment).
-      const env = state.scene.environment;
-      if (env && paint.envMap !== env) {
-        paint.envMap = env;
-        paint.needsUpdate = true;
-      }
-      paint.envMapIntensity = c.paintEnv;
+      withEnv(paint, c.paintEnv);
       paint.roughness = c.paintRoughness;
       paint.metalness = c.paintMetalness;
       paint.clearcoat = c.clearcoat;
       paint.clearcoatRoughness = c.clearcoatRoughness;
+    }
+    for (const glass of rig.glass) {
+      withEnv(glass, c.glassEnv);
+      glass.color.set(c.glassTint);
+      glass.roughness = c.glassRoughness;
+    }
+    if (rig.tyre) {
+      withEnv(rig.tyre, c.tyreEnv);
+      rig.tyre.color.set(c.tyreColor);
+      rig.tyre.roughness = c.tyreRoughness;
+      rig.tyre.specularIntensity = c.tyreSpecular;
     }
     for (const m of rig.rims) m.color.set(c.rimColor);
     for (const m of rig.calipers) m.color.set(c.caliperColor);
@@ -322,6 +364,11 @@ export function Car() {
     s.rearContacts[0].copy(rig.rearContactsLocal[0]).applyMatrix4(g.matrixWorld);
     s.rearContacts[1].copy(rig.rearContactsLocal[1]).applyMatrix4(g.matrixWorld);
     s.tailLight.set(0, 0.6, -2.4).applyMatrix4(g.matrixWorld);
+    // Headlight positions and beam direction, for rain and spray lit by the beams
+    s.headPos[0].set(0.62, 0.66, 1.9).applyMatrix4(g.matrixWorld);
+    s.headPos[1].set(-0.62, 0.66, 1.9).applyMatrix4(g.matrixWorld);
+    s.headDir.set(0, -0.035, 1).transformDirection(g.matrixWorld);
+    s.headLevel = hl;
     s.carReady = true;
   }, -2);
 
@@ -352,10 +399,16 @@ export function Car() {
         <pointLight ref={tailGlow} position={[0, 0.4, -3.1]} color="#ff1a1a" distance={7} decay={2} />
       </group>
       <primitive object={rig.wheels} />
-      <mesh rotation-x={-Math.PI / 2} position={[0, rig.groundOffset + 0.012, -0.05]} renderOrder={1}>
-        <planeGeometry args={[2.9, 5.8]} />
-        <meshBasicMaterial map={shadowTex} transparent depthWrite={false} opacity={0.9} />
-      </mesh>
+      {/* Contact shadows ride with the car (re-rendered every frame) */}
+      <ContactShadows
+        position={[0, rig.groundOffset + 0.01, 0]}
+        scale={[3.4, 6.2]}
+        resolution={mobile ? 256 : 512}
+        blur={CONFIG.car.contactBlur}
+        far={1.6}
+        opacity={CONFIG.car.contactOpacity}
+        color="#000000"
+      />
     </group>
   );
 }

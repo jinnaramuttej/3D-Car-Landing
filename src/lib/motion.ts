@@ -176,6 +176,10 @@ export const carState = {
   /** Written by Car: rear tyre contact patches in world space [left, right]. */
   rearContacts: [new Vector3(), new Vector3()] as [Vector3, Vector3],
   tailLight: new Vector3(),
+  /** Written by Car: headlight positions, beam direction and brightness multiplier. */
+  headPos: [new Vector3(), new Vector3()] as [Vector3, Vector3],
+  headDir: new Vector3(0, 0, 1),
+  headLevel: 1,
   carReady: false,
 };
 

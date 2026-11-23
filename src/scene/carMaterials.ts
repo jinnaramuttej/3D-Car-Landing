@@ -36,8 +36,7 @@ const FIXES: Fix[] = [
   { test: /^EXT_RIM/, metalness: 0.85, roughness: 0.32, role: 'rim' },
   { test: /^EXT_CALIPER/, metalness: 0.35, roughness: 0.35, role: 'caliper' },
   { test: /^EXT_Disc/, metalness: 0.85, roughness: 0.42 },
-  { test: /^MI_Tyre/, roughness: 0.92 },
-  { test: /Windows|Windshield|^INT_Glass|Glass_Emissive/, metalness: 0, roughness: 0.05 },
+  { test: /Glass_Emissive/, metalness: 0, roughness: 0.05 },
   { test: /^MIRROR/, metalness: 1, roughness: 0.05 },
   { test: /carbon|kevlar/i, color: '#131417', metalness: 0.45, roughness: 0.36 },
   { test: /^EXT_EXALTS/, color: '#8a817a', metalness: 1, roughness: 0.28 },
@@ -94,6 +93,44 @@ export function createPaintMaterial(livery: Texture, source: Material) {
     roughness: c.paintRoughness,
     clearcoat: c.clearcoat,
     clearcoatRoughness: c.clearcoatRoughness,
+    side: source.side,
+  });
+}
+
+/**
+ * Window glass. The model's window texture is almost fully transparent (faint
+ * smudges only), so it's replaced by real glass: transmission with a slight tint.
+ * `transmission = false` gives a cheap tinted transparent version (mobile, and the
+ * inner glass layers, which would otherwise cost a second transmission render).
+ */
+export function createGlassMaterial(source: Material, transmission: boolean) {
+  const c = CONFIG.car;
+  return new MeshPhysicalMaterial({
+    name: transmission ? 'GT3R_Glass' : 'GT3R_GlassCheap',
+    color: c.glassTint,
+    metalness: 0,
+    roughness: c.glassRoughness,
+    transmission: transmission ? 1 : 0,
+    thickness: 0.02,
+    ior: 1.5,
+    specularIntensity: 1,
+    transparent: !transmission,
+    opacity: transmission ? 1 : 0.32,
+    depthWrite: transmission,
+    side: source.side,
+  });
+}
+
+/** Tyres: dark rubber, low specular. Keeps the sidewall lettering texture. */
+export function createTyreMaterial(source: MeshStandardMaterial) {
+  const c = CONFIG.car;
+  return new MeshPhysicalMaterial({
+    name: 'GT3R_Tyre',
+    map: source.map,
+    color: c.tyreColor,
+    metalness: 0,
+    roughness: c.tyreRoughness,
+    specularIntensity: c.tyreSpecular,
     side: source.side,
   });
 }

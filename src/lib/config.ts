@@ -71,10 +71,19 @@ export const CONFIG = {
     headBeamAngle: 0.5,
     tailGlow: 1.2, // red point light behind the car
     paintEnv: 1.2, // envMapIntensity on the bodywork (absolute, not scaled by look.envIntensity)
-    paintRoughness: 0.32,
-    paintMetalness: 0.1,
+    paintRoughness: 0.25,
+    paintMetalness: 0.6,
     clearcoat: 1,
     clearcoatRoughness: 0.05,
+    glassTint: '#b4c3cc', // slight cool tint on the transmissive windows
+    glassRoughness: 0.04,
+    glassEnv: 1.3,
+    tyreColor: '#7a7a7a', // multiplies the tyre texture: dark rubber
+    tyreRoughness: 0.9,
+    tyreSpecular: 0.25,
+    tyreEnv: 0.35,
+    contactOpacity: 0.85, // (mount) drei ContactShadows under the car
+    contactBlur: 2.4, // (mount)
     rimColor: '#1c1d21',
     caliperColor: '#c8161d',
     rimBlurFrom: 14, // wheel rad/s where the motion-blur disc starts to show
@@ -202,6 +211,13 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     paintMetalness: [0, 1, 0.01],
     clearcoat: [0, 1, 0.01],
     clearcoatRoughness: [0, 1, 0.01],
+    glassRoughness: [0, 0.5, 0.01],
+    glassEnv: [0, 4, 0.05],
+    tyreRoughness: [0, 1, 0.01],
+    tyreSpecular: [0, 1, 0.01],
+    tyreEnv: [0, 2, 0.01],
+    contactOpacity: [0, 1, 0.01],
+    contactBlur: [0, 6, 0.1],
   },
   camera: {
     fovMin: [10, 40, 0.5],

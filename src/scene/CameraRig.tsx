@@ -106,6 +106,21 @@ function evalShot(shot: Shot, p: number, out: Pose) {
   return out;
 }
 
+/**
+ * Long-lens rule: vertical FOV stays inside [camera.fovMin, camera.fovMax]. If a shot
+ * asks for wider, narrow it and pull the camera back along its line of sight by
+ * tan(asked/2) / tan(clamped/2), so the subject keeps its size in frame.
+ */
+function fitLens(pos: Vector3, look: Vector3, fov: number) {
+  const c = CONFIG.camera;
+  const clamped = clamp(fov, c.fovMin, c.fovMax);
+  if (clamped !== fov) {
+    const k = Math.tan(degToRad(fov) / 2) / Math.tan(degToRad(clamped) / 2);
+    pos.sub(look).multiplyScalar(k).add(look);
+  }
+  return clamped;
+}
+
 type SectionRig = {
   init: boolean;
   pos: Vector3;
@@ -125,6 +140,7 @@ const _dir = new Vector3();
 function runSectionCamera(cam: PerspectiveCamera, dt: number, rig: SectionRig, mobile: boolean) {
   const c = CONFIG.camera;
   const t = sectionCameraTarget(mobile, rig.target);
+  t.fov = fitLens(t.pos, t.look, t.fov * c.fovScale);
 
   if (!rig.init) {
     // Pick up exactly where the drift scene's camera left off
@@ -152,7 +168,7 @@ function runSectionCamera(cam: PerspectiveCamera, dt: number, rig: SectionRig, m
     cam.rotateY(-rig.parallax.x * c.parallax * 0.02);
   }
 
-  const fov = rig.fov * c.fovScale;
+  const fov = rig.fov;
   if (Math.abs(cam.fov - fov) > 1e-3) {
     cam.fov = fov;
     cam.updateProjectionMatrix();
@@ -231,6 +247,9 @@ export function CameraRig() {
       }
     }
 
+    // Long lens only: clamp the FOV and back the camera off to keep the framing
+    const lensFov = fitLens(cur.pos, cur.look, cur.fov * c.fovScale);
+
     // Portrait screens see far less sideways: back off from the subject
     if (cam.aspect < 1) {
       const k = Math.min(2.2, Math.pow(1 / cam.aspect, c.portraitFit));
@@ -262,7 +281,7 @@ export function CameraRig() {
       cam.rotateZ(degToRad(c.shakeRollDeg) * (amp / Math.max(1e-3, c.shakePeak)) * Math.sin(ts * 13.3));
     }
 
-    const fov = cur.fov * c.fovScale;
+    const fov = lensFov;
     if (Math.abs(cam.fov - fov) > 1e-3) {
       cam.fov = fov;
       cam.updateProjectionMatrix();

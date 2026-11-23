@@ -83,6 +83,8 @@ export const CONFIG = {
 
   /** Global camera knobs. The shots themselves (framing, cuts, timing) are in src/lib/script.ts. */
   camera: {
+    fovMin: 24, // long-lens rule: vertical FOV is clamped to [fovMin, fovMax]
+    fovMax: 40, // (wider requests pull the camera back to keep the framing)
     fovScale: 1, // multiplies every shot's FOV
     anchorP: 0.62, // where along the path the final shot is anchored (the smoke cloud)
     shakePeak: 0.07, // metres, at shakeAt and full slip
@@ -202,6 +204,8 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     clearcoatRoughness: [0, 1, 0.01],
   },
   camera: {
+    fovMin: [10, 40, 0.5],
+    fovMax: [24, 70, 0.5],
     fovScale: [0.5, 1.5, 0.01],
     anchorP: [0.4, 0.8, 0.01],
     shakePeak: [0, 0.3, 0.005],

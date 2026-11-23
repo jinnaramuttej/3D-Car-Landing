@@ -216,6 +216,15 @@ function buildRig(source: Object3D, livery: Texture): Rig {
   };
 
   if (verbose) {
+    // Scale check: a 992 GT3 R is ~4.62 m long, 2.05 m wide, 2.51 m wheelbase.
+    const size = new Box3().setFromObject(root).getSize(new Vector3());
+    const hubZ = (id: CornerId) => corners.find((k) => k.id === id)?.steer.position.z ?? 0;
+    console.info('[gt3r] size (m)', {
+      length: +size.z.toFixed(3),
+      width: +size.x.toFixed(3),
+      height: +size.y.toFixed(3),
+      wheelbase: +(hubZ('LF') - hubZ('LR')).toFixed(3),
+    });
     console.info('[gt3r] rig', {
       body: 'RootNode (MAIN_BODY, doors, cockpit, lights...)',
       wheels: corners.map((c) => `WHEEL_${c.id} -> ${c.steer.name}/${c.spin.name}`),

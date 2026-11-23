@@ -73,8 +73,8 @@ export const SHOTS: Shot[] = [
     // look target sits off the car toward screen-left, so the car fills the right
     // two-thirds and the intro title has the left third
     keys: [
-      { pos: [4.4, 0.42, 7.2], look: [-0.9, 0.55, 1.1], fov: 38 },
-      { pos: [3.3, 0.5, 5.4], look: [-0.8, 0.6, 0.6], fov: 34 },
+      { pos: [5.91, 0.42, 8.94], look: [-0.9, 0.55, 1.1], fov: 30 },
+      { pos: [4.42, 0.5, 6.71], look: [-0.8, 0.6, 0.6], fov: 27 },
     ],
     handheld: 0.6,
     dof: 2,
@@ -89,9 +89,9 @@ export const SHOTS: Shot[] = [
     frame: 'body',
     ease: 'linear',
     keys: [
-      { pos: [-2.0, 0.62, 2.6], look: [-0.6, 0.5, 2.1], fov: 32 },
-      { pos: [-2.6, 0.85, 0.2], look: [-0.5, 0.55, -0.4], fov: 34 },
-      { pos: [-2.0, 0.95, -2.7], look: [-0.5, 0.85, -2.3], fov: 32 },
+      { pos: [-2.21, 0.62, 2.68], look: [-0.6, 0.5, 2.1], fov: 28 },
+      { pos: [-3.08, 0.85, 0.34], look: [-0.5, 0.55, -0.4], fov: 28 },
+      { pos: [-2.23, 0.95, -2.76], look: [-0.5, 0.85, -2.3], fov: 28 },
     ],
     handheld: 0.4,
     dof: 3.5,
@@ -107,8 +107,8 @@ export const SHOTS: Shot[] = [
     frame: 'body',
     ease: 'inOut',
     keys: [
-      { pos: [-0.9, 0.55, -4.6], look: [0, 0.75, -1.6], fov: 40 },
-      { pos: [0.3, 1.25, -7.2], look: [0, 0.8, 1], fov: 46 },
+      { pos: [-1.07, 0.55, -5.17], look: [0, 0.75, -1.6], fov: 34 },
+      { pos: [0.37, 1.25, -9.11], look: [0, 0.8, 1], fov: 38 },
     ],
     handheld: 0.5,
     dof: 2,
@@ -123,8 +123,8 @@ export const SHOTS: Shot[] = [
     frame: 'body',
     ease: 'out',
     keys: [
-      { pos: [-2.3, 0.3, 0.05], look: [-0.86, 0.32, -1.25], fov: 36 },
-      { pos: [-1.95, 0.33, -0.4], look: [-0.86, 0.32, -1.25], fov: 31 },
+      { pos: [-2.61, 0.3, 0.33], look: [-0.86, 0.32, -1.25], fov: 30 },
+      { pos: [-2.17, 0.33, -0.23], look: [-0.86, 0.32, -1.25], fov: 26 },
     ],
     shake: 0.5,
     dof: 4,
@@ -142,9 +142,9 @@ export const SHOTS: Shot[] = [
     // Telephoto swing from the flank (smoke streaming back) round to the front 3/4
     // (the car comes at the lens sideways). Long lens, low, compressed background.
     keys: [
-      { pos: [-11.3, 0.5, 6.5], look: [0, 0.6, 1.0], fov: 40 },
-      { pos: [-7.7, 0.6, 9.9], look: [0, 0.6, 0.8], fov: 38 },
-      { pos: [-3.1, 0.9, 11.6], look: [0, 0.65, 0.5], fov: 42 },
+      { pos: [-13.45, 0.5, 7.55], look: [0, 0.6, 1.0], fov: 34 },
+      { pos: [-9.25, 0.6, 11.73], look: [0, 0.6, 0.8], fov: 32 },
+      { pos: [-3.66, 0.9, 13.61], look: [0, 0.65, 0.5], fov: 36 },
     ],
     shake: 1,
     dof: 1.5,
@@ -160,10 +160,10 @@ export const SHOTS: Shot[] = [
     frame: 'anchor',
     ease: 'linear',
     keys: [
-      { t: 0, pos: [-12, 3, 4.5], look: [0, 0.8, 3], fov: 55 },
-      { t: 0.18, pos: [-17.9, 7.5, 6.5], look: [0, 0.8, 4], fov: 55 },
-      { t: 0.47, pos: [-8, 3, 2.9], look: [0, 1.1, 2], fov: 58 },
-      { t: 1, pos: [-0.56, 1.4, 0.2], look: [0, 1.3, 0], fov: 62 },
+      { t: 0, pos: [-18.14, 4.13, 5.27], look: [0, 0.8, 3], fov: 38 },
+      { t: 0.18, pos: [-27.06, 10.93, 7.78], look: [0, 0.8, 4], fov: 38 },
+      { t: 0.47, pos: [-12.18, 3.99, 3.37], look: [0, 1.1, 2], fov: 40 },
+      { t: 1, pos: [-0.92, 1.47, 0.33], look: [0, 1.3, 0], fov: 40 },
     ],
   },
 ];

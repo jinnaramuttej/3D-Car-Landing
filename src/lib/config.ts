@@ -110,18 +110,24 @@ export const CONFIG = {
 
   smoke: {
     maxParticles: 400, // (mount) halved on mobile
-    rate: 34, // particles/s per rear wheel at full slip
-    lifeMin: 2,
-    lifeMax: 4,
-    sizeStart: 0.8,
-    sizeEnd: 6,
-    opacity: 0.5,
-    rise: 0.7,
+    rate: 10, // particles/s per rear wheel at full slip (was 34: low tyre smoke, not a wall)
+    lifeMin: 1.4,
+    lifeMax: 2.8,
+    sizeStart: 0.45,
+    sizeEnd: 3.2,
+    opacity: 0.3,
+    rise: 0.15, // stays low over the asphalt
     drag: 1.1,
     noise: 1.2,
-    kick: 3.4, // sideways throw toward the outside of the turn
-    color: '#8d939d',
+    kick: 2.2, // sideways throw toward the outside of the turn
+    color: '#6f7680',
     tailTint: 0.2, // how much the tail lights paint nearby smoke red
+    headLit: 1.6, // how strongly the headlight beams light the smoke and spray
+    sprayRate: 26, // wet-road spray per rear wheel at speed (scaled by rain.intensity)
+    spraySize: 0.28,
+    sprayOpacity: 0.55,
+    fullScreenFrom: 0.4, // drift progress where shot IV (the tyre) starts; before it smoke can't fill the frame
+    maxCover: 0.28, // before shot IV: the most of the frame height a single puff may cover
     fillStart: 0.66, // smoke starts swelling toward the camera
     fillFull: 0.82, // screen is covered
     fillRate: 140, // extra particles/s spawned into the cloud at full fill
@@ -292,6 +298,12 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     noise: [0, 5, 0.05],
     kick: [0, 8, 0.1],
     tailTint: [0, 2, 0.05],
+    headLit: [0, 8, 0.05],
+    sprayRate: [0, 120, 1],
+    spraySize: [0.05, 1.5, 0.01],
+    sprayOpacity: [0, 1.5, 0.01],
+    fullScreenFrom: [0, 1, 0.005],
+    maxCover: [0.02, 2, 0.01],
     fillStart: [0, 1, 0.005],
     fillFull: [0, 1, 0.005],
     fillRate: [0, 400, 1],

@@ -10,6 +10,7 @@ import {
   MathUtils,
   type Mesh,
   NormalBlending,
+  type PerspectiveCamera,
   PlaneGeometry,
   ShaderMaterial,
   Vector2,
@@ -32,12 +33,27 @@ attribute float aAngle;
 attribute float aShade;
 uniform vec3 uTailPos;
 uniform float uTailRadius;
+uniform float uProjScale;
+uniform float uMaxCover;
+uniform vec3 uHeadPos0;
+uniform vec3 uHeadPos1;
+uniform vec3 uHeadDir;
+uniform float uHeadCos;
+uniform float uHeadLit;
 varying vec2 vUv;
 varying float vAlpha;
 varying float vShade;
 varying float vTail;
 varying float vDepth;
 varying float vGroundY;
+varying float vHead;
+
+float headCone(vec3 p, vec3 hp) {
+  vec3 d = p - hp;
+  float dist = max(length(d), 1e-3);
+  float cone = smoothstep(uHeadCos, mix(uHeadCos, 1.0, 0.5), dot(d / dist, uHeadDir));
+  return cone / (1.0 + dist * dist * 0.03);
+}
 
 void main() {
   vUv = uv;
@@ -54,6 +70,13 @@ void main() {
   vec2 offset = mat2(c, s, -s, c) * position.xy * aSize;
   mv.xy += offset;
   vDepth = -mv.z;
+  // Coverage guard: a puff may only cover uMaxCover of the frame height (before shot IV
+  // the smoke must never fill the screen); bigger ones fade instead of growing.
+  float cover = aSize * uProjScale / max(vDepth, 0.05);
+  vAlpha *= 1.0 - smoothstep(uMaxCover * 0.55, uMaxCover, cover);
+  // tyre spray and mist pick up the headlight beams
+  float fwd = 0.5 + 1.5 * pow(max(dot(uHeadDir, normalize(cameraPosition - aCenter)), 0.0), 2.0);
+  vHead = (headCone(aCenter, uHeadPos0) + headCone(aCenter, uHeadPos1)) * uHeadLit * fwd;
 
   // World height of this corner, so the fragment can fade out where it meets the asphalt.
   vec3 camRight = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
@@ -77,6 +100,7 @@ varying float vShade;
 varying float vTail;
 varying float vDepth;
 varying float vGroundY;
+varying float vHead;
 
 void main() {
   vec4 tex = texture2D(uMap, vUv);
@@ -87,7 +111,7 @@ void main() {
   float groundFade = smoothstep(0.0, 0.9, vGroundY);
   float a = tex.a * vAlpha * uOpacity * nearFade * groundFade;
   if (a < 0.003) discard;
-  vec3 col = uColor * vShade;
+  vec3 col = uColor * vShade + vec3(1.0, 0.95, 0.86) * vHead;
   col = mix(col, uTailColor, clamp(vTail * uTailTint, 0.0, 1.0));
   gl_FragColor = vec4(col, a);
   #include <colorspace_fragment>
@@ -155,11 +179,12 @@ function createPool(max: number) {
     seed: new Float32Array(max),
     shade: new Float32Array(max),
     alpha0: new Float32Array(max),
+    grav: new Float32Array(max), // m/s^2 pulling down (spray), on top of cfg.rise
     size: new Float32Array(max),
     alpha: new Float32Array(max),
     depth: new Float32Array(max),
     order: new Uint16Array(max),
-    acc: [0, 0, 0], // fractional emission carry: left tyre, right tyre, cloud
+    acc: [0, 0, 0, 0, 0], // fractional emission carry: left tyre, right tyre, cloud, left spray, right spray
     prev: [new Vector3(), new Vector3()],
     hasPrev: false,
   };
@@ -177,6 +202,7 @@ function claim(pool: Pool) {
   pool.spin[i] = rand(-0.35, 0.35);
   pool.seed[i] = Math.random() * 100;
   pool.shade[i] = rand(0.65, 1.1);
+  pool.grav[i] = 0;
   return i;
 }
 
@@ -218,6 +244,13 @@ export function Smoke() {
         uTailTint: { value: CONFIG.smoke.tailTint },
         uOpacity: { value: CONFIG.smoke.opacity },
         uNearFade: { value: new Vector2(0.35, 2) },
+        uProjScale: { value: 1 },
+        uMaxCover: { value: 100 },
+        uHeadPos0: { value: new Vector3() },
+        uHeadPos1: { value: new Vector3() },
+        uHeadDir: { value: new Vector3(0, 0, 1) },
+        uHeadCos: { value: Math.cos(0.5) },
+        uHeadLit: { value: 0 },
       },
       vertexShader: particleVert,
       fragmentShader: particleFrag,
@@ -264,7 +297,11 @@ export function Smoke() {
     const p = s.progress;
     const t = state.clock.elapsedTime;
     // After the drift the sections own the smoke cover (the hero thins it out).
-    const fill = sectionState.active ? sectionState.look.smoke : MathUtils.smoothstep(p, cfg.fillStart, cfg.fillFull);
+    // Before shot IV (cfg.fullScreenFrom) the smoke stays low and may never fill the frame.
+    const fillFrom = Math.max(cfg.fillStart, cfg.fullScreenFrom);
+    const fillTo = Math.max(fillFrom + 1e-3, cfg.fillFull);
+    const fill = sectionState.active ? sectionState.look.smoke : MathUtils.smoothstep(p, fillFrom, fillTo);
+    const guarded = !sectionState.active && p < cfg.fullScreenFrom;
 
     camera.getWorldPosition(_cam);
     camera.getWorldDirection(_camDir);
@@ -301,6 +338,33 @@ export function Smoke() {
         pool.prev[w].copy(cur);
       }
       pool.hasPrev = true;
+
+      /* 1b. wet-road spray: rate follows ground speed, not slip; low, short-lived, falls back */
+      const sprayRate =
+        cfg.sprayRate * scale * CONFIG.rain.intensity * Math.pow(MathUtils.clamp(Math.abs(s.speed) / 25, 0, 1), 1.5);
+      for (let w = 0; w < 2; w++) {
+        pool.acc[3 + w] += sprayRate * dt;
+        const n = Math.floor(pool.acc[3 + w]);
+        pool.acc[3 + w] -= n;
+        const cur = s.rearContacts[w];
+        for (let k = 0; k < n; k++) {
+          const i = claim(pool);
+          const o = i * 3;
+          pool.pos[o] = cur.x - s.forward.x * 0.35 + rand(-0.12, 0.12);
+          pool.pos[o + 1] = rand(0.08, 0.2);
+          pool.pos[o + 2] = cur.z - s.forward.z * 0.35 + rand(-0.12, 0.12);
+          const carry = s.speed * rand(0.15, 0.45); // water leaves the tyre slower than the car
+          const sideways = rand(-0.6, 0.6);
+          pool.vel[o] = s.forward.x * carry + s.outward.x * sideways + rand(-0.3, 0.3);
+          pool.vel[o + 1] = rand(0.5, 1.4);
+          pool.vel[o + 2] = s.forward.z * carry + s.outward.z * sideways + rand(-0.3, 0.3);
+          pool.life[i] = rand(0.5, 1.1);
+          pool.size0[i] = cfg.spraySize * rand(0.6, 1);
+          pool.size1[i] = cfg.spraySize * rand(3.5, 5.5);
+          pool.alpha0[i] = cfg.sprayOpacity;
+          pool.grav[i] = 2.2;
+        }
+      }
     }
 
     /* 2. after fillStart: seed the cloud between its centre and the camera */
@@ -352,7 +416,7 @@ export function Smoke() {
       const ny = Math.sin(px * 0.3 + pz * 0.3 + t * 0.5 + sd);
       const nz = Math.cos(px * 0.5 + t * 0.6 + sd * 0.6) + 0.6 * Math.cos(py * 0.8 + t * 0.4 + sd * 2.3);
       let vx = pool.vel[o] * drag + nx * cfg.noise * dt;
-      let vy = pool.vel[o + 1] * drag + (cfg.rise + ny * 0.3 * cfg.noise) * dt;
+      let vy = pool.vel[o + 1] * drag + (cfg.rise - pool.grav[i] + ny * 0.3 * cfg.noise) * dt;
       let vz = pool.vel[o + 2] * drag + nz * cfg.noise * dt;
 
       // filling: everything drifts toward the lens
@@ -422,11 +486,21 @@ export function Smoke() {
     u.uTailTint.value = cfg.tailTint * s.slip;
     (u.uTailPos.value as Vector3).copy(s.tailLight);
     (u.uNearFade.value as Vector2).set(cameraState.nearFade[0], cameraState.nearFade[1]);
+    u.uProjScale.value = 1 / (2 * Math.tan(MathUtils.degToRad((camera as PerspectiveCamera).fov) / 2));
+    // the guard eases off across the cut into shot IV
+    u.uMaxCover.value = guarded
+      ? MathUtils.lerp(cfg.maxCover, 100, MathUtils.smoothstep(p, cfg.fullScreenFrom - 0.02, cfg.fullScreenFrom))
+      : 100;
+    (u.uHeadPos0.value as Vector3).copy(s.headPos[0]);
+    (u.uHeadPos1.value as Vector3).copy(s.headPos[1]);
+    (u.uHeadDir.value as Vector3).copy(s.headDir);
+    u.uHeadCos.value = Math.cos(CONFIG.car.headBeamAngle * 0.9);
+    u.uHeadLit.value = s.carReady ? cfg.headLit * s.headLevel : 0;
 
     /* 6. veil: guarantees full coverage by fillFull, independent of particle count */
     const veilOpacity = sectionState.active
       ? MathUtils.smoothstep(fill, 0.1, 1) * cfg.veilOpacity
-      : MathUtils.smoothstep(p, cfg.fillStart + (cfg.fillFull - cfg.fillStart) * 0.55, cfg.fillFull) * cfg.veilOpacity;
+      : MathUtils.smoothstep(p, fillFrom + (fillTo - fillFrom) * 0.55, fillTo) * cfg.veilOpacity;
     const vu = veilMaterial.uniforms;
     vu.uOpacity.value = veilOpacity;
     vu.uTime.value = t;

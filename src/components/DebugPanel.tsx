@@ -113,6 +113,9 @@ export function DebugPanel() {
   useControls('Skid marks', configSchema('skid'), { collapsed: true });
   useControls('Car', configSchema('car'), { collapsed: true });
   useControls('Look', configSchema('look'), { collapsed: true });
+  useControls('Post', configSchema('post'), { collapsed: true });
+  useControls('Rain', configSchema('rain'), { collapsed: true });
+  useControls('Coast', configSchema('coast'), { collapsed: true });
   useControls('Track', configSchema('track'), { collapsed: true });
   useControls('Scroll', configSchema('scroll'), { collapsed: true });
 

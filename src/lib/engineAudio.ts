@@ -1,0 +1,191 @@
+/**
+ * Synthesised flat-six (no audio files): sawtooth/square oscillators at the firing
+ * frequency, band-passed noise for intake roar, soft-clipped and low-passed. RPM,
+ * throttle and level follow a piecewise-linear script.
+ *
+ * Browsers only allow audio after a user gesture, so the AudioContext is created
+ * the first time the visitor turns sound on (the navbar toggle). Muted by default.
+ */
+
+/** [seconds, rpm, throttle 0..1, level 0..1] */
+type Point = readonly [number, number, number, number];
+
+const MASTER = 0.55;
+
+/** Two throttle blips on the line. */
+const REV: Point[] = [
+  [0, 950, 0.15, 1],
+  [0.25, 950, 0.15, 1],
+  [0.42, 7400, 1, 1],
+  [0.55, 6800, 0.2, 1],
+  [1.2, 1500, 0.1, 1],
+  [1.45, 1300, 0.1, 1],
+  [1.62, 7900, 1, 1],
+  [1.75, 7300, 0.2, 1],
+  [2.5, 1200, 0.1, 1],
+  [3.2, 1000, 0.1, 0.8],
+  [3.6, 950, 0.1, 0],
+];
+
+/** Launch through two shifts while the car pulls away (level drops with distance). */
+const LAUNCH: Point[] = [
+  [0, 3500, 0.6, 1],
+  [0.15, 6200, 1, 1],
+  [1.2, 8300, 1, 0.9],
+  [1.28, 5900, 0.5, 0.85],
+  [1.36, 6000, 1, 0.85],
+  [2.6, 8400, 1, 0.55],
+  [2.68, 6300, 0.5, 0.5],
+  [2.76, 6400, 1, 0.48],
+  [4.2, 8200, 1, 0.18],
+  [5.2, 8000, 0.8, 0],
+];
+
+/** Flat-six four-stroke: three power pulses per crank revolution. */
+const fireHz = (rpm: number) => (rpm / 60) * 3;
+
+function softClip(amount: number) {
+  const n = 1024;
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    curve[i] = ((3 + amount) * x * 20 * (Math.PI / 180)) / (Math.PI + amount * Math.abs(x));
+  }
+  return curve;
+}
+
+class EngineAudio {
+  private ctx: AudioContext | null = null;
+  private master: GainNode | null = null;
+  private noise: AudioBuffer | null = null;
+  private muted = true;
+  private stopCurrent: (() => void) | null = null;
+
+  private ensure() {
+    if (typeof window === 'undefined') return null;
+    if (!this.ctx) {
+      const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return null;
+      const ctx = new Ctx();
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -14;
+      comp.ratio.value = 4;
+      const master = ctx.createGain();
+      master.gain.value = this.muted ? 0 : MASTER;
+      master.connect(comp).connect(ctx.destination);
+      const noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+      const data = noise.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      this.ctx = ctx;
+      this.master = master;
+      this.noise = noise;
+    }
+    if (this.ctx.state === 'suspended') void this.ctx.resume();
+    return this.ctx;
+  }
+
+  /** Call from a click handler the first time (autoplay rules). */
+  setMuted(muted: boolean) {
+    this.muted = muted;
+    if (!muted) this.ensure();
+    if (this.ctx && this.master) {
+      this.master.gain.setTargetAtTime(muted ? 0 : MASTER, this.ctx.currentTime, 0.05);
+      if (muted) this.stopCurrent?.();
+    }
+  }
+
+  rev() {
+    this.play(REV);
+  }
+
+  launch() {
+    this.play(LAUNCH);
+  }
+
+  private play(points: Point[]) {
+    if (this.muted) return;
+    const ctx = this.ensure();
+    if (!ctx || !this.master || !this.noise) return;
+    this.stopCurrent?.();
+
+    const t0 = ctx.currentTime + 0.02;
+    const end = t0 + points[points.length - 1][0];
+
+    const out = ctx.createGain();
+    out.gain.value = 0;
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.Q.value = 0.9;
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = softClip(18);
+    shaper.oversample = '2x';
+    const pre = ctx.createGain();
+    pre.gain.value = 0.6;
+    pre.connect(shaper).connect(lowpass).connect(out).connect(this.master);
+
+    // Firing-frequency harmonics
+    const voices: { osc: OscillatorNode; mult: number }[] = [];
+    const voice = (type: OscillatorType, mult: number, gain: number) => {
+      const osc = ctx.createOscillator();
+      osc.type = type;
+      const g = ctx.createGain();
+      g.gain.value = gain;
+      osc.connect(g).connect(pre);
+      voices.push({ osc, mult });
+    };
+    voice('sawtooth', 1, 0.5);
+    voice('square', 0.5, 0.35);
+    voice('sawtooth', 2, 0.18);
+    voice('triangle', 3, 0.08);
+
+    // Intake / exhaust roar
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noise;
+    noise.loop = true;
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.Q.value = 1.2;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = 0.25;
+    noise.connect(band).connect(noiseGain).connect(pre);
+
+    const [, rpm0, thr0, lvl0] = points[0];
+    for (const v of voices) v.osc.frequency.setValueAtTime(fireHz(rpm0) * v.mult, t0);
+    lowpass.frequency.setValueAtTime((300 + rpm0 * 0.55) * (0.5 + 0.5 * lvl0), t0);
+    band.frequency.setValueAtTime(180 + rpm0 * 0.12, t0);
+    out.gain.setValueAtTime(0, t0);
+    out.gain.linearRampToValueAtTime((0.12 + 0.88 * thr0) * lvl0, t0 + 0.05);
+    for (const [time, rpm, throttle, level] of points.slice(1)) {
+      const at = t0 + time;
+      for (const v of voices) v.osc.frequency.linearRampToValueAtTime(fireHz(rpm) * v.mult, at);
+      lowpass.frequency.linearRampToValueAtTime((300 + rpm * 0.55 * (0.6 + 0.4 * throttle)) * (0.5 + 0.5 * level), at);
+      band.frequency.linearRampToValueAtTime(180 + rpm * 0.12, at);
+      out.gain.linearRampToValueAtTime((0.12 + 0.88 * throttle) * level, at);
+    }
+
+    const sources: AudioScheduledSourceNode[] = [...voices.map((v) => v.osc), noise];
+    for (const s of sources) {
+      s.start(t0);
+      s.stop(end + 0.05);
+    }
+    const stop = () => {
+      const now = ctx.currentTime;
+      out.gain.cancelScheduledValues(now);
+      out.gain.setTargetAtTime(0, now, 0.04);
+      for (const s of sources) {
+        try {
+          s.stop(now + 0.2);
+        } catch {
+          /* already stopped */
+        }
+      }
+    };
+    this.stopCurrent = stop;
+    sources[0].onended = () => {
+      out.disconnect();
+      if (this.stopCurrent === stop) this.stopCurrent = null;
+    };
+  }
+}
+
+export const engine = new EngineAudio();

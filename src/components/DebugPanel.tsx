@@ -7,8 +7,9 @@ import { advance } from '@react-three/fiber';
 import { CONFIG, RANGES, type Config } from '@/lib/config';
 import { carState } from '@/lib/motion';
 import { SHOTS } from '@/lib/script';
-import { sectionState } from '@/lib/sectionRuntime';
-import { anchorProgress, DRIFT, fromDriftLocal, SECTIONS } from '@/lib/sections';
+import { BEATS, CHAPTERS, DRIFT, fromDriftLocal } from '@/lib/chapters';
+import { chapterState } from '@/lib/chapterRuntime';
+import { interaction } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
 import { cameraState } from '@/scene/CameraRig';
 
@@ -63,14 +64,19 @@ export function DebugPanel() {
         st.setProgress(v);
       },
     },
-    // One button per drift shot and per section (no dots in leva keys: a dot means "nested folder")
+    // One button per beat and per drift shot (no dots in leva keys: a dot means "nested folder")
+    ...Object.fromEntries(
+      BEATS.map((b) => {
+        const c = CHAPTERS.find((ch) => ch.id === b.chapter)!;
+        return [`${c.numeral}: ${b.id}`, button(() => jump(b.start + (b.anchor ?? 0.05) * (b.end - b.start)))];
+      }),
+    ),
     ...Object.fromEntries(
       SHOTS.filter((shot) => shot.from < DRIFT.localEnd).map((shot, i) => [
-        `shot ${i + 1}: ${shot.title}`,
+        `III shot ${i + 1}: ${shot.title}`,
         button(() => jump(fromDriftLocal(shot.from + 0.002))),
       ]),
     ),
-    ...Object.fromEntries(SECTIONS.map((s) => [`section: ${s.id}`, button(() => jump(anchorProgress(s.id)))])),
     'play 0 to 1 (60 s)': button(() => play()),
     'back to scroll': button(() => {
       tween.current?.kill();
@@ -113,6 +119,7 @@ export function DebugPanel() {
   useControls('Skid marks', configSchema('skid'), { collapsed: true });
   useControls('Car', configSchema('car'), { collapsed: true });
   useControls('Look', configSchema('look'), { collapsed: true });
+  useControls('Interaction', configSchema('interaction'), { collapsed: true });
   useControls('Post', configSchema('post'), { collapsed: true });
   useControls('Rain', configSchema('rain'), { collapsed: true });
   useControls('Coast', configSchema('coast'), { collapsed: true });
@@ -123,18 +130,19 @@ export function DebugPanel() {
     // Console access while debugging: __gt3r.store.getState().setProgress(0.5)
     // `advance(performance.now())` renders one frame by hand (useful when the tab is throttled).
     const w = window as unknown as { __gt3r?: unknown };
-    w.__gt3r = { store: useStore, config: CONFIG, carState, cameraState, sectionState, advance };
+    w.__gt3r = { store: useStore, config: CONFIG, carState, cameraState, chapterState, interaction, advance };
 
     // HUD: which drift shot or section is on screen right now
     const id = window.setInterval(() => {
       if (!hud.current) return;
       const g = useStore.getState().progress.toFixed(3);
-      if (sectionState.active) {
-        const s = SECTIONS[sectionState.index];
-        hud.current.textContent = `SECTION ${s.id.toUpperCase()}  ${(sectionState.local * 100).toFixed(0)}%   global ${g}`;
+      const c = CHAPTERS[chapterState.chapter];
+      if (!chapterState.drift) {
+        const b = BEATS[Math.max(0, chapterState.beat)];
+        hud.current.textContent = `${c.numeral} ${c.title.toUpperCase()} / ${b.id}  ${(chapterState.beatLocal * 100).toFixed(0)}%   global ${g}`;
       } else {
         const shot = SHOTS[Math.max(0, cameraState.shot)];
-        hud.current.textContent = `SHOT ${cameraState.shot + 1}  ${shot.title.toUpperCase()}   drift ${carState.progress.toFixed(3)}  global ${g}`;
+        hud.current.textContent = `${c.numeral} / SHOT ${cameraState.shot + 1}  ${shot.title.toUpperCase()}   drift ${carState.progress.toFixed(3)}  global ${g}`;
       }
     }, 100);
     return () => {

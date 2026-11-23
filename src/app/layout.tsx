@@ -9,8 +9,8 @@ import './globals.css';
 const display = Unbounded({ subsets: ['latin'], weight: ['500', '700', '900'], variable: '--font-display' });
 
 export const metadata: Metadata = {
-  title: `${site.name} ${site.edition} | Feel the drift`,
-  description: `${site.dates} at ${site.venue}.`,
+  title: `${site.name} ${site.year} | ${site.concept}`,
+  description: `${site.claim}. ${site.dates}, ${site.venue}. ${site.disclaimer}`,
 };
 
 export const viewport: Viewport = {

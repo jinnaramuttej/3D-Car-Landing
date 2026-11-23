@@ -4,18 +4,19 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Loader } from '@react-three/drei';
 import { Leva } from 'leva';
-import { CONFIG } from '@/lib/config';
+import { PAGES } from '@/lib/chapters';
 import { SHOTS } from '@/lib/script';
 import { useScrollTimeline } from '@/lib/useScrollTimeline';
 import { Scene } from '@/scene/Scene';
 import { DebugPanel } from './DebugPanel';
+import { Arrival } from './Arrival';
+import { MiniMap } from './MiniMap';
 import { Navbar } from './Navbar';
 import { Overlay } from './Overlay';
-import { Sections } from './Sections';
 
 /**
- * Fixed full-screen canvas, a tall (600vh) scroll container above it, and the DOM
- * overlay on top. The scroll container is empty: it only gives Lenis/ScrollTrigger
+ * Fixed full-screen canvas, a tall scroll container above it (PAGES x 100vh, see
+ * src/lib/chapters.ts), and the DOM overlay on top. The scroll container is empty: it only gives Lenis/ScrollTrigger
  * a distance to scrub.
  */
 export default function Experience() {
@@ -43,14 +44,15 @@ export default function Experience() {
       </div>
 
       <Overlay />
-      <Sections />
+      <Arrival />
       <Navbar />
-      <div ref={trackRef} className="scroll-track" style={{ height: `${CONFIG.scroll.pages * 100}vh` }} />
+      <MiniMap />
+      <div ref={trackRef} className="scroll-track" style={{ height: `${PAGES * 100}vh` }} />
 
       <Loader
         containerStyles={{ background: '#04050a' }}
         barStyles={{ background: '#ff2a1a' }}
-        dataInterpolation={(p) => `Warming tyres ${p.toFixed(0)}%`}
+        dataInterpolation={(p) => `Waiting out the rain ${p.toFixed(0)}%`}
       />
       <Leva hidden={!debug} collapsed={false} titleBar={{ title: 'GT3 R tuning' }} />
       {debug && <DebugPanel />}

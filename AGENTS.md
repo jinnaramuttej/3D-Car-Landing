@@ -20,4 +20,7 @@ Notes for anyone working on this repo, people and AI assistants alike.
 - Section timing, camera waypoints and lighting live in `src/lib/sections.ts`. The drift scene's shots are in `src/lib/script.ts`; everything else tunable is in `src/lib/config.ts`.
 - The drift scene (the first 30% of the scroll) is finished. Leave it alone unless someone asks for a change there.
 - After editing anything the 3D frame loop reads (`sections.ts`, `script.ts`, the runtime files), reload the page. Hot reload keeps stale state around and will fool you.
+- Keep every camera between 24 and 40 degrees of vertical FOV. If a shot needs more in frame, move the camera back rather than widening the lens.
+- Keep the NaN scrub as the first pass in `Effects.tsx`. The wet-road reflector throws the odd NaN pixel, and bloom turns one of those into a black screen.
+- Don't hide or add lights per frame. Changing the light count recompiles every material; turn a light's intensity down to 0 instead.
 - The car model is CC BY-NC-SA 4.0, so keep the credit line in the footer.

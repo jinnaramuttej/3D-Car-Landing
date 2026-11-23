@@ -11,12 +11,10 @@ import {
   Vignette,
 } from '@react-three/postprocessing';
 import {
-  BlendFunction,
   type BloomEffect,
   type ChromaticAberrationEffect,
   type DepthOfFieldEffect,
   LUT3DEffect,
-  NoiseEffect,
   ToneMappingMode,
   type VignetteEffect,
 } from 'postprocessing';
@@ -24,18 +22,22 @@ import { MathUtils, type PerspectiveCamera, Quaternion, Vector2, Vector3 } from 
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { carState } from '@/lib/motion';
-import { sectionState } from '@/lib/sectionRuntime';
+import { chapterState, rainLevel } from '@/lib/chapterRuntime';
+import { getWipeTexture, interaction } from '@/lib/interaction';
 import { cameraState } from './CameraRig';
 import { AnamorphicEffect } from './postfx/AnamorphicEffect';
 import { createTealOrangeLut } from './postfx/gradeLut';
 import { LensDropsEffect } from './postfx/LensDropsEffect';
 import { MotionBlurEffect } from './postfx/MotionBlurEffect';
+import { DissolvePass } from './postfx/DissolvePass';
+import { FilmGrainEffect } from './postfx/FilmGrainEffect';
 import { createSanitizePass } from './postfx/SanitizePass';
 
 /**
  * The post chain, in order (the composer splits it into passes where effects that
  * sample neighbouring pixels would collide):
- *   sanitize     NaN/Inf scrub (the reflector throws the odd NaN)
+ *   sanitize     NaN/Inf scrub (the reflector throws the odd NaN), chapter exposure
+ *   dissolve     holds the last frame over a cut and fades it out
  *   DOF          focused on the car during the drift, on the section's subject after
  *   motion blur  camera reprojection, with the car carried by its own motion
  *   bloom        + anamorphic streaks on the brightest lights
@@ -56,9 +58,10 @@ export function Effects() {
   const fx = useMemo(() => {
     const p = CONFIG.post;
     const lut = new LUT3DEffect(createTealOrangeLut(32));
-    const grain = new NoiseEffect({ blendFunction: BlendFunction.SOFT_LIGHT, premultiply: false });
+    const grain = new FilmGrainEffect();
     return {
       sanitize: createSanitizePass(),
+      dissolve: new DissolvePass(),
       motionBlur: new MotionBlurEffect(camera, carState, p.motionBlurSamples),
       anamorphic: new AnamorphicEffect(),
       drops: new LensDropsEffect(),
@@ -74,13 +77,22 @@ export function Effects() {
       fx.drops.dispose();
       fx.lut.dispose();
       fx.grain.dispose();
+      fx.dissolve.dispose();
     },
     [fx],
   );
 
   // camera velocity for the lens drops (camera space, m/s), smoothed and cut-aware
   const motion = useMemo(
-    () => ({ prev: new Vector3(), has: false, vel: new Vector3(), push: new Vector2(), radial: 0, clock: 0 }),
+    () => ({
+      prev: new Vector3(),
+      has: false,
+      vel: new Vector3(),
+      push: new Vector2(),
+      radial: 0,
+      clock: 0,
+      mode: 'beat' as 'drift' | 'beat',
+    }),
     [],
   );
   const _pos = useMemo(() => new Vector3(), []);
@@ -96,7 +108,7 @@ export function Effects() {
     // detail on the car, like the tyre; the car's centre when the shot looks past it).
     if (dof.current) {
       _focus.copy(cameraState.focus);
-      if (!sectionState.active && carState.carReady && p.focusOnCar) {
+      if (chapterState.drift && carState.carReady && p.focusOnCar) {
         _d.copy(carState.position).setY(0.6);
         if (_focus.distanceTo(_d) > 2.6) _focus.copy(_d);
       }
@@ -105,7 +117,7 @@ export function Effects() {
       dof.current.cocMaterial.focusRange = cameraState.focusRange;
     }
     if (bloom.current) {
-      bloom.current.intensity = l.bloomIntensity * (sectionState.active ? sectionState.look.bloom : 1);
+      bloom.current.intensity = l.bloomIntensity * chapterState.env.bloom;
       bloom.current.luminanceMaterial.threshold = l.bloomThreshold;
       bloom.current.luminanceMaterial.smoothing = l.bloomSmoothing;
     }
@@ -119,6 +131,17 @@ export function Effects() {
       vignette.current.darkness = l.vignetteDarkness;
     }
 
+    fx.sanitize.exposure.value = chapterState.env.exposure;
+
+    // Cross-dissolve: a dissolve beat or a mini-map jump, or the camera jumping between
+    // the drift and the chapter cameras. The drift's own hard cuts stay hard.
+    camera.getWorldPosition(_pos);
+    fx.dissolve.duration = p.dissolve;
+    const modeChanged = motion.mode !== cameraState.mode;
+    const jumped = motion.has && _pos.distanceTo(motion.prev) > p.cutDistance;
+    if (motion.has && (chapterState.cut || (jumped && (modeChanged || cameraState.mode === 'beat')))) fx.dissolve.trigger();
+    motion.mode = cameraState.mode;
+
     const mb = fx.motionBlur;
     mb.strength = p.motionBlur;
     mb.maxBlur = p.motionBlurMax;
@@ -131,11 +154,10 @@ export function Effects() {
     an.tint.set(p.anamorphicTint);
 
     fx.lut.blendMode.opacity.value = p.grade;
-    fx.grain.blendMode.opacity.value = p.grain;
+    fx.grain.amount = p.grain;
 
     // Lens drops: air pushes them against the camera's sideways motion; moving forward
     // spreads them out from the centre. A cut (big jump in one frame) is ignored.
-    camera.getWorldPosition(_pos);
     if (motion.has) {
       _d.subVectors(_pos, motion.prev);
       if (_d.length() < p.cutDistance) {
@@ -151,7 +173,11 @@ export function Effects() {
     motion.radial = MathUtils.clamp(-motion.vel.z * k * 1.5, 0, 3);
     motion.clock += dt;
     const dr = fx.drops;
-    dr.amount = p.lensDrops * CONFIG.rain.intensity;
+    dr.amount = p.lensDrops * rainLevel();
+    dr.wipe = getWipeTexture();
+    // a rev rattles the glass
+    const rr = interaction.rev * CONFIG.interaction.revRain;
+    if (rr > 0.01) motion.push.x += Math.sin(motion.clock * 57) * 0.35 * rr;
     dr.refract = p.lensDropRefract;
     dr.push.copy(motion.push);
     dr.radial = motion.radial;
@@ -160,7 +186,8 @@ export function Effects() {
 
   return (
     <EffectComposer multisampling={mobile ? 0 : 4}>
-      <primitive object={fx.sanitize} />
+      <primitive object={fx.sanitize.pass} />
+      <primitive object={fx.dissolve} />
       {mobile ? (
         <></>
       ) : (

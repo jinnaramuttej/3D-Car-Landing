@@ -100,7 +100,7 @@ export const SECTIONS: Section[] = [
       { position: [6.55, 1.1, 10.66], lookAt: [0.2, 2.25, 0], fov: 32 },
       { position: [5.5, 1.0, 9.0], lookAt: [0.1, 2.15, 0], fov: 30 },
     ],
-    look: { fog: 0.014, env: 0.9, bloom: 1, headlights: 1, accent: 0.4, smoke: 0.85 },
+    look: { fog: 0.009, env: 0.9, bloom: 1, headlights: 1, accent: 0.4, smoke: 0.85 },
     lookEnd: { smoke: 0, accent: 1 },
   },
   {
@@ -115,7 +115,7 @@ export const SECTIONS: Section[] = [
       { position: [4.32, 2.0, -7.87], lookAt: [0, 0.7, 0], fov: 32, screenShift: 1.9 },
     ],
     mobileCamera: { position: [7.32, 1.9, 4.18], lookAt: [0, 0.6, 0], fov: 36 },
-    look: { fog: 0.012, env: 0.95, bloom: 1, headlights: 1, accent: 1.2, smoke: 0 },
+    look: { fog: 0.008, env: 0.95, bloom: 1, headlights: 1, accent: 1.2, smoke: 0 },
   },
   {
     // Pinned: vertical scroll slides the event cards sideways while the camera
@@ -130,7 +130,7 @@ export const SECTIONS: Section[] = [
     ],
     move: 'line',
     mobileCamera: { position: [5.69, 2.2, 1.35], lookAt: [0, 0.4, 0], fov: 38 },
-    look: { fog: 0.012, env: 0.9, bloom: 1, headlights: 1, accent: 0.8, smoke: 0 },
+    look: { fog: 0.008, env: 0.9, bloom: 1, headlights: 1, accent: 0.8, smoke: 0 },
     dof: 1.4,
     focusRange: 2.5,
   },
@@ -148,7 +148,7 @@ export const SECTIONS: Section[] = [
     move: 'line',
     mobileCamera: { position: [-3.2, 1.6, -5], lookAt: [-7, 1.2, 30], fov: 40 },
     blend: 0.25,
-    look: { fog: 0.01, env: 0.8, bloom: 1.15, headlights: 1.25, accent: 0, smoke: 0 },
+    look: { fog: 0.007, env: 0.8, bloom: 1.15, headlights: 1.25, accent: 0, smoke: 0 },
   },
   {
     // Close-up on the headlights with extra bloom.
@@ -163,7 +163,7 @@ export const SECTIONS: Section[] = [
       { position: [1.85, 0.68, 2.8], lookAt: [0.62, 0.82, 1.85], fov: 28, screenShift: 0.32 },
     ],
     mobileCamera: { position: [1.85, 0.9, 5.13], lookAt: [0.3, 0.6, 1.8], fov: 34 },
-    look: { fog: 0.016, env: 0.7, bloom: 1.5, headlights: 1.35, accent: 0.5, smoke: 0 },
+    look: { fog: 0.01, env: 0.7, bloom: 1.5, headlights: 1.35, accent: 0.5, smoke: 0 },
     dof: 1.8,
     focusRange: 0.8,
   },
@@ -182,8 +182,8 @@ export const SECTIONS: Section[] = [
       { t: 1, position: [-0.83, 0.95, -17.86], lookAt: [0, 0.8, 40], fov: 34 },
     ],
     mobileCamera: { position: [-1.08, 1.0, -22.82], lookAt: [0, 0.8, 30], fov: 38 },
-    look: { fog: 0.016, env: 0.8, bloom: 1.4, headlights: 1.2, accent: 0, smoke: 0 },
-    lookEnd: { fog: 0.024 },
+    look: { fog: 0.01, env: 0.8, bloom: 1.4, headlights: 1.2, accent: 0, smoke: 0 },
+    lookEnd: { fog: 0.016 },
   },
 ];
 

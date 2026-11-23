@@ -34,7 +34,7 @@ export default function Experience() {
         <Canvas
           dpr={[1, 1.5]}
           gl={{ antialias: false, powerPreference: 'high-performance', stencil: false }}
-          camera={{ fov: SHOTS[0].keys[0].fov, near: 0.05, far: 600, position: [6, 1, 6] }}
+          camera={{ fov: SHOTS[0].keys[0].fov, near: 0.1, far: 2200, position: [6, 1, 6] }}
         >
           <Suspense fallback={null}>
             <Scene />

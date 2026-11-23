@@ -70,7 +70,7 @@ export const CONFIG = {
     headBeam: 110, // spot light intensity of each headlight
     headBeamAngle: 0.5,
     tailGlow: 1.2, // red point light behind the car
-    paintEnv: 1.2, // envMapIntensity on the bodywork (absolute, not scaled by look.envIntensity)
+    paintEnv: 0.85, // envMapIntensity on the bodywork (absolute, not scaled by look.envIntensity)
     paintRoughness: 0.25,
     paintMetalness: 0.6,
     clearcoat: 1,
@@ -137,9 +137,28 @@ export const CONFIG = {
     minSlip: 0.15,
   },
 
+  /** Rainy Mumbai seafront: sea wall on the road's left, city on the right. */
+  coast: {
+    seaWallOffset: 11.5, // (mount) metres from the centre line to the sea wall (sea side = left)
+    seaLevel: -1.4, // (mount)
+    sodium: '#ffa24d', // street lamp colour
+    sodiumEmissive: 7,
+    windowGlow: 0.7, // lit windows in the city
+    neonGlow: 5, // neon signs
+    shoreLights: 3.5, // the far shoreline "necklace" across the bay
+    bridgeLights: 4,
+    haze: 0.0026, // distance haze on the far city and bridge (they skip the normal fog)
+    skyTop: '#020307',
+    skyHorizon: '#131922',
+    skyGlow: '#4a2f1d', // sodium light pollution low on the city side
+    waveSpeed: 0.015,
+    seaEnv: 0.22, // sky/city reflection on the water (fresnel keeps it dark face-on)
+  },
+
   look: {
     background: '#04050a',
-    fogDensity: 0.014,
+    fogColor: '#0c1016',
+    fogDensity: 0.009,
     envIntensity: 0.9,
     bloomIntensity: 1.1,
     bloomThreshold: 0.9,
@@ -255,6 +274,16 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     veilOpacity: [0, 1, 0.01],
   },
   skid: { opacity: [0, 1, 0.01], width: [0.05, 0.8, 0.01], minSlip: [0, 1, 0.01] },
+  coast: {
+    sodiumEmissive: [0, 20, 0.1],
+    windowGlow: [0, 6, 0.05],
+    neonGlow: [0, 15, 0.1],
+    shoreLights: [0, 12, 0.1],
+    bridgeLights: [0, 12, 0.1],
+    haze: [0, 0.01, 0.0001],
+    waveSpeed: [0, 0.1, 0.001],
+    seaEnv: [0, 3, 0.01],
+  },
   look: {
     fogDensity: [0, 0.06, 0.001],
     envIntensity: [0, 4, 0.05],

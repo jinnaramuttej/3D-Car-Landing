@@ -103,6 +103,43 @@ export function createKerbTexture() {
   return tex;
 }
 
+/** Lane dash along V: 1/3 painted, 2/3 gap (use with alphaTest). */
+export function createDashTexture() {
+  const [c, g] = canvas(4, 48);
+  g.clearRect(0, 0, 4, 48);
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, 4, 16);
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
+  tex.wrapS = tex.wrapT = RepeatWrapping;
+  return tex;
+}
+
+/** Tileable wave normal map for the sea. */
+export function createWaveNormalTexture() {
+  const size = 256;
+  const h = fbm(size, 8, 4, 17);
+  const data = new Uint8Array(size * size * 4);
+  const strength = 3;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const l = h[y * size + ((x - 1 + size) % size)];
+      const r = h[y * size + ((x + 1) % size)];
+      const u = h[((y - 1 + size) % size) * size + x];
+      const d = h[((y + 1) % size) * size + x];
+      const nx = (l - r) * strength;
+      const ny = (u - d) * strength;
+      const len = Math.hypot(nx, ny, 1);
+      const i = (y * size + x) * 4;
+      data[i] = (nx / len) * 127.5 + 127.5;
+      data[i + 1] = (ny / len) * 127.5 + 127.5;
+      data[i + 2] = (1 / len) * 127.5 + 127.5;
+      data[i + 3] = 255;
+    }
+  }
+  return dataTexture(data, size);
+}
+
 /** Tileable value noise, fBm, values 0..1. */
 function fbm(size: number, baseCells: number, octaves: number, seed: number) {
   const out = new Float32Array(size * size);
@@ -186,12 +223,13 @@ export function createAsphaltTextures() {
     }
   }
 
-  // Puddles -> roughness (green channel is what three samples)
+  // Puddles -> roughness (green channel is what three samples). It's raining: lots of
+  // standing water (mirror-smooth) with damp, slightly rough asphalt in between.
   const w = fbm(size, 4, 5, 9);
   const rough = new Uint8Array(size * size * 4);
   for (let i = 0; i < w.length; i++) {
-    const wet = Math.min(1, Math.max(0, (w[i] - 0.42) / 0.16)); // 0 dry .. 1 puddle
-    const v = (0.95 - wet * 0.75) * 255;
+    const wet = Math.min(1, Math.max(0, (w[i] - 0.36) / 0.18)); // 0 damp .. 1 puddle
+    const v = (0.78 - wet * 0.7) * 255;
     rough[i * 4] = v;
     rough[i * 4 + 1] = v;
     rough[i * 4 + 2] = v;

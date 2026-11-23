@@ -121,6 +121,29 @@ class EngineAudio {
     this.play(IGNITE);
   }
 
+  /** One soft heartbeat (lub-dub): two low sine thumps, no engine involved. */
+  heartbeat() {
+    if (this.muted) return;
+    const ctx = this.ensure();
+    if (!ctx || !this.master) return;
+    const t0 = ctx.currentTime + 0.01;
+    const thump = (at: number, level: number) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(70, at);
+      osc.frequency.exponentialRampToValueAtTime(42, at + 0.12);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, at);
+      g.gain.linearRampToValueAtTime(level, at + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
+      osc.connect(g).connect(this.master!);
+      osc.start(at);
+      osc.stop(at + 0.25);
+    };
+    thump(t0, 0.32);
+    thump(t0 + 0.28, 0.2);
+  }
+
   /**
    * Hold-to-rev: `on` while the engine runs, `rev` 0..1 from the visitor. Idles quietly,
    * climbs to ~7800 rpm at full rev.

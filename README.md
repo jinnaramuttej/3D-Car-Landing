@@ -1,6 +1,6 @@
 # Techfest 2026 (unofficial concept)
 
-Scroll-driven R3F site in one fixed Canvas, told in five chapters: a Porsche 992 GT3 R waits in the rain on a Mumbai seafront at midnight, wakes up, drifts through the bends, and the rain clears into a warm morning where the festival content lives. An unofficial concept build for the Build in 3D challenge; every call to action goes to [techfest.org](https://techfest.org).
+Scroll-driven R3F site in one fixed Canvas, told in eleven chapters and a finale: a Porsche 992 GT3 R waits in the rain on a Mumbai seafront at midnight, wakes up, drifts through the bends, the rain clears into a warm morning, and the festival opens up district by district before the car leaves into the sunrise. An unofficial concept build for the Build in 3D challenge; every call to action goes to [techfest.org](https://techfest.org).
 
 ```powershell
 npm install
@@ -20,12 +20,12 @@ scroll (Lenis) -> ScrollTrigger -> one GSAP timeline -> store.progress (zustand,
                        stepDrive(): car path, yaw, roll, steer, slip
                        then fog, env map, sun and sky light from the chapter's environment
   Car    useFrame(-2)  applies it to the model, publishes tyre contacts and the headlight beams
-  Smoke / Rain / SkidMarks / ChapterProps / CameraRig / Interaction  useFrame(-1)
+  Smoke / Rain / SkidMarks / ChapterProps / districts / CameraRig / Interaction  useFrame(-1)
   Effects  composer, priority 1
-  Overlay + Arrival (DOM)  paused GSAP timelines that follow store.progress
+  Overlay + Districts (DOM)  paused GSAP timelines that follow store.progress
 ```
 
-## The five chapters
+## The chapters
 
 `src/lib/chapters.ts` holds the chapters (scroll length in viewport heights, environment at the start and end), the camera beats inside them (waypoints in a frame, `orbit` or `line` moves, depth of field, headlight/accent/smoke levels) and the staging numbers (ignition, finale, mile markers, billboards). The runtime (`src/lib/chapterRuntime.ts`) eases every environment value, rain, fog, light colour, exposure, sky, sun, lamps, so nothing jumps between chapters.
 
@@ -35,9 +35,16 @@ scroll (Lenis) -> ScrollTrigger -> one GSAP timeline -> store.progress (zustand,
 | II | Ignition | The engine catches and the lights flicker up; then a camera car leads it away. The launch ends exactly on the drift's first frame, so there is no cut |
 | III | The Turn | The drift scene (shot script below), untouched and at its original pace. It ends in the smoke |
 | IV | Clearing | Under the smoke the env map switches to daylight; the smoke settles, the rain stops, dawn comes up, the street lamps go off and the Techfest title forms |
-| V | Arrival | Warm morning: the facts, a dashboard of numbers, the pit lane (garage bays with filter chips), three mile markers for the schedule, partner billboards, then the car leaves toward the sun and the CTA comes up |
+| V | Arrival | Warm morning beside the parked car: edition, dates, venue |
+| VI | Arena | Robowars: an octagonal steel cage with orange rim light. Pick 8/15/30/60 kg and the robot rescales; click the floor for sparks; the stats count up |
+| VII | Pit Lane | The competitions as garage bays; filter chips re-flow the cards (GSAP Flip); every card has a Check status link |
+| VIII | Hall of Voices | Past speakers on a globe: category tabs swap the markers, hover for a monogram card, click to pin. Phones get a plain list |
+| IX | Expo | Four holographic pedestals; the camera dollies along them; click one for its detail panel |
+| X | Heartbeat | The stem cell donor drive: warm light, one slow pulse in light and sound, a 3-minute ring timer |
+| XI | Chamber | Techfest World MUN in a purple hall; committee cards flip on hover (tap on phones) |
+| Fin | Finale | Back at the car: it leaves into the sunrise; one CTA to techfest.org and the disclaimer |
 
-Camera continuity: beats ease into each other in their own frame (`start`, `follow`, `parked`). Where the camera has to jump (the finale, a mini-map jump), the frame cross-dissolves (`DissolvePass`).
+Camera continuity: beats ease into each other in their own frame (`start`, `follow`, `parked`, or a district's platform). Chapters VI-XI are sets on platforms out over the sea, about 100 m apart; moving between them is a real camera move that lifts out of one hall into morning mist over the water and down into the next (the fog, light and env map cross-fade on the way, `CONFIG.districts`). Only a mini-map jump cross-dissolves (`DissolvePass`).
 
 ## Interaction
 
@@ -45,7 +52,8 @@ Camera continuity: beats ease into each other in their own frame (`start`, `foll
 - **Move the cursor** over the scene to wipe the wet lens; the drops come back as it keeps raining.
 - **Click the car** for the next livery (a recolour of the race livery: gold, teal, red, midnight, pearl).
 - **H** or the navbar button toggles the headlights. Mouse parallax on every camera, a chapter mini-map down the right edge (click to jump), and a sound toggle.
-- Tunables in `CONFIG.interaction`. Phones get tap-the-car and the mini-map; no hold-to-rev or lens wipe.
+- In the districts: weight classes and sparks in the arena, filter chips in the pit lane, globe markers and tabs in the Hall of Voices, pedestals in the expo, the timer in Heartbeat, flip cards in the Chamber.
+- Tunables in `CONFIG.interaction` and `CONFIG.districts`. Phones get tap-the-car, the mini-map and the district controls; no hold-to-rev or lens wipe, and a list instead of the globe.
 
 ## The drift scene: shot script
 
@@ -78,14 +86,16 @@ Each shot gives camera keys in its own frame (`body` = rides on the car, `path` 
 | File | What it does |
 | --- | --- |
 | `src/content.ts` | All site copy and the accent colour |
-| `src/lib/chapters.ts` | The five chapters: scroll lengths, environments, camera beats, finale/ignition/marker numbers |
+| `src/lib/chapters.ts` | The chapters: scroll lengths, environments, camera beats, district positions, finale/ignition numbers |
+| `src/lib/districtState.ts` | UI state shared by the district panels and sets (weight class, speaker category, open exhibit) |
 | `src/lib/chapterRuntime.ts` | Runs the chapters each frame: damped environment and looks, car staging, ignition, finale, camera targets |
 | `src/lib/interaction.ts`, `src/scene/Interaction.tsx` | Hold to rev, lens wipe, click-the-car livery, headlight toggle |
 | `src/lib/engineAudio.ts` | Synthesised flat-six: ignition, held-throttle rev, finale rev and launch (Web Audio, no files) |
 | `src/components/Overlay.tsx` | Chapter cards, hints, cinema bars, the chapter IV title, livery toast, footer credit |
-| `src/components/Arrival.tsx` | Chapter V: facts, dashboard, pit lane, mile markers, partners, finale CTA |
+| `src/components/Districts.tsx` | Chapters V-XI and the finale in the DOM: facts, Robowars console, pit lane bays, speakers, expo details, heartbeat timer, committee cards, the CTA |
 | `src/components/Navbar.tsx`, `MiniMap.tsx` | Navbar (headlights, sound, techfest.org) and the chapter mini-map |
-| `src/scene/ChapterProps.tsx` | Mile markers, partner billboards and the accent rim light |
+| `src/scene/ChapterProps.tsx` | The accent rim light behind the parked car |
+| `src/scene/districts/` | The six district sets, the shared light pool, the hologram material |
 | `src/scene/livery.ts`, `dayEnvironment.ts` | Livery recolours; the generated daylight env map |
 | `src/lib/script.ts` | The drift scene's shot script: timings, framing, cuts, depth of field per shot |
 | `src/lib/config.ts` | Every other tunable (drift, car, smoke, rain, coast, post, look) plus slider ranges for leva |

@@ -16,8 +16,8 @@ Notes for anyone working on this repo, people and AI assistants alike.
 ## Good to know before you change things
 
 - Run it with `npm run dev`. Open `/?debug` for the tuning panel, the chapter/shot jump buttons and the HUD.
-- All the site copy (chapter lines, facts, events, schedule, partners, the accent colour) lives in `src/content.ts`. It's an unofficial concept: every call to action goes to techfest.org, and the "Unofficial concept build" line stays in the footer.
-- The page is five chapters. Their scroll lengths, camera beats and each chapter's light, fog, rain and exposure live in `src/lib/chapters.ts`. The drift scene's shots are in `src/lib/script.ts`; everything else tunable is in `src/lib/config.ts`.
+- All the site copy lives in `src/content.ts` (SITE, ROBOWARS, COMPETITIONS, VOICES, EXPO, HEARTBEAT, TWMUN, plus the chapter lines and UI labels). It's an unofficial concept: every call to action goes to SITE.home, the disclaimer stays in the footer, no organiser phone numbers or emails, no external images or logos, and the speakers are always presented as past speakers.
+- The page is eleven chapters and a finale. Their scroll lengths, camera beats, district positions and each chapter's light, fog, rain and exposure live in `src/lib/chapters.ts`. Moving between districts is always a camera move with a fog/light cross-fade, never a cut. The drift scene's shots are in `src/lib/script.ts`; everything else tunable is in `src/lib/config.ts`.
 - The drift scene (chapter III) is finished. Leave it alone unless someone asks for a change there.
 - After editing anything the 3D frame loop reads (`chapters.ts`, `script.ts`, the runtime files), reload the page. Hot reload keeps stale state around and will fool you.
 - Keep every camera between 24 and 40 degrees of vertical FOV. If a shot needs more in frame, move the camera back rather than widening the lens.

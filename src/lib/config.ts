@@ -187,6 +187,24 @@ export const CONFIG = {
     beamLength: 16,
   },
 
+  /** Post chain (src/scene/Effects.tsx). Mobile skips DOF, motion blur, streaks and lens drops. */
+  post: {
+    focusOnCar: true, // during the drift, keep the car in focus even when the shot looks past it
+    motionBlur: 0.45, // share of each frame's motion that gets smeared (0.5 ~ 180 degree shutter)
+    motionBlurMax: 0.025, // longest smear, in screen heights
+    motionBlurSamples: 8, // (mount)
+    cutDistance: 2.5, // metres the camera jumps in one frame that count as a cut (no blur that frame)
+    anamorphic: 0.5, // horizontal lens streaks on the brightest lights
+    anamorphicThreshold: 2.2, // HDR level where the streaks start
+    anamorphicLength: 1,
+    anamorphicTint: '#7fb0ff',
+    grade: 1, // teal/orange LUT strength
+    grain: 0.32, // film grain (soft light)
+    lensDrops: 0.75, // rain drops on the lens (scaled by rain.intensity)
+    lensDropRefract: 0.035,
+    lensDropStreak: 0.09, // how far camera motion stretches the drops
+  },
+
   look: {
     background: '#04050a',
     fogColor: '#0c1016',
@@ -341,6 +359,19 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     splashOpacity: [0, 2, 0.01],
     beamOpacity: [0, 0.5, 0.005],
     beamLength: [2, 40, 0.5],
+  },
+  post: {
+    motionBlur: [0, 1.5, 0.01],
+    motionBlurMax: [0, 0.1, 0.001],
+    cutDistance: [0.2, 10, 0.1],
+    anamorphic: [0, 3, 0.01],
+    anamorphicThreshold: [0, 10, 0.05],
+    anamorphicLength: [0.2, 3, 0.05],
+    grade: [0, 1, 0.01],
+    grain: [0, 1, 0.01],
+    lensDrops: [0, 2, 0.01],
+    lensDropRefract: [0, 0.15, 0.001],
+    lensDropStreak: [0, 0.5, 0.005],
   },
   look: {
     fogDensity: [0, 0.06, 0.001],

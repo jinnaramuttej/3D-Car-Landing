@@ -1,21 +1,23 @@
 'use client';
 
-import { useLayoutEffect, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Environment, Lightformer } from '@react-three/drei';
 import * as THREE from 'three';
-import { Color, FogExp2 } from 'three';
+import { Color, type DirectionalLight, FogExp2, type HemisphereLight, type Texture, Vector3 } from 'three';
+import { chapterById } from '@/lib/chapters';
+import { chapterState, stepChapters, sunDirection } from '@/lib/chapterRuntime';
 import { CONFIG } from '@/lib/config';
-import { stepDrive } from '@/lib/motion';
-import { sectionState, stepSections } from '@/lib/sectionRuntime';
-import { driftLocal } from '@/lib/sections';
+import { carState, stepDrive } from '@/lib/motion';
 import { useStore } from '@/lib/store';
 import { Car } from './Car';
 import { CameraRig } from './CameraRig';
+import { ChapterProps } from './ChapterProps';
 import { Cityscape } from './Cityscape';
+import { createDayEnvironment } from './dayEnvironment';
 import { Effects } from './Effects';
+import { Interaction } from './Interaction';
 import { Rain } from './Rain';
-import { SectionProps } from './SectionProps';
 import { SkidMarks } from './SkidMarks';
 import { Smoke } from './Smoke';
 import { Track } from './Track';
@@ -23,25 +25,46 @@ import { Track } from './Track';
 /** Night waterfront street (Shanghai Bund, Poly Haven, CC0): the closest free stand-in for a Mumbai seafront. */
 export const NIGHT_HDRI = '/hdri/shanghai_bund_1k.hdr';
 
+const _sun = new Vector3();
+
 /**
  * Frame order (lower priority runs first; none are > 0, so R3F still owns the loop
  * and the EffectComposer renders):
- *   -3  Scene      global progress -> sectionState (stepSections), then the drift
- *                  scene's own progress -> carState kinematics (stepDrive)
- *   -2  Car        applies carState, publishes wheel contacts
- *   -1  Smoke, SkidMarks, SectionProps, CameraRig
+ *   -3  Scene      global progress -> chapterState (stepChapters), then the car's
+ *                  kinematics (stepDrive), then the chapter's light, fog and env map
+ *   -2  Car        applies carState, publishes wheel contacts and headlight beams
+ *   -1  Smoke, Rain, SkidMarks, ChapterProps, CameraRig, Interaction
  */
 export function Scene() {
   const camera = useThree((s) => s.camera);
   const scene = useThree((s) => s.scene);
   const gl = useThree((s) => s.gl);
   const background = useMemo(() => new Color(CONFIG.look.background), []);
-  const fog = useMemo(() => new FogExp2(CONFIG.look.background, CONFIG.look.fogDensity), []);
+  const fog = useMemo(() => new FogExp2('#0c1016', 0.009), []);
+  const sun = useRef<DirectionalLight>(null!);
+  const hemi = useRef<HemisphereLight>(null!);
+  const envs = useRef<{ night: Texture | null; day: Texture | null }>({ night: null, day: null });
+  const sunTarget = useMemo(() => new THREE.Object3D(), []);
 
   useLayoutEffect(() => {
     // Layer 1 holds things the main camera sees but the ground reflection skips.
     camera.layers.enable(1);
   }, [camera]);
+
+  useLayoutEffect(() => {
+    sun.current.target = sunTarget;
+  }, [sunTarget]);
+
+  useEffect(() => {
+    // daylight environment for chapters IV-V, generated once
+    const morning = chapterById('arrival').env;
+    const day = createDayEnvironment(gl, morning, sunDirection(morning.sunAzimuth, morning.sunElevation, new Vector3()));
+    envs.current.day = day;
+    return () => {
+      day.dispose();
+      envs.current.day = null;
+    };
+  }, [gl]);
 
   useLayoutEffect(() => {
     if (process.env.NODE_ENV === 'production') return;
@@ -60,18 +83,34 @@ export function Scene() {
 
   useFrame((state, rawDt) => {
     const dt = Math.min(rawDt, 1 / 20);
-    const global = useStore.getState().progress;
-    stepSections(global, dt, state.camera.position);
-    // The drift scene keeps its own 0..1 timeline; it holds at DRIFT.localEnd once the
-    // sections take over, and the finale adds its launch distance on top.
-    stepDrive(driftLocal(global), dt, sectionState.launchS, sectionState.burnout);
+    const raw = useStore.getState().progress;
+    stepChapters(raw, dt, state.camera.position);
+    if (chapterState.jumped) carState.initialized = false; // land exactly where the jump goes
+    stepDrive(chapterState.driftRaw, dt, chapterState.extraS, chapterState.burnout);
 
-    const l = CONFIG.look;
-    const sl = sectionState.active ? sectionState.look : null;
-    background.set(l.background);
-    fog.color.set(l.fogColor);
-    fog.density = sl ? sl.fog : l.fogDensity;
-    scene.environmentIntensity = sl ? sl.env : l.envIntensity;
+    const e = chapterState.env;
+    background.set(CONFIG.look.background);
+    fog.color.copy(e.fogColor);
+    fog.density = e.fog;
+
+    // night HDRI (drei sets it) until chapter IV, then the generated daylight sky
+    const E = envs.current;
+    if (!E.night && scene.environment && scene.environment !== E.day) E.night = scene.environment;
+    const want = e.day > 0.5 && E.day ? E.day : E.night;
+    if (want && scene.environment !== want) scene.environment = want;
+    scene.environmentIntensity = e.env;
+
+    // sun (moonlight at night), aimed at the car
+    sunTarget.position.copy(carState.position);
+    sunTarget.updateMatrixWorld();
+    sunDirection(e.sunAzimuth, e.sunElevation, _sun);
+    const s = sun.current;
+    s.position.copy(sunTarget.position).addScaledVector(_sun, 120);
+    s.color.copy(e.sun);
+    s.intensity = e.sunIntensity;
+    hemi.current.color.copy(e.hemiSky);
+    hemi.current.groundColor.copy(e.hemiGround);
+    hemi.current.intensity = e.hemi;
   }, -3);
 
   return (
@@ -81,15 +120,16 @@ export function Scene() {
 
       {/* Night street HDRI for reflections, plus soft boxes standing in for sodium
           street lamps (warm streaks on the paint) and a cool sea-side fill (teal/orange) */}
-      <Environment files={NIGHT_HDRI} resolution={256} environmentIntensity={CONFIG.look.envIntensity}>
+      <Environment files={NIGHT_HDRI} resolution={256}>
         <Lightformer form="rect" intensity={1.5} color="#ffa24d" position={[0, 16, 0]} rotation-x={Math.PI / 2} scale={[50, 2.5, 1]} />
         <Lightformer form="rect" intensity={1.1} color="#ff9440" position={[-24, 8, -8]} rotation-y={Math.PI / 2} scale={[36, 1.6, 1]} />
         <Lightformer form="rect" intensity={1.1} color="#5fb4c9" position={[24, 6, 8]} rotation-y={-Math.PI / 2} scale={[36, 3, 1]} />
         <Lightformer form="ring" intensity={0.8} color="#ff2bd6" position={[0, 4, -40]} scale={6} />
       </Environment>
 
-      <hemisphereLight args={['#4b6378', '#120c08', 0.3]} />
-      <directionalLight position={[-30, 40, -20]} intensity={0.25} color="#9fc2d6" />
+      <hemisphereLight ref={hemi} args={['#4b6378', '#120c08', 0.3]} />
+      <directionalLight ref={sun} intensity={0.25} color="#9fc2d6" />
+      <primitive object={sunTarget} />
 
       <Cityscape />
       <Track />
@@ -97,8 +137,9 @@ export function Scene() {
       <SkidMarks />
       <Smoke />
       <Rain />
-      <SectionProps />
+      <ChapterProps />
       <CameraRig />
+      <Interaction />
       <Effects />
     </>
   );

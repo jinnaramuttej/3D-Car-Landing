@@ -20,6 +20,7 @@ import {
   Vector3,
 } from 'three';
 import { landPolygon } from '@/lib/coast';
+import { chapterState } from '@/lib/chapterRuntime';
 import { CONFIG } from '@/lib/config';
 import { forwardOf, getTrack, leftOf, sampleTrack, type Track as TrackData } from '@/lib/motion';
 import { createAsphaltTextures, createDashTexture, createGlowTexture, createWaveNormalTexture } from '@/lib/textures';
@@ -217,20 +218,23 @@ export function Track() {
     const l = CONFIG.look;
     const c = CONFIG.coast;
     headMat.current.emissive.set(c.sodium);
-    headMat.current.emissiveIntensity = c.sodiumEmissive;
+    // the street lamps switch off as it gets light
+    const e = chapterState.env;
+    headMat.current.emissiveIntensity = c.sodiumEmissive * e.lamps;
+    poolMat.current.opacity = 0.06 * e.lamps;
     poolMat.current.color.set(c.sodium);
     const r = reflector.current;
     if (r) {
-      r.mixStrength = l.reflection;
+      r.mixStrength = l.reflection * e.wet;
       r.mixBlur = l.reflectionBlur;
-      r.color.set(l.groundColor);
+      r.color.copy(e.ground);
       // three ignores envMapIntensity for materials that fall back to scene.environment,
       // so hand the env map over explicitly to get a separate (much lower) level here.
       if (scene.environment && r.envMap !== scene.environment) {
         r.envMap = scene.environment;
         r.needsUpdate = true;
       }
-      r.envMapIntensity = l.groundEnv;
+      r.envMapIntensity = e.groundEnv;
     }
     // Water reflects ~2% face-on and a lot at grazing angles, so metalness stays 0;
     // the env map is handed over explicitly for the same reason as the asphalt.
@@ -239,7 +243,7 @@ export function Track() {
       sm.envMap = scene.environment;
       sm.needsUpdate = true;
     }
-    if (sm) sm.envMapIntensity = c.seaEnv;
+    if (sm) sm.envMapIntensity = e.seaEnv;
     // slow swell on the sea
     waves.offset.x += c.waveSpeed * dt;
     waves.offset.y += c.waveSpeed * 0.6 * dt;
@@ -266,7 +270,7 @@ export function Track() {
           depthScale={1.2}
           minDepthThreshold={0.4}
           maxDepthThreshold={1.4}
-          color={CONFIG.look.groundColor}
+          color="#0e1014"
           metalness={0.5}
         />
       </mesh>

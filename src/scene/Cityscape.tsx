@@ -11,6 +11,7 @@ import {
   InstancedBufferAttribute,
   type InstancedMesh,
   LineBasicMaterial,
+  MathUtils,
   type Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -22,6 +23,7 @@ import {
   type WebGLProgramParametersWithUniforms,
 } from 'three';
 import { insidePolygon, landPolygon } from '@/lib/coast';
+import { chapterState, sunDirection } from '@/lib/chapterRuntime';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { forwardOf, getTrack, leftOf, sampleTrack, type Track } from '@/lib/motion';
@@ -43,6 +45,10 @@ uniform vec3 uHorizon;
 uniform vec3 uGlow;
 uniform vec2 uCityDir;
 uniform float uTime;
+uniform vec3 uSunDir;
+uniform vec3 uSunColor;
+uniform float uSunGlow;
+uniform float uClouds;
 varying vec3 vDir;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -58,9 +64,14 @@ void main() {
   float city = max(dot(normalize(d.xz + 1e-5), uCityDir), 0.0);
   float low = pow(1.0 - clamp(h * 2.5, 0.0, 1.0), 3.0);
   col += uGlow * low * (0.3 + 0.7 * city);
-  // low rain clouds lit from below
+  // the sun (dawn and morning): a soft halo low on the city side and a small disc
+  float sd = max(dot(d, uSunDir), 0.0);
+  col += uSunColor * uSunGlow * (pow(sd, 8.0) * 0.6 + pow(sd, 64.0) * 1.5 + pow(sd, 2400.0) * 40.0);
+  // clouds: dark rain clouds at night, thin broken ones by morning
   vec2 cuv = d.xz / max(h + 0.18, 0.05) * 1.4 + vec2(uTime * 0.004, uTime * 0.002);
-  col *= 0.8 + 0.45 * fbm(cuv) * smoothstep(-0.02, 0.25, h);
+  float cl = fbm(cuv);
+  col *= mix(1.0, 0.8 + 0.45 * cl, uClouds * smoothstep(-0.02, 0.25, h));
+  col = mix(col, col * 0.75 + uHorizon * 0.35, (1.0 - uClouds) * smoothstep(0.55, 0.8, cl) * smoothstep(0.02, 0.3, h));
   if (h < 0.0) col = uHorizon;
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
@@ -78,6 +89,10 @@ function Sky({ cityDir }: { cityDir: Vector2 }) {
           uGlow: { value: new Color() },
           uCityDir: { value: cityDir },
           uTime: { value: 0 },
+          uSunDir: { value: new Vector3(0, 1, 0) },
+          uSunColor: { value: new Color() },
+          uSunGlow: { value: 0 },
+          uClouds: { value: 1 },
         },
         vertexShader: skyVert,
         fragmentShader: skyFrag,
@@ -90,11 +105,15 @@ function Sky({ cityDir }: { cityDir: Vector2 }) {
     [cityDir],
   );
   useFrame((state) => {
-    const c = CONFIG.coast;
+    const e = chapterState.env;
     const u = mat.uniforms;
-    (u.uTop.value as Color).set(c.skyTop);
-    (u.uHorizon.value as Color).set(c.skyHorizon);
-    (u.uGlow.value as Color).set(c.skyGlow);
+    (u.uTop.value as Color).copy(e.skyTop);
+    (u.uHorizon.value as Color).copy(e.skyHorizon);
+    (u.uGlow.value as Color).copy(e.skyGlow);
+    sunDirection(e.sunAzimuth, e.sunElevation, u.uSunDir.value as Vector3);
+    (u.uSunColor.value as Color).copy(e.sun);
+    u.uSunGlow.value = MathUtils.smoothstep(e.sunIntensity, 0.4, 1.6);
+    u.uClouds.value = e.clouds;
     u.uTime.value = state.clock.elapsedTime;
     mesh.current.position.copy(state.camera.position);
   });
@@ -184,7 +203,7 @@ function LightSpritesInner({ sprites, intensity }: { sprites: Sprite[]; intensit
   }, [sprites]);
   useFrame((state) => {
     material.uniforms.uTime.value = state.clock.elapsedTime;
-    material.uniforms.uIntensity.value = intensity();
+    material.uniforms.uIntensity.value = intensity() * chapterState.env.city;
     material.uniforms.uHaze.value = CONFIG.coast.haze * 0.6;
   });
   return <instancedMesh ref={mesh} args={[geometry, material, sprites.length]} frustumCulled={false} />;
@@ -332,7 +351,7 @@ function layoutCity(track: Track, mobile: boolean): CityLayout {
 function Buildings({ layout }: { layout: CityLayout }) {
   const mesh = useRef<InstancedMesh>(null!);
   const uniforms = useMemo(
-    () => ({ glow: { value: CONFIG.coast.windowGlow }, haze: { value: CONFIG.coast.haze }, hazeColor: { value: new Color(CONFIG.look.fogColor) } }),
+    () => ({ glow: { value: CONFIG.coast.windowGlow }, haze: { value: CONFIG.coast.haze }, hazeColor: { value: new Color('#0c1016') } }),
     [],
   );
   const material = useMemo(() => {
@@ -356,9 +375,11 @@ function Buildings({ layout }: { layout: CityLayout }) {
   }, [layout]);
 
   useFrame(() => {
-    uniforms.glow.value = CONFIG.coast.windowGlow;
+    const e = chapterState.env;
+    uniforms.glow.value = CONFIG.coast.windowGlow * e.city;
     uniforms.haze.value = CONFIG.coast.haze;
-    uniforms.hazeColor.value.set(CONFIG.look.fogColor);
+    uniforms.hazeColor.value.copy(e.fogColor);
+    material.color.copy(e.buildings);
   });
 
   return (
@@ -388,7 +409,7 @@ function NeonSigns({ layout }: { layout: CityLayout }) {
   }, [layout]);
   useFrame((state) => {
     // one sign in five buzzes like a tired neon tube
-    material.color.setScalar(CONFIG.coast.neonGlow * (0.92 + 0.08 * Math.sin(state.clock.elapsedTime * 31)));
+    material.color.setScalar(CONFIG.coast.neonGlow * chapterState.env.city * (0.92 + 0.08 * Math.sin(state.clock.elapsedTime * 31)));
   });
   return (
     <instancedMesh ref={mesh} args={[undefined, material, Math.max(1, layout.signs.length)]}>
@@ -433,6 +454,12 @@ function Bridge({ b }: { b: BridgeLayout }) {
     const cableMat = new LineBasicMaterial({ color: '#7c8da3', transparent: true, opacity: 0.5, fog: false });
     return { solids: { parts, silhouette }, cables: { cableGeo, cableMat } };
   }, [b]);
+
+  useFrame(() => {
+    // hazy grey against the morning sky, a near-black cut-out at night
+    const e = chapterState.env;
+    solids.silhouette.color.copy(e.buildings).lerp(e.fogColor, 0.55);
+  });
 
   return (
     <group position={b.origin} rotation-y={b.yaw}>

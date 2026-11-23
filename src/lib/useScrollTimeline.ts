@@ -6,21 +6,27 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import Lenis from 'lenis';
 import { CONFIG } from './config';
 import { SHOTS } from './script';
-import { fromDriftLocal, SECTIONS } from './sections';
+import { CHAPTERS, fromDriftLocal } from './chapters';
 import { useStore } from './store';
 
 let lenisRef: Lenis | null = null;
 let trackEl: HTMLElement | null = null;
 
 /**
- * Smooth-scrolls (through Lenis) to a global progress value. Used by the navbar.
+ * Scrolls (through Lenis) to a global progress value. `immediate` jumps there in one
+ * frame (the mini-map: the scene snaps and cross-dissolves); otherwise it glides.
  * If the debug slider owns progress, it hands control back to the scroll first.
  */
-export function scrollToProgress(p: number, duration = 2.4) {
+export function scrollToProgress(p: number, immediate = false, duration = 2.4) {
   if (!lenisRef || !trackEl) return;
   useStore.getState().setManual(false);
   const max = trackEl.offsetHeight - window.innerHeight;
-  lenisRef.scrollTo(Math.max(0, Math.min(1, p)) * max, {
+  const y = Math.max(0, Math.min(1, p)) * max;
+  if (immediate) {
+    lenisRef.scrollTo(y, { immediate: true, force: true });
+    return;
+  }
+  lenisRef.scrollTo(y, {
     duration,
     easing: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
   });
@@ -62,9 +68,9 @@ export function useScrollTimeline(trackRef: RefObject<HTMLElement | null>) {
       },
     });
     tl.to(proxy, { progress: 1, duration: 1, onUpdate: write }, 0);
-    // Labels: every drift shot (mapped to global progress) and every section
+    // Labels: every chapter and every drift shot (mapped to global progress)
+    for (const chapter of CHAPTERS) tl.addLabel(chapter.id, chapter.start);
     for (const shot of SHOTS) if (shot.from <= 0.78) tl.addLabel(`shot:${shot.id}`, fromDriftLocal(shot.from));
-    for (const section of SECTIONS) tl.addLabel(section.id, section.start);
 
     // Leaving manual mode: hand progress back to the scroll position.
     const unsubscribe = useStore.subscribe((state, prev) => {

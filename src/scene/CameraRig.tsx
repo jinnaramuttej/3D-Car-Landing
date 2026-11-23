@@ -4,12 +4,21 @@ import { useEffect, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { MathUtils, type PerspectiveCamera, Vector2, Vector3 } from 'three';
 import { easing } from 'maath';
+import { BEATS, type FrameKind } from '@/lib/chapters';
+import {
+  type BeatTarget,
+  chapterState,
+  frameFor,
+  frameToWorld,
+  localPose,
+  beatCameraTarget,
+  worldToFrame,
+} from '@/lib/chapterRuntime';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
+import { interaction } from '@/lib/interaction';
 import { carState, forwardOf, getAnchorFrame, leftOf, shakeAmount, type Frame } from '@/lib/motion';
 import { pointer, trackPointer } from '@/lib/pointer';
-import { type CameraTarget, sectionCameraTarget, sectionState } from '@/lib/sectionRuntime';
-import { SECTIONS } from '@/lib/sections';
 import { type Ease, SHOTS, type Shot, shotIndexAt } from '@/lib/script';
 
 const { clamp, degToRad, lerp, smootherstep } = MathUtils;
@@ -18,9 +27,11 @@ const DEFAULT_NEAR_FADE: readonly [number, number] = [0.35, 2];
 
 /**
  * What the rest of the scene needs to know about the current shot. Written every
- * frame by CameraRig: Effects reads focus/dof/shake, Smoke reads nearFade.
+ * frame by CameraRig: Effects reads focus/dof/shake/mode, Smoke reads nearFade.
  */
 export const cameraState = {
+  /** 'drift' = the shot script (chapter III), 'beat' = chapter camera beats. */
+  mode: 'beat' as 'drift' | 'beat',
   shot: 0,
   shotId: SHOTS[0].id,
   shake: 0,
@@ -121,91 +132,178 @@ function fitLens(pos: Vector3, look: Vector3, fov: number) {
   return clamped;
 }
 
-type SectionRig = {
+/** The drift camera for progress p (script pose + long-lens fit, before portrait fit). */
+function driftPose(p: number, cur: Pose, prev: Pose) {
+  const i = shotIndexAt(p);
+  const shot = SHOTS[i];
+  evalShot(shot, p, cur);
+  let dof = shot.dof ?? 0;
+  let focusRange = shot.focusRange ?? 3;
+  // Blend-in shots ease over from wherever the previous shot ends up
+  if (shot.enter === 'blend' && i > 0 && shot.blend) {
+    const b = (p - shot.from) / shot.blend;
+    if (b < 1) {
+      const before = SHOTS[i - 1];
+      evalShot(before, p, prev);
+      const w = smootherstep(b, 0, 1);
+      cur.pos.lerpVectors(prev.pos, cur.pos, w);
+      cur.look.lerpVectors(prev.look, cur.look, w);
+      cur.fov = lerp(prev.fov, cur.fov, w);
+      dof = lerp(before.dof ?? 0, dof, w);
+      focusRange = lerp(before.focusRange ?? 3, focusRange, w);
+    }
+  }
+  // Long lens only: clamp the FOV and back the camera off to keep the framing
+  cur.fov = fitLens(cur.pos, cur.look, cur.fov * CONFIG.camera.fovScale);
+  return { i, shot, dof, focusRange };
+}
+
+function portraitFit(cam: PerspectiveCamera, pos: Vector3, look: Vector3) {
+  if (cam.aspect < 1) {
+    const k = Math.min(2.2, Math.pow(1 / cam.aspect, CONFIG.camera.portraitFit));
+    pos.sub(look).multiplyScalar(k).add(look);
+  }
+  pos.y = Math.max(pos.y, 0.15);
+}
+
+/** Mouse parallax and the rev shake, on top of either camera. */
+function applyExtras(cam: PerspectiveCamera, parallax: Vector2, dt: number, t: number, amount: number, mobile: boolean) {
+  const c = CONFIG.camera;
+  if (!mobile) {
+    easing.damp2(parallax, [pointer.x, pointer.y], 0.35, dt);
+    const k = c.parallax * amount;
+    cam.translateX(parallax.x * k);
+    cam.translateY(parallax.y * k * 0.5);
+    cam.rotateY(-parallax.x * k * 0.02);
+  }
+  const rev = interaction.rev * CONFIG.interaction.revShake;
+  if (rev > 1e-5) {
+    cam.translateX((Math.sin(t * 41.3) * 0.6 + Math.sin(t * 73.1 + 1) * 0.4) * rev);
+    cam.translateY((Math.sin(t * 37.9 + 2) * 0.6 + Math.sin(t * 67.7) * 0.4) * rev);
+    cam.rotateZ(Math.sin(t * 29.3) * rev * 0.15);
+  }
+  return rev;
+}
+
+type BeatRig = {
   init: boolean;
+  frame: FrameKind;
+  /** Damped pose in the beat's frame (so a camera riding with the car never lags it). */
   pos: Vector3;
   look: Vector3;
   fov: number;
-  parallax: Vector2;
-  target: CameraTarget;
+  target: BeatTarget;
+  world: { pos: Vector3; look: Vector3 };
 };
 
 const _dir = new Vector3();
+const _w = new Vector3();
+const _up = new Vector3(0, 1, 0);
+const _right = new Vector3();
 
 /**
- * Sections camera: the target comes from sections.ts (waypoints interpolated around the
- * parked car), then maath damps position, look target and FOV so moves between
- * sections ease instead of snapping. Mouse parallax on top (desktop only).
+ * Chapter camera: the beat's waypoints (src/lib/chapters.ts) give a target in the beat's
+ * frame, maath damps toward it in that frame. The launch beat hands over to the drift's
+ * first frame; a dissolve beat (or a mini-map jump) snaps and lets the frame dissolve.
  */
-function runSectionCamera(cam: PerspectiveCamera, dt: number, rig: SectionRig, mobile: boolean) {
+function runBeatCamera(cam: PerspectiveCamera, dt: number, rig: BeatRig, mobile: boolean, drift: Pose, prev: Pose) {
   const c = CONFIG.camera;
-  const t = sectionCameraTarget(mobile, rig.target);
-  t.fov = fitLens(t.pos, t.look, t.fov * c.fovScale);
+  const t = beatCameraTarget(mobile, rig.target);
+  const pose = t.pose;
+  // screen shift: slide the look target sideways (frame axes are right-handed like the world's)
+  if (pose.shift) {
+    _right.subVectors(pose.look, pose.pos).normalize().cross(_up).normalize();
+    pose.look.addScaledVector(_right, -pose.shift);
+  }
+  pose.fov = fitLens(pose.pos, pose.look, pose.fov * c.fovScale);
+  const frame = frameFor(t.frame);
 
-  if (!rig.init) {
-    // Pick up exactly where the drift scene's camera left off
-    rig.pos.copy(cam.position);
-    rig.look.copy(cam.position).add(cam.getWorldDirection(_dir).multiplyScalar(10));
-    rig.fov = cam.fov;
+  if (chapterState.cut) {
+    rig.pos.copy(pose.pos);
+    rig.look.copy(pose.look);
+    rig.fov = pose.fov;
+    rig.frame = t.frame;
     rig.init = true;
+  } else if (!rig.init) {
+    // pick up exactly where the drift camera left off
+    worldToFrame(frame, cam.position, rig.pos);
+    worldToFrame(frame, _w.copy(cam.position).add(cam.getWorldDirection(_dir).multiplyScalar(10)), rig.look);
+    rig.fov = cam.fov;
+    rig.frame = t.frame;
+    rig.init = true;
+  } else if (rig.frame !== t.frame) {
+    // carry the damped pose over into the new frame
+    const old = frameFor(rig.frame);
+    frameToWorld(old, rig.pos, rig.world.pos);
+    frameToWorld(old, rig.look, rig.world.look);
+    const now = frameFor(t.frame);
+    worldToFrame(now, rig.world.pos, rig.pos);
+    worldToFrame(now, rig.world.look, rig.look);
+    rig.frame = t.frame;
   }
-  easing.damp3(rig.pos, t.pos, c.sectionSmooth, dt);
-  easing.damp3(rig.look, t.look, c.sectionSmooth * 0.8, dt);
-  easing.damp(rig, 'fov', t.fov, c.sectionSmooth, dt);
+  easing.damp3(rig.pos, pose.pos, c.sectionSmooth, dt);
+  easing.damp3(rig.look, pose.look, c.sectionSmooth * 0.8, dt);
+  easing.damp(rig, 'fov', pose.fov, c.sectionSmooth, dt);
 
-  cam.position.copy(rig.pos);
-  if (cam.aspect < 1) {
-    const k = Math.min(2.2, Math.pow(1 / cam.aspect, c.portraitFit));
-    cam.position.sub(rig.look).multiplyScalar(k).add(rig.look);
+  const wp = frameToWorld(frameFor(rig.frame), rig.pos, rig.world.pos);
+  const wl = frameToWorld(frameFor(rig.frame), rig.look, rig.world.look);
+  let fov = rig.fov;
+  let dof = t.dof;
+  let focusRange = t.focusRange;
+
+  // the end of the launch: become the drift's first frame
+  if (t.toDrift > 0) {
+    const d = driftPose(Math.max(0, carState.progress), drift, prev);
+    wp.lerp(drift.pos, t.toDrift);
+    wl.lerp(drift.look, t.toDrift);
+    fov = lerp(fov, drift.fov, t.toDrift);
+    dof = lerp(dof, d.dof, t.toDrift);
+    focusRange = lerp(focusRange, d.focusRange, t.toDrift);
   }
-  cam.position.y = Math.max(cam.position.y, 0.15);
-  cam.lookAt(rig.look);
 
-  if (!mobile) {
-    easing.damp2(rig.parallax, [pointer.x, pointer.y], 0.35, dt);
-    cam.translateX(rig.parallax.x * c.parallax);
-    cam.translateY(rig.parallax.y * c.parallax * 0.5);
-    cam.rotateY(-rig.parallax.x * c.parallax * 0.02);
-  }
-
-  const fov = rig.fov;
+  cam.position.copy(wp);
+  portraitFit(cam, cam.position, wl);
+  cam.lookAt(wl);
   if (Math.abs(cam.fov - fov) > 1e-3) {
     cam.fov = fov;
     cam.updateProjectionMatrix();
   }
 
+  const b = BEATS[Math.max(0, chapterState.beat)];
+  cameraState.mode = 'beat';
   cameraState.shot = -1;
-  cameraState.shotId = `section:${SECTIONS[Math.max(0, sectionState.index)].id}`;
-  cameraState.shake = 0;
-  cameraState.focus.copy(t.focus);
-  cameraState.dof = t.dof * c.dofScale;
-  cameraState.focusRange = t.focusRange;
+  cameraState.shotId = `beat:${b.id}`;
+  cameraState.focus.copy(wl);
+  cameraState.dof = dof * c.dofScale;
+  cameraState.focusRange = focusRange;
   cameraState.nearFade[0] = DEFAULT_NEAR_FADE[0];
   cameraState.nearFade[1] = DEFAULT_NEAR_FADE[1];
 }
 
 /**
- * Plays the shot script (src/lib/script.ts) against the damped scroll progress.
- * Cuts are instant because nothing here is damped: smoothness comes from the damped
- * progress and from the car itself, so a cut lands on exactly one frame.
+ * Chapter III plays the shot script (src/lib/script.ts) against the damped scroll
+ * progress: cuts are instant because nothing there is damped. Every other chapter runs
+ * the beat camera. Mouse parallax and the rev shake sit on top of both.
  */
 export function CameraRig() {
   const pose = useMemo(
     () => ({
       cur: { pos: new Vector3(), look: new Vector3(), fov: 40 } as Pose,
       prev: { pos: new Vector3(), look: new Vector3(), fov: 40 } as Pose,
+      parallax: new Vector2(),
     }),
     [],
   );
   const mobile = useMemo(() => isMobile(), []);
-  const sec = useMemo(
+  const rig = useMemo<BeatRig>(
     () => ({
       init: false,
+      frame: 'start',
       pos: new Vector3(),
       look: new Vector3(),
       fov: 40,
-      parallax: new Vector2(),
-      target: { pos: new Vector3(), look: new Vector3(), focus: new Vector3(), fov: 40, dof: 0, focusRange: 3 } as CameraTarget,
+      target: { pose: localPose(), frame: 'start', dof: 0, focusRange: 3, toDrift: 0 },
+      world: { pos: new Vector3(), look: new Vector3() },
     }),
     [],
   );
@@ -215,52 +313,23 @@ export function CameraRig() {
   useFrame((state, rawDt) => {
     const cam = state.camera as PerspectiveCamera;
     const c = CONFIG.camera;
+    const dt = Math.min(rawDt, 1 / 20);
+    const t = state.clock.elapsedTime;
 
-    // After the drift: damp toward the current section's waypoint (sections.ts)
-    if (sectionState.active) {
-      runSectionCamera(cam, Math.min(rawDt, 1 / 20), sec, mobile);
+    if (!chapterState.drift) {
+      runBeatCamera(cam, dt, rig, mobile, pose.cur, pose.prev);
+      cameraState.shake = applyExtras(cam, pose.parallax, dt, t, 1, mobile);
       return;
     }
-    sec.init = false;
+    rig.init = false;
 
     const p = carState.progress;
-    const i = shotIndexAt(p);
-    const shot = SHOTS[i];
     const { cur, prev } = pose;
+    const { i, shot, dof, focusRange } = driftPose(p, cur, prev);
 
-    evalShot(shot, p, cur);
-    let dof = shot.dof ?? 0;
-    let focusRange = shot.focusRange ?? 3;
-
-    // Blend-in shots ease over from wherever the previous shot ends up
-    if (shot.enter === 'blend' && i > 0 && shot.blend) {
-      const b = (p - shot.from) / shot.blend;
-      if (b < 1) {
-        const before = SHOTS[i - 1];
-        evalShot(before, p, prev);
-        const w = smootherstep(b, 0, 1);
-        cur.pos.lerpVectors(prev.pos, cur.pos, w);
-        cur.look.lerpVectors(prev.look, cur.look, w);
-        cur.fov = lerp(prev.fov, cur.fov, w);
-        dof = lerp(before.dof ?? 0, dof, w);
-        focusRange = lerp(before.focusRange ?? 3, focusRange, w);
-      }
-    }
-
-    // Long lens only: clamp the FOV and back the camera off to keep the framing
-    const lensFov = fitLens(cur.pos, cur.look, cur.fov * c.fovScale);
-
-    // Portrait screens see far less sideways: back off from the subject
-    if (cam.aspect < 1) {
-      const k = Math.min(2.2, Math.pow(1 / cam.aspect, c.portraitFit));
-      cur.pos.sub(cur.look).multiplyScalar(k).add(cur.look);
-    }
-    cur.pos.y = Math.max(cur.pos.y, 0.15);
-
+    portraitFit(cam, cur.pos, cur.look);
     cam.position.copy(cur.pos);
     cam.lookAt(cur.look);
-
-    const t = state.clock.elapsedTime;
 
     // Slow hand-held float
     const hh = (shot.handheld ?? 0) * c.handheld;
@@ -280,16 +349,17 @@ export function CameraRig() {
       cam.translateY(sy * amp);
       cam.rotateZ(degToRad(c.shakeRollDeg) * (amp / Math.max(1e-3, c.shakePeak)) * Math.sin(ts * 13.3));
     }
+    const rev = applyExtras(cam, pose.parallax, dt, t, CONFIG.interaction.parallaxDrift, mobile);
 
-    const fov = lensFov;
-    if (Math.abs(cam.fov - fov) > 1e-3) {
-      cam.fov = fov;
+    if (Math.abs(cam.fov - cur.fov) > 1e-3) {
+      cam.fov = cur.fov;
       cam.updateProjectionMatrix();
     }
 
+    cameraState.mode = 'drift';
     cameraState.shot = i;
     cameraState.shotId = shot.id;
-    cameraState.shake = amp;
+    cameraState.shake = amp + rev;
     cameraState.focus.copy(cur.look);
     cameraState.dof = dof * c.dofScale;
     cameraState.focusRange = focusRange;

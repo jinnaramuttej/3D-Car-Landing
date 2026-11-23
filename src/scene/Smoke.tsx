@@ -17,8 +17,9 @@ import {
   Vector3,
 } from 'three';
 import { CONFIG } from '@/lib/config';
+import { DRIFT } from '@/lib/chapters';
 import { carState, getCloudCenter } from '@/lib/motion';
-import { sectionState } from '@/lib/sectionRuntime';
+import { chapterState, rainLevel } from '@/lib/chapterRuntime';
 import { cameraState } from './CameraRig';
 import { createSmokeTexture } from '@/lib/textures';
 import { isMobile } from '@/lib/device';
@@ -296,12 +297,18 @@ export function Smoke() {
     const s = carState;
     const p = s.progress;
     const t = state.clock.elapsedTime;
-    // After the drift the sections own the smoke cover (the hero thins it out).
+    // Outside the drift the chapter beats own the smoke cover (chapter IV thins it out).
     // Before shot IV (cfg.fullScreenFrom) the smoke stays low and may never fill the frame.
     const fillFrom = Math.max(cfg.fillStart, cfg.fullScreenFrom);
     const fillTo = Math.max(fillFrom + 1e-3, cfg.fillFull);
-    const fill = sectionState.active ? sectionState.look.smoke : MathUtils.smoothstep(p, fillFrom, fillTo);
-    const guarded = !sectionState.active && p < cfg.fullScreenFrom;
+    const after = !chapterState.drift && p >= DRIFT.localEnd - 1e-3; // chapters IV and V
+    const fill = after ? chapterState.look.smoke : MathUtils.smoothstep(p, fillFrom, fillTo);
+    const guarded = !after && p < cfg.fullScreenFrom;
+    if (chapterState.jumped) {
+      // a mini-map jump: drop the old smoke instead of leaving it hanging where it was
+      pool.life.fill(0);
+      pool.hasPrev = false;
+    }
 
     camera.getWorldPosition(_cam);
     camera.getWorldDirection(_camDir);
@@ -341,7 +348,7 @@ export function Smoke() {
 
       /* 1b. wet-road spray: rate follows ground speed, not slip; low, short-lived, falls back */
       const sprayRate =
-        cfg.sprayRate * scale * CONFIG.rain.intensity * Math.pow(MathUtils.clamp(Math.abs(s.speed) / 25, 0, 1), 1.5);
+        cfg.sprayRate * scale * rainLevel() * Math.pow(MathUtils.clamp(Math.abs(s.speed) / 25, 0, 1), 1.5);
       for (let w = 0; w < 2; w++) {
         pool.acc[3 + w] += sprayRate * dt;
         const n = Math.floor(pool.acc[3 + w]);
@@ -498,7 +505,7 @@ export function Smoke() {
     u.uHeadLit.value = s.carReady ? cfg.headLit * s.headLevel : 0;
 
     /* 6. veil: guarantees full coverage by fillFull, independent of particle count */
-    const veilOpacity = sectionState.active
+    const veilOpacity = after
       ? MathUtils.smoothstep(fill, 0.1, 1) * cfg.veilOpacity
       : MathUtils.smoothstep(p, fillFrom + (fillTo - fillFrom) * 0.55, fillTo) * cfg.veilOpacity;
     const vu = veilMaterial.uniforms;

@@ -10,7 +10,6 @@
  */
 export const CONFIG = {
   scroll: {
-    pages: 14, // (mount) height of the scroll container in viewport heights -> 1400vh (see sections.ts)
     lenisLerp: 0.09, // (mount) Lenis smoothing, lower = floatier
     progressSmooth: 0.12, // seconds; maath damp applied to progress before anything reads it
   },
@@ -70,7 +69,7 @@ export const CONFIG = {
     headBeam: 110, // spot light intensity of each headlight
     headBeamAngle: 0.5,
     tailGlow: 1.2, // red point light behind the car
-    paintEnv: 0.85, // envMapIntensity on the bodywork (absolute, not scaled by look.envIntensity)
+    paintEnv: 0.85, // envMapIntensity on the bodywork (absolute, not scaled by the chapter's env level)
     paintRoughness: 0.25,
     paintMetalness: 0.6,
     clearcoat: 1,
@@ -154,11 +153,7 @@ export const CONFIG = {
     shoreLights: 3.5, // the far shoreline "necklace" across the bay
     bridgeLights: 4,
     haze: 0.0026, // distance haze on the far city and bridge (they skip the normal fog)
-    skyTop: '#020307',
-    skyHorizon: '#131922',
-    skyGlow: '#4a2f1d', // sodium light pollution low on the city side
     waveSpeed: 0.015,
-    seaEnv: 0.22, // sky/city reflection on the water (fresnel keeps it dark face-on)
   },
 
   /** Rain: streaks around the camera, splashes around the car, haze in the headlight beams. */
@@ -187,6 +182,20 @@ export const CONFIG = {
     beamLength: 16,
   },
 
+  /** Visitor input (src/scene/Interaction.tsx). */
+  interaction: {
+    revRise: 0.12, // seconds to wind up while held
+    revFall: 0.45, // seconds to settle after release
+    holdDelay: 0.16, // seconds a press must last before it revs (a click picks the car)
+    revShake: 0.035, // metres of camera shake at full rev
+    revVibration: 0.012, // body buzz at full rev
+    revRain: 1, // how hard the rain reacts to a rev (splashes, jitter, lens drops)
+    parallaxDrift: 0.5, // mouse parallax during the drift, relative to camera.parallax
+    wipeRadius: 0.06, // lens wipe brush, in screen heights
+    wipeReturn: 0.15, // how fast the drops come back (per second, scaled by the rain)
+    liveryTime: 0.6, // seconds to change livery
+  },
+
   /** Post chain (src/scene/Effects.tsx). Mobile skips DOF, motion blur, streaks and lens drops. */
   post: {
     focusOnCar: true, // during the drift, keep the car in focus even when the shot looks past it
@@ -199,17 +208,15 @@ export const CONFIG = {
     anamorphicLength: 1,
     anamorphicTint: '#7fb0ff',
     grade: 1, // teal/orange LUT strength
-    grain: 0.32, // film grain (soft light)
+    grain: 0.35, // film grain, strongest in the midtones
     lensDrops: 0.75, // rain drops on the lens (scaled by rain.intensity)
     lensDropRefract: 0.035,
     lensDropStreak: 0.09, // how far camera motion stretches the drops
+    dissolve: 0.9, // seconds a chapter cross-dissolve takes
   },
 
   look: {
     background: '#04050a',
-    fogColor: '#0c1016',
-    fogDensity: 0.009,
-    envIntensity: 0.9,
     bloomIntensity: 1.1,
     bloomThreshold: 0.9,
     bloomSmoothing: 0.25,
@@ -217,8 +224,6 @@ export const CONFIG = {
     chromaticShake: 0.0025, // extra aberration at shake peak
     vignetteOffset: 0.28,
     vignetteDarkness: 0.78,
-    groundColor: '#0e1014',
-    groundEnv: 0.06, // env reflections on the asphalt; high values look like frost (or olive paint with the city HDRI)
     reflection: 25, // MeshReflectorMaterial mixStrength: how wet the asphalt looks
     reflectionBlur: 1, // mixBlur: how much rough patches smear the reflection
     lampEmissive: 6,
@@ -338,7 +343,6 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     bridgeLights: [0, 12, 0.1],
     haze: [0, 0.01, 0.0001],
     waveSpeed: [0, 0.1, 0.001],
-    seaEnv: [0, 3, 0.01],
   },
   rain: {
     intensity: [0, 2, 0.01],
@@ -360,7 +364,20 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     beamOpacity: [0, 0.5, 0.005],
     beamLength: [2, 40, 0.5],
   },
+  interaction: {
+    revRise: [0.01, 1, 0.01],
+    revFall: [0.01, 2, 0.01],
+    holdDelay: [0, 0.6, 0.01],
+    revShake: [0, 0.2, 0.001],
+    revVibration: [0, 0.05, 0.001],
+    revRain: [0, 3, 0.05],
+    parallaxDrift: [0, 1, 0.01],
+    wipeRadius: [0.01, 0.2, 0.005],
+    wipeReturn: [0, 2, 0.01],
+    liveryTime: [0.05, 3, 0.05],
+  },
   post: {
+    dissolve: [0, 3, 0.05],
     motionBlur: [0, 1.5, 0.01],
     motionBlurMax: [0, 0.1, 0.001],
     cutDistance: [0.2, 10, 0.1],
@@ -374,8 +391,6 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     lensDropStreak: [0, 0.5, 0.005],
   },
   look: {
-    fogDensity: [0, 0.06, 0.001],
-    envIntensity: [0, 4, 0.05],
     bloomIntensity: [0, 4, 0.05],
     bloomThreshold: [0, 3, 0.01],
     bloomSmoothing: [0, 1, 0.01],
@@ -383,7 +398,6 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     chromaticShake: [0, 0.02, 0.0001],
     vignetteOffset: [0, 1, 0.01],
     vignetteDarkness: [0, 1.5, 0.01],
-    groundEnv: [0, 2, 0.01],
     reflection: [0, 150, 0.5],
     reflectionBlur: [0, 10, 0.05],
     lampEmissive: [0, 20, 0.1],

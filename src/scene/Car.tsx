@@ -5,6 +5,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { ContactShadows, useGLTF, useTexture } from '@react-three/drei';
 import {
   Box3,
+  Color,
   Group,
   MathUtils,
   type Mesh,
@@ -18,8 +19,10 @@ import {
 } from 'three';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
+import { chapterState } from '@/lib/chapterRuntime';
+import { interaction } from '@/lib/interaction';
 import { carState } from '@/lib/motion';
-import { sectionState } from '@/lib/sectionRuntime';
+import { useStore } from '@/lib/store';
 import {
   createGlassMaterial,
   createPaintMaterial,
@@ -30,6 +33,7 @@ import {
   type MaterialRoles,
   prepareLivery,
 } from './carMaterials';
+import { createLiveryUniforms, LIVERIES, patchPaint } from './livery';
 
 export const MODEL_URL = '/models/gt3r.glb';
 
@@ -279,6 +283,8 @@ export function Car() {
   );
   const mobile = useMemo(() => isMobile(), []);
   const rig = useMemo(() => buildRig(scene, livery, mobile), [scene, livery, mobile]);
+  const liveryU = useMemo(() => createLiveryUniforms(), []);
+  const lights = useMemo(() => ({ level: 0, tail: 0 }), []);
 
   const car = useRef<Group>(null!);
   const body = useRef<Group>(null!);
@@ -290,22 +296,28 @@ export function Car() {
   useLayoutEffect(() => {
     carState.frontRadius = rig.frontRadius;
     carState.rearRadius = rig.rearRadius;
+    if (rig.paint) patchPaint(rig.paint, liveryU);
+    interaction.carObject = car.current;
     return () => {
       carState.carReady = false;
+      interaction.carObject = null;
     };
-  }, [rig]);
+  }, [rig, liveryU]);
 
-  useFrame((state) => {
+  useFrame((state, rawDt) => {
     const s = carState;
     const c = CONFIG.car;
     const g = car.current;
     const t = state.clock.elapsedTime;
+    const dt = Math.min(rawDt, 1 / 20);
+    const ui = useStore.getState();
 
     g.position.set(s.position.x, -rig.groundOffset, s.position.z);
     g.rotation.y = s.heading;
 
-    // Body only: roll + a little buzz while the rears are lit up. Wheels stay planted.
-    const buzz = CONFIG.drift.vibration * s.slip;
+    // Body only: roll + a little buzz while the rears are lit up, the engine idles or revs.
+    const idle = chapterState.engineOn ? 0.0015 : 0;
+    const buzz = CONFIG.drift.vibration * s.slip + idle + CONFIG.interaction.revVibration * interaction.rev;
     body.current.rotation.z = s.roll + Math.sin(t * 47) * buzz * 0.5;
     body.current.position.y = (Math.sin(t * 61) * 0.6 + Math.sin(t * 23.7) * 0.4) * buzz;
 
@@ -320,11 +332,27 @@ export function Car() {
       }
     }
 
-    const brake = 1 + c.brakeBoost * s.brake;
-    // Sections (after the drift) can boost the headlights: prizes close-up, finale flare
-    const hl = sectionState.active ? sectionState.look.headlights : 1;
+    // Headlights: the beat's level (finale flare etc.) times the ignition, unless the
+    // visitor forced them on or off. A cold start flickers before it settles.
+    const ign = chapterState.ignition;
+    const flicker = ign > 0 && ign < 1 ? 0.55 + 0.45 * Math.sign(Math.sin(t * 61) + Math.sin(t * 23.3) + 0.6) : 1;
+    const target =
+      ui.headlights === 'off' ? 0 : ui.headlights === 'on' ? Math.max(1, chapterState.look.headlights) : chapterState.look.headlights * ign * flicker;
+    lights.level = ign > 0 && ign < 1 && ui.headlights === 'auto' ? target : MathUtils.damp(lights.level, target, 18, dt);
+    lights.tail = MathUtils.damp(lights.tail, Math.max(ign, ui.headlights === 'on' ? 1 : 0), 18, dt);
+    const hl = lights.level;
+    const brake = (1 + c.brakeBoost * s.brake) * lights.tail;
     for (const h of rig.head) h.mat.emissiveIntensity = c.headlightEmissive * h.factor * hl;
     for (const h of rig.tail) h.mat.emissiveIntensity = c.tailLightEmissive * h.factor * brake;
+
+    // Livery: ease the recolour toward the chosen preset
+    const lv = LIVERIES[ui.livery % LIVERIES.length];
+    const k = 1 - Math.exp((-4 * dt) / Math.max(0.05, CONFIG.interaction.liveryTime));
+    liveryU.hue.value += (lv.hue - liveryU.hue.value) * k;
+    liveryU.sat.value += (lv.sat - liveryU.sat.value) * k;
+    liveryU.value.value += (lv.value - liveryU.value.value) * k;
+    liveryU.tintMix.value += (lv.tintMix - liveryU.tintMix.value) * k;
+    liveryU.tint.value.lerp(_tint.set(lv.tint), k);
     // Explicit envMap so envMapIntensity counts (three ignores it with scene.environment).
     const env = state.scene.environment;
     const withEnv = (m: MeshStandardMaterial, intensity: number) => {
@@ -412,6 +440,8 @@ export function Car() {
     </group>
   );
 }
+
+const _tint = new Color();
 
 useGLTF.preload(MODEL_URL);
 if (typeof window !== 'undefined') useTexture.preload(liveryUrl());

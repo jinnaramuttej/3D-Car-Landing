@@ -19,6 +19,8 @@ import {
 } from 'three';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
+import { rainLevel } from '@/lib/chapterRuntime';
+import { interaction } from '@/lib/interaction';
 import { carState } from '@/lib/motion';
 import { cameraState } from './CameraRig';
 
@@ -77,6 +79,7 @@ uniform float uLength;
 uniform float uWidth;
 uniform float uPixel;
 uniform float uIntensity;
+uniform float uJitter;
 uniform vec2 uNearFade;
 varying vec2 vUv;
 varying vec3 vColor;
@@ -92,6 +95,8 @@ void main() {
   vec3 q = rel / uBoxSize;
   vec3 center = uBoxMin + rel;
   vec3 edge = smoothstep(0.0, 0.1, q) * smoothstep(1.0, 0.9, q);
+  // a rev shakes the air: drops shiver sideways
+  center.xz += vec2(sin(uTime * 53.0 + aSeed.w * 40.0), cos(uTime * 47.0 + aSeed.x * 31.0)) * uJitter;
 
   vec3 axis = normalize(vel);
   vec3 toCam = cameraPosition - center;
@@ -174,7 +179,8 @@ void main() {
   vec3 wp = c + vec3(position.x * s, 0.012, -position.y * s);
   gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
   vColor = rainLight(c + vec3(0.0, 0.1, 0.0));
-  vAlpha = alive * uOpacity * (1.0 - phase) * (1.0 - phase);
+  float camD = distance(c, cameraPosition);
+  vAlpha = alive * uOpacity * (1.0 - phase) * (1.0 - phase) * smoothstep(1.5, 4.0, camD);
 }
 `;
 
@@ -206,7 +212,7 @@ void main() {
   vec3 wp = c + side * position.x * s + vec3(0.0, (position.y + 0.5) * s, 0.0);
   gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
   vColor = rainLight(c + vec3(0.0, 0.1, 0.0));
-  vAlpha = alive * uOpacity * 1.6 * smoothstep(0.0, 0.08, phase) * (1.0 - smoothstep(0.45, 0.8, phase));
+  vAlpha = alive * uOpacity * 1.6 * smoothstep(0.0, 0.08, phase) * (1.0 - smoothstep(0.45, 0.8, phase)) * smoothstep(2.0, 5.0, distance(c, cameraPosition));
 }
 `;
 
@@ -326,6 +332,7 @@ export function Rain() {
         uWidth: { value: r.streakWidth },
         uPixel: { value: 0.001 },
         uIntensity: { value: r.intensity },
+        uJitter: { value: 0 },
         uNearFade: { value: new Vector2(0.4, 1.6) },
       },
       vertexShader: streakVert,
@@ -397,7 +404,9 @@ export function Rain() {
     const c = CONFIG.rain;
     const s = carState;
     const t = state.clock.elapsedTime;
-    const on = c.intensity > 0.001;
+    const level = rainLevel();
+    const on = level > 0.001;
+    const rev = interaction.rev * CONFIG.interaction.revRain;
 
     // shared light
     (light.uRainColor.value as Color).set(c.color);
@@ -427,18 +436,19 @@ export function Rain() {
     u.uLength.value = c.streakLength;
     u.uWidth.value = c.streakWidth;
     u.uPixel.value = (2 * Math.tan(MathUtils.degToRad(camera.fov) / 2)) / Math.max(1, size.height);
-    u.uIntensity.value = c.intensity;
+    u.uIntensity.value = level;
+    u.uJitter.value = rev * 0.035;
     (u.uNearFade.value as Vector2).set(c.nearFade, c.nearFade * 4);
     streakMesh.current.visible = on;
 
     // splashes around the car
     const su = splashes.uniforms;
     su.uTime.value = t;
-    su.uLife.value = c.splashLife;
+    su.uLife.value = c.splashLife / (1 + rev * 1.6); // revving: the puddles jump
     su.uCenter.value.copy(s.position);
     su.uRadius.value = c.splashRadius;
-    su.uSize.value = c.splashSize;
-    su.uOpacity.value = c.splashOpacity * c.intensity;
+    su.uSize.value = c.splashSize * (1 + rev * 0.9);
+    su.uOpacity.value = c.splashOpacity * level * (1 + rev * 0.8);
     su.uCarPos.value.copy(s.position);
     su.uCarHeading.value = s.heading;
     rippleMesh.current.visible = on && s.carReady;
@@ -448,7 +458,7 @@ export function Rain() {
     const bu = beam.material.uniforms;
     const len = c.beamLength;
     const radius = Math.tan(CONFIG.car.headBeamAngle * 0.7) * len;
-    bu.uOpacity.value = c.beamOpacity * (s.carReady ? s.headLevel : 0) * (0.4 + 0.6 * c.intensity);
+    bu.uOpacity.value = c.beamOpacity * (s.carReady ? s.headLevel : 0) * (0.4 + 0.6 * Math.min(1, level));
     (bu.uNearFade.value as Vector2).set(cameraState.nearFade[0], cameraState.nearFade[1]);
     beams.forEach((b, i) => {
       const m = b.current;

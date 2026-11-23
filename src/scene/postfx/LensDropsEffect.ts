@@ -1,5 +1,5 @@
 import { Effect, EffectAttribute } from 'postprocessing';
-import { Uniform, Vector2 } from 'three';
+import { type Texture, Uniform, Vector2 } from 'three';
 
 /*
  * Rain on the lens. Two layers of procedural drops (big sparse, small dense) that land,
@@ -14,6 +14,7 @@ uniform float dropRefract;
 uniform vec2 dropPush;
 uniform float dropRadial;
 uniform float dropClock;
+uniform sampler2D dropWipe;
 
 float dropHash(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
@@ -62,7 +63,8 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   vec2 p = vec2(uv.x * aspect, uv.y);
   vec2 push = dropPush + (uv - 0.5) * dropRadial;
   vec3 dr = dropLayer(p, 7.0, 0.3, 1.0, push) + dropLayer(p + vec2(0.37, 0.71), 15.0, 0.26, 7.0, push * 1.4);
-  float m = clamp(dr.z, 0.0, 1.0) * dropAmount;
+  // the visitor's cursor wipes the glass (white in the mask = wiped)
+  float m = clamp(dr.z, 0.0, 1.0) * dropAmount * (1.0 - texture2D(dropWipe, uv).r);
   if (m < 0.002) {
     outputColor = inputColor;
     return;
@@ -95,6 +97,7 @@ export class LensDropsEffect extends Effect {
         ['dropPush', new Uniform(new Vector2())],
         ['dropRadial', new Uniform(0)],
         ['dropClock', new Uniform(0)],
+        ['dropWipe', new Uniform<Texture | null>(null)],
       ]),
     });
   }
@@ -110,6 +113,9 @@ export class LensDropsEffect extends Effect {
   }
   set clock(v: number) {
     this.uniforms.get('dropClock')!.value = v;
+  }
+  set wipe(t: Texture | null) {
+    this.uniforms.get('dropWipe')!.value = t;
   }
   get push() {
     return this.uniforms.get('dropPush')!.value as Vector2;

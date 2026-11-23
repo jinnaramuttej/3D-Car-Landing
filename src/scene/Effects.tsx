@@ -22,6 +22,7 @@ import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { sectionState } from '@/lib/sectionRuntime';
 import { cameraState } from './CameraRig';
+import { createSanitizePass } from './postfx/SanitizePass';
 
 /**
  * Depth of field focuses on whatever the current shot looks at (cameraState.focus),
@@ -36,6 +37,7 @@ export function Effects() {
   const ca = useRef<ChromaticAberrationEffect>(null!);
   const vignette = useRef<VignetteEffect>(null!);
   const caOffset = useMemo(() => new Vector2(CONFIG.look.chromaticOffset, CONFIG.look.chromaticOffset * 0.6), []);
+  const sanitize = useMemo(() => createSanitizePass(), []);
 
   useFrame(() => {
     const l = CONFIG.look;
@@ -62,6 +64,7 @@ export function Effects() {
 
   return (
     <EffectComposer multisampling={mobile ? 0 : 4}>
+      <primitive object={sanitize} />
       {mobile ? (
         <></>
       ) : (

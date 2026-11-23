@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import type { CSSProperties } from 'react';
 import { Unbounded } from 'next/font/google';
-import { site, theme } from '@/content';
+import { CONCEPT, SITE, theme } from '@/content';
 import 'lenis/dist/lenis.css';
 import './globals.css';
 
@@ -9,8 +9,8 @@ import './globals.css';
 const display = Unbounded({ subsets: ['latin'], weight: ['500', '700', '900'], variable: '--font-display' });
 
 export const metadata: Metadata = {
-  title: `${site.name} ${site.year} | ${site.concept}`,
-  description: `${site.claim}. ${site.dates}, ${site.venue}. ${site.disclaimer}`,
+  title: `${SITE.name} | ${CONCEPT}`,
+  description: `${SITE.edition}, ${SITE.dates}, ${SITE.venue}. ${SITE.disclaimer}`,
 };
 
 export const viewport: Viewport = {

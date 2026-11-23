@@ -9,7 +9,7 @@ import { SHOTS } from '@/lib/script';
 import { useScrollTimeline } from '@/lib/useScrollTimeline';
 import { Scene } from '@/scene/Scene';
 import { DebugPanel } from './DebugPanel';
-import { Arrival } from './Arrival';
+import { Districts } from './Districts';
 import { MiniMap } from './MiniMap';
 import { Navbar } from './Navbar';
 import { Overlay } from './Overlay';
@@ -44,7 +44,7 @@ export default function Experience() {
       </div>
 
       <Overlay />
-      <Arrival />
+      <Districts />
       <Navbar />
       <MiniMap />
       <div ref={trackRef} className="scroll-track" style={{ height: `${PAGES * 100}vh` }} />

@@ -1,6 +1,8 @@
 'use client';
 
-import { site } from '@/content';
+import { CONCEPT, SITE } from '@/content';
+
+const [BRAND, YEAR] = SITE.name.split(' ');
 import { chapterState } from '@/lib/chapterRuntime';
 import { engine } from '@/lib/engineAudio';
 import { useStore } from '@/lib/store';
@@ -22,9 +24,9 @@ export function Navbar() {
   return (
     <nav className="navbar" aria-label="Site">
       <button type="button" className="brand" onClick={() => scrollToProgress(0, true)}>
-        {site.name}
-        <span>{site.year}</span>
-        <em>{site.concept}</em>
+        {BRAND}
+        <span>{YEAR}</span>
+        <em>{CONCEPT}</em>
       </button>
 
       <div className="nav-actions">
@@ -63,7 +65,7 @@ export function Navbar() {
             <i />
           </span>
         </button>
-        <a className="btn btn-accent btn-sm nav-cta" href={site.url} target="_blank" rel="noopener noreferrer" aria-label="Open techfest.org">
+        <a className="btn btn-accent btn-sm nav-cta" href={SITE.home} target="_blank" rel="noopener noreferrer" aria-label="Open techfest.org">
           <span className="cta-label">techfest.org</span>
           <span aria-hidden>↗</span>
         </a>

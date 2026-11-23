@@ -2,8 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
-import { chapters, credits, hints, site, title } from '@/content';
+import { chapters, credits, hints, SITE, UI } from '@/content';
 import { beatById, CHAPTERS, chapterById, type ChapterId, fromDriftLocal } from '@/lib/chapters';
+
+const [TITLE_WORD, TITLE_YEAR] = SITE.name.split(' ');
+const TITLE_META = [SITE.edition, SITE.dates, SITE.venue];
 import { PHASES } from '@/lib/script';
 import { useStore } from '@/lib/store';
 import { LIVERIES } from '@/scene/livery';
@@ -81,15 +84,12 @@ export function Overlay() {
     );
     tl.fromTo(q('.title-cta'), { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: cll(0.1), ease: 'power2.out' }, cl(0.6));
     tl.to(q('.title-block'), { autoAlpha: 0, y: -24, filter: 'blur(10px)', duration: cll(0.1) }, cl(0.92));
-    // V: the card over the arrival orbit
-    const arrive = beatById('arrive');
-    tl.fromTo(
-      card('arrival'),
-      { autoAlpha: 0, y: 18, filter: 'blur(10px)' },
-      { autoAlpha: 1, y: 0, filter: 'blur(0px)', duration: 0.006, ease: 'power2.out' },
-      arrive.start + 0.02 * (arrive.end - arrive.start),
-    );
-    tl.to(card('arrival'), { autoAlpha: 0, y: -14, duration: 0.006 }, arrive.start + 0.8 * (arrive.end - arrive.start));
+    // V-XI and the finale: the card opens each chapter, then makes way for its panel
+    for (const c of CHAPTERS.slice(CHAPTERS.findIndex((x) => x.id === 'arrival'))) {
+      cardIn(c.id, 0.03, 0.06);
+      if (c.id === 'finale') cardOut(c.id, 0.4);
+      else cardOut(c.id, 0.24, 0.06);
+    }
     tl.set({}, {}, 1);
 
     const bar = q('.progress')[0] as HTMLElement | undefined;
@@ -143,18 +143,18 @@ export function Overlay() {
         ))}
       </ul>
 
-      <section className="title-block" aria-label={`${title.word} ${title.year}`}>
+      <section className="title-block" aria-label={SITE.name}>
         <h1>
-          <span className="title-word">{title.word}</span>
-          <span className="title-year">{title.year}</span>
+          <span className="title-word">{TITLE_WORD}</span>
+          <span className="title-year">{TITLE_YEAR}</span>
         </h1>
         <p className="title-meta">
-          {title.meta.map((m) => (
+          {TITLE_META.map((m) => (
             <span key={m}>{m}</span>
           ))}
         </p>
-        <a className="btn btn-accent title-cta" href={site.url} target="_blank" rel="noopener noreferrer">
-          {title.cta}
+        <a className="btn btn-accent title-cta" href={SITE.home} target="_blank" rel="noopener noreferrer">
+          {UI.cta}
           <span aria-hidden>↗</span>
         </a>
       </section>
@@ -165,7 +165,7 @@ export function Overlay() {
 
       <div className="progress" aria-hidden />
       <p className="credit">
-        {site.disclaimer}{' '}
+        {SITE.disclaimer}{' '}
         <a href={credits.model.href} target="_blank" rel="noreferrer">
           {credits.model.text}
         </a>

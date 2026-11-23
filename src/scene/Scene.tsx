@@ -14,6 +14,7 @@ import { Car } from './Car';
 import { CameraRig } from './CameraRig';
 import { Cityscape } from './Cityscape';
 import { Effects } from './Effects';
+import { Rain } from './Rain';
 import { SectionProps } from './SectionProps';
 import { SkidMarks } from './SkidMarks';
 import { Smoke } from './Smoke';
@@ -95,6 +96,7 @@ export function Scene() {
       <Car />
       <SkidMarks />
       <Smoke />
+      <Rain />
       <SectionProps />
       <CameraRig />
       <Effects />

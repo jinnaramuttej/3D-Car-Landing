@@ -155,6 +155,32 @@ export const CONFIG = {
     seaEnv: 0.22, // sky/city reflection on the water (fresnel keeps it dark face-on)
   },
 
+  /** Rain: streaks around the camera, splashes around the car, haze in the headlight beams. */
+  rain: {
+    count: 9000, // (mount) streaks in the box around the camera
+    splashCount: 700, // (mount)
+    mobileScale: 0.3, // (mount) phones get this fraction of streaks and splashes
+    intensity: 1, // 0 = dry
+    fallSpeed: 9, // m/s
+    windX: 2.4, // m/s, slants the streaks
+    windZ: 0.9,
+    streakLength: 0.6, // metres (fall speed x a cinema shutter, stretched for the look)
+    streakWidth: 0.007,
+    boxSize: 30, // metres of rain kept around the camera
+    boxHeight: 16,
+    nearFade: 0.35, // streaks fade out this close to the lens (metres)
+    color: '#9db3c9',
+    ambient: 0.32, // city glow on the drops
+    headGain: 5, // extra glow inside the headlight beams
+    tailGain: 0.8, // red glow from the tail lights
+    splashLife: 0.38, // seconds
+    splashRadius: 11, // metres around the car
+    splashSize: 0.09,
+    splashOpacity: 0.35,
+    beamOpacity: 0.05, // haze cone in front of each headlight
+    beamLength: 16,
+  },
+
   look: {
     background: '#04050a',
     fogColor: '#0c1016',
@@ -168,7 +194,7 @@ export const CONFIG = {
     vignetteOffset: 0.28,
     vignetteDarkness: 0.78,
     groundColor: '#0e1014',
-    groundEnv: 0.15, // env reflections on the asphalt; high values look like frost
+    groundEnv: 0.06, // env reflections on the asphalt; high values look like frost (or olive paint with the city HDRI)
     reflection: 25, // MeshReflectorMaterial mixStrength: how wet the asphalt looks
     reflectionBlur: 1, // mixBlur: how much rough patches smear the reflection
     lampEmissive: 6,
@@ -283,6 +309,26 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     haze: [0, 0.01, 0.0001],
     waveSpeed: [0, 0.1, 0.001],
     seaEnv: [0, 3, 0.01],
+  },
+  rain: {
+    intensity: [0, 2, 0.01],
+    fallSpeed: [1, 20, 0.1],
+    windX: [-8, 8, 0.1],
+    windZ: [-8, 8, 0.1],
+    streakLength: [0.05, 2, 0.01],
+    streakWidth: [0.001, 0.03, 0.0005],
+    boxSize: [8, 80, 1],
+    boxHeight: [4, 40, 1],
+    nearFade: [0, 3, 0.01],
+    ambient: [0, 2, 0.01],
+    headGain: [0, 20, 0.1],
+    tailGain: [0, 5, 0.05],
+    splashLife: [0.1, 1.5, 0.01],
+    splashRadius: [1, 30, 0.5],
+    splashSize: [0.02, 0.6, 0.01],
+    splashOpacity: [0, 2, 0.01],
+    beamOpacity: [0, 0.5, 0.005],
+    beamLength: [2, 40, 0.5],
   },
   look: {
     fogDensity: [0, 0.06, 0.001],

@@ -10,6 +10,15 @@ import { type BoardId, COMPETITION_TAGS, initials, type SpeakerCategory } from '
 export const ART_W = 1024;
 export const ART_H = 576;
 
+/** The DKMS heart line's baseline (canvas px). */
+const HEART_Y = 440;
+/**
+ * The canvas rows the DKMS heart line can touch at any pulse: the spike up (70 px at full
+ * pulse), the dip (46 px), their miter tips and antialiasing, with room to spare. Nothing
+ * else on that board changes with the pulse, so only this band is redrawn per beat.
+ */
+export const PULSE_BAND: [number, number] = [HEART_Y - 96, HEART_Y + 64];
+
 export type ArtState = {
   robowarsClass: number;
   competitionFilter: string;
@@ -212,11 +221,11 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
     fit(ctx, head.slice(0, half), 800, 70, 900);
     ctx.fillText(head.slice(0, half), 62, 230);
     ctx.fillText(head.slice(half + 1), 62, 320);
-    // one slow heart line
+    // one slow heart line (the only thing on the board that moves: keep it inside PULSE_BAND)
     ctx.strokeStyle = withAlpha(ACCENT, 0.45 + 0.55 * s.pulse);
     ctx.lineWidth = 6;
     ctx.beginPath();
-    const y0 = 440;
+    const y0 = HEART_Y;
     ctx.moveTo(64, y0);
     ctx.lineTo(420, y0);
     ctx.lineTo(450, y0 - 70 * (0.4 + 0.6 * s.pulse));

@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import {
+  Box2,
   CanvasTexture,
   Color,
   type Group,
@@ -17,6 +18,7 @@ import {
   SRGBColorSpace,
   Vector2,
   Vector3,
+  type WebGLRenderer,
 } from 'three';
 import { CHAPTERS, type StopId } from '@/lib/chapters';
 import { chapterState, stopWeight } from '@/lib/chapterRuntime';
@@ -26,7 +28,7 @@ import { isMobile } from '@/lib/device';
 import { carState, leftOf } from '@/lib/motion';
 import { zoneById, zoneProgress } from '@/lib/pacing';
 import { type BoardId, boardS, EXPO_SPAN, expoIndexAt, heartbeatPulse, isExtra, mountOf, stopAnchor, stopFx, useStops } from '@/lib/stops';
-import { ART_H, ART_W, type ArtState, drawStop, resolveFont } from './billboardArt';
+import { ART_H, ART_W, type ArtState, drawStop, PULSE_BAND, resolveFont } from './billboardArt';
 import { CITY_URL, useCityLayer } from './City';
 
 const STOP_IDS = CHAPTERS.filter((c) => c.stop).map((c) => c.stop!) as StopId[];
@@ -100,7 +102,68 @@ type Board = {
   onWall: boolean;
   /** 0 asleep .. 1 fully on (it wakes as the car comes, sleeps once it is well past). */
   wake: number;
+  /** The Heartbeat's beat, pre-drawn (desktop only). */
+  pulse: Pulse | null;
 };
+
+/** The Heartbeat's pulse is drawn in eighths. */
+const PULSE_STEPS = 8;
+
+/**
+ * Redrawing a canvas and uploading it straight away makes the browser rasterise it and sync
+ * with WebGL in the same frame, and the beat did that ~15 times a second. Instead the heart
+ * line's band (PULSE_BAND) is drawn once at every step, stacked in one texture, and each
+ * step is copied into the board's texture on the GPU: the same pixels, no redraw, no upload.
+ */
+type Pulse = {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  tex: CanvasTexture;
+  /** The step the board's texture shows (-1: not drawn yet). */
+  step: number;
+};
+
+function makePulse(): Pulse {
+  const canvas = document.createElement('canvas');
+  canvas.width = ART_W;
+  canvas.height = (PULSE_BAND[1] - PULSE_BAND[0]) * (PULSE_STEPS + 1);
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  tex.minFilter = LinearFilter;
+  tex.generateMipmaps = false;
+  return { canvas, ctx: canvas.getContext('2d')!, tex, step: -1 };
+}
+
+/** Draws the board at every pulse step into its strip and uploads that once (on a fresh draw). */
+function drawPulse(gl: WebGLRenderer, b: Board, art: ArtState) {
+  const p = b.pulse!;
+  const h = PULSE_BAND[1] - PULSE_BAND[0];
+  const live = art.pulse;
+  for (let i = 0; i <= PULSE_STEPS; i++) {
+    art.pulse = i / PULSE_STEPS;
+    drawStop(b.id, b.ctx, art);
+    p.ctx.drawImage(b.canvas, 0, PULSE_BAND[0], ART_W, h, 0, i * h, ART_W, h);
+  }
+  art.pulse = live;
+  p.tex.needsUpdate = true;
+  gl.initTexture(p.tex);
+}
+
+const _src = new Box2();
+const _dst = new Vector2();
+/** Puts pulse step `step` on the board: its band, copied on the GPU from the strip. */
+function showPulse(gl: WebGLRenderer, b: Board, step: number) {
+  const p = b.pulse!;
+  if (p.step === step) return;
+  const h = PULSE_BAND[1] - PULSE_BAND[0];
+  // (texture rows run bottom-up: both canvases are flipped on upload)
+  const rows = p.canvas.height;
+  _src.min.set(0, rows - (step + 1) * h);
+  _src.max.set(ART_W, rows - step * h);
+  _dst.set(0, ART_H - PULSE_BAND[1]);
+  gl.copyTextureToTexture(p.tex, b.tex, _src, _dst);
+  p.step = step;
+}
 
 const _ray = new Raycaster();
 // (the city is on its own render layer, CITY_LAYER: the wall search has to see it)
@@ -190,11 +253,13 @@ export function Billboards() {
         fragmentShader: ledFrag,
         fog: true,
       });
-      return { id, mount: mountOf(id), canvas, ctx, tex, mat, key: '', anim: '', tint: new Color(), centre: new Vector3(), normal: new Vector3(0, 0, 1), width: spec.width, height: spec.height, onWall: false, wake: 0 };
+      // (phones hold the pulse still: nothing to pre-draw)
+      const pulse = id === 'dkms' && !mobile ? makePulse() : null;
+      return { id, mount: mountOf(id), canvas, ctx, tex, mat, key: '', anim: '', tint: new Color(), centre: new Vector3(), normal: new Vector3(0, 0, 1), width: spec.width, height: spec.height, onWall: false, wake: 0, pulse };
     });
   }, [mobile]);
 
-  useEffect(() => () => boards.forEach((b) => (b.tex.dispose(), b.mat.dispose())), [boards]);
+  useEffect(() => () => boards.forEach((b) => (b.tex.dispose(), b.mat.dispose(), b.pulse?.tex.dispose())), [boards]);
 
   // hang each billboard (once the city is in the scene graph)
   useLayoutEffect(() => {
@@ -262,14 +327,26 @@ export function Billboards() {
                 : 'static';
         // (animated art redraws the canvas: only while its own stop is the one on screen)
         const own = CHAPTERS.findIndex((c) => c.stop === b.id) === chapterState.chapter;
-        const anim = !own ? b.anim : b.id === 'competitions' ? art.competitionAnim.toFixed(2) : b.id === 'dkms' ? (Math.round(art.pulse * 8) / 8).toFixed(3) : '';
+        const step = Math.round(art.pulse * PULSE_STEPS);
+        const anim = !own ? b.anim : b.id === 'competitions' ? art.competitionAnim.toFixed(2) : b.id === 'dkms' ? `${step}` : '';
         if (key !== b.key || anim !== b.anim) {
           const fresh = key !== b.key;
           b.key = key;
           b.anim = anim;
-          drawStop(b.id, b.ctx, art);
-          b.tex.needsUpdate = true;
-          if (fresh) averageColour(b);
+          if (b.pulse && !fresh && b.pulse.step >= 0) showPulse(state.gl, b, step);
+          else {
+            const live = art.pulse;
+            if (b.pulse) {
+              // every step into the strip, then the board at a whole step (the strip's)
+              drawPulse(state.gl, b, art);
+              art.pulse = step / PULSE_STEPS;
+              b.pulse.step = step;
+            }
+            drawStop(b.id, b.ctx, art);
+            art.pulse = live;
+            b.tex.needsUpdate = true;
+            if (fresh) averageColour(b);
+          }
         }
       }
       const u = b.mat.uniforms;

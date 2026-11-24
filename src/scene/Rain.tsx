@@ -430,10 +430,13 @@ export function Rain() {
       .copy(_cam)
       .addScaledVector(_fwd, c.boxSize * 0.38)
       .sub(_half.set(box.x / 2, box.y * 0.55, box.z / 2));
-    (u.uWind.value as Vector3).set(c.windX, 0, c.windZ);
+    // the drops come at the car as fast as it drives: they slant back and stretch on the
+    // runs, fall straight through the slow zones
+    const v = Math.abs(s.speed);
+    (u.uWind.value as Vector3).set(c.windX, 0, c.windZ).addScaledVector(s.forward, -v * c.speedSlant);
     u.uFall.value = c.fallSpeed;
     u.uTime.value = t;
-    u.uLength.value = c.streakLength;
+    u.uLength.value = c.streakLength * (1 + v * c.speedStretch);
     u.uWidth.value = c.streakWidth;
     u.uPixel.value = (2 * Math.tan(MathUtils.degToRad(camera.fov) / 2)) / Math.max(1, size.height);
     u.uIntensity.value = level * CONFIG.rain.streakOpacity;

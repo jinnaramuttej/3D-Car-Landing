@@ -158,6 +158,8 @@ export const CONFIG = {
     windX: 2.4, // m/s, slants the streaks
     windZ: 0.9,
     streakLength: 0.6, // metres (fall speed x a cinema shutter, stretched for the look)
+    speedSlant: 0.55, // how far the streaks lean back per m/s of the car's speed
+    speedStretch: 0.03, // how much longer they get per m/s
     streakWidth: 0.007,
     boxSize: 30, // metres of rain kept around the camera
     boxHeight: 16,
@@ -279,12 +281,12 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     shakeRollDeg: [0, 4, 0.05],
     shakeHz: [0.2, 12, 0.1],
     popFlash: [0, 20, 0.1],
-  },
-  drift: {
     launchFov: [0, 12, 0.1],
     launchTrauma: [0, 1, 0.01],
     launchStreaks: [0, 2, 0.01],
     launchSeconds: [0.2, 4, 0.05],
+  },
+  drift: {
     yawPeakDeg: [0, 60, 0.5],
     slipRefDeg: [5, 60, 0.5],
     rollDeg: [0, 10, 0.1],
@@ -357,6 +359,8 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     windX: [-8, 8, 0.1],
     windZ: [-8, 8, 0.1],
     streakLength: [0.05, 2, 0.01],
+    speedSlant: [0, 2, 0.01],
+    speedStretch: [0, 0.2, 0.002],
     streakWidth: [0.001, 0.03, 0.0005],
     boxSize: [8, 80, 1],
     boxHeight: [4, 40, 1],

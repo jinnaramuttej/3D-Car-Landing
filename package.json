@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "check:route": "tsx scripts/check-route.ts",
     "car": "node scripts/optimize-car.mjs",
-    "city": "node scripts/optimize-city.mjs && node scripts/build-route.mjs && node scripts/trim-city.mjs && tsx scripts/check-route.ts"
+    "city": "node scripts/optimize-city.mjs && node scripts/build-route.mjs && node scripts/trim-city.mjs && tsx scripts/check-route.ts",
+    "pacing": "tsx scripts/pacing-report.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

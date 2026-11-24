@@ -23,6 +23,7 @@ import {
 import { MathUtils, type PerspectiveCamera, Quaternion, Vector2, Vector3 } from 'three';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
+import { feel } from '@/lib/feel';
 import { carState } from '@/lib/motion';
 import { chapterState, rainLevel } from '@/lib/chapterRuntime';
 import { getWipeTexture, interaction } from '@/lib/interaction';
@@ -148,7 +149,8 @@ export function Effects() {
     camera.getWorldPosition(_pos);
 
     // flat out (a long catch-up drive): the frame streaks
-    fx.streaks.amount = MathUtils.smoothstep(Math.abs(carState.speed), 60, 105) * p.streaks;
+    // (and for a moment launching out of a stop)
+    fx.streaks.amount = MathUtils.smoothstep(Math.abs(carState.speed), 60, 105) * p.streaks + feel.kick * CONFIG.feel.launchStreaks;
     fx.streaks.time = motion.clock;
 
     const mb = fx.motionBlur;

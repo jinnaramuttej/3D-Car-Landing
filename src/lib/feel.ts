@@ -3,7 +3,8 @@ import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import { routeCurvature } from './cityRoute';
 import { CONFIG } from './config';
 import { carState, forwardOf, leftOf } from './motion';
-import { powertrain } from './powertrain';
+import { blip, launchBurst, powertrain } from './powertrain';
+import { ZONES, zoneSpan } from './pacing';
 import { onWarmupEnd } from './warmup';
 
 /**
@@ -38,6 +39,8 @@ export const feel = {
   lagV: new Vector3(),
   /** Exhaust flash 0..1 (decays fast, flickers). */
   pop: 0,
+  /** The launch burst out of a slow zone, 1 -> 0 over CONFIG.feel.launchSeconds: the lens kicks wider, the frame streaks. */
+  kick: 0,
   /** Seconds until each queued pop fires (a lift fires two or three in a ripple). */
   popQueue: [-1, -1, -1],
   /** What the body and the pops last saw. */
@@ -66,10 +69,36 @@ function spring(axis: Axis, target: number, hz: number, zeta: number, dt: number
 /** Lateral acceleration (m/s², positive to the left) from the speed and the road's bend (per frame). */
 let lateral = 0;
 
+let lastS = -1;
+
+/**
+ * The slow zones' edges, driving forward: braking in, a downshift with a blip; launching
+ * out, full throttle (the gear changes and the pops follow from the powertrain), a spike
+ * of trauma, the lens kicking wider and the frame streaking for a moment.
+ */
+function stepLaunch(dt: number) {
+  const f = CONFIG.feel;
+  const s = carState.s;
+  if (lastS >= 0 && s > lastS && s - lastS < 8) {
+    for (const z of ZONES) {
+      const [a, b] = zoneSpan(z);
+      if (lastS < a && s >= a) blip();
+      if (lastS < b && s >= b) {
+        launchBurst();
+        feel.kick = 1;
+        feel.trauma = Math.min(1, feel.trauma + f.launchTrauma);
+      }
+    }
+  }
+  lastS = s;
+  feel.kick = Math.max(0, feel.kick - dt / Math.max(0.1, f.launchSeconds));
+}
+
 /** The body on its springs, and the exhaust pops. Call once per frame, after the drive. */
 export function stepBody(dt: number) {
   const f = CONFIG.feel;
   const s = carState;
+  stepLaunch(dt);
   if (!feel.seen.init) {
     feel.seen.shifts = powertrain.shifts;
     feel.seen.lifts = powertrain.lifts;
@@ -167,7 +196,8 @@ export function stepCamera(dt: number) {
 /** After the warm-up drive behind the loader: settle everything at rest. */
 export function resetFeel() {
   feel.pitch = feel.pitchV = feel.roll = feel.rollV = feel.heave = feel.heaveV = 0;
-  feel.trauma = feel.shake = feel.pop = 0;
+  feel.trauma = feel.shake = feel.pop = feel.kick = 0;
+  lastS = -1;
   feel.lag.set(0, 0, 0);
   feel.lagV.set(0, 0, 0);
   feel.popQueue.fill(-1);

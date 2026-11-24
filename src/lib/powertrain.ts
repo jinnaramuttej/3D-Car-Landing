@@ -44,6 +44,27 @@ export const powertrain = {
 };
 
 let startAt = -1;
+/** Seconds left of a rev-matching blip (a downshift into a slow zone). */
+let blipT = 0;
+const BLIP = 0.24;
+/** Seconds left of a launch (full throttle out of a slow zone). */
+let launchT = 0;
+
+/** Braking into a slow zone: down a gear with a blip of the throttle (the audio hears the flare). */
+export function blip() {
+  const p = powertrain;
+  if (!p.running) return;
+  if (p.gear > 1) {
+    p.gear--;
+    p.shifts++;
+  }
+  blipT = BLIP;
+}
+
+/** Out of a slow zone: full throttle for a moment; the gear changes and the pops follow. */
+export function launchBurst() {
+  if (powertrain.running) launchT = 0.9;
+}
 /** A lift counts once the throttle comes off a high point (re-armed when it goes back up). */
 let liftArmed = false;
 
@@ -92,8 +113,9 @@ export function stepPowertrain(input: DriveInput, dt: number) {
   const moving = p.speed > 1.2;
   let demand = moving ? clamp(0.32 + input.accel / 7, 0, 1) : 0.05;
   if (input.accel < -1.5) demand = 0.02; // braking: off the throttle
-  demand = Math.max(demand, input.slip * 0.9, input.rev);
+  demand = Math.max(demand, input.slip * 0.9, input.rev, launchT > 0 ? 1 : 0, blipT > 0 ? 0.85 : 0);
   if (p.shifting > 0) demand = 0.05; // the shift cuts the throttle
+  launchT = Math.max(0, launchT - dt);
   // attack is quick, the release a little slower
   const tau = demand > p.throttle ? 0.07 : 0.22;
   p.throttle += (demand - p.throttle) * (1 - Math.exp(-dt / tau));
@@ -123,6 +145,11 @@ export function stepPowertrain(input: DriveInput, dt: number) {
   const clutch = smoothstep(p.speed, 1, 6);
   let target = lerp(free, Math.max(IDLE, geared), clutch);
   target += p.slip * 1600 * clutch;
+  // the blip: the revs flare to meet the lower gear
+  if (blipT > 0) {
+    target += 1900 * Math.sin((Math.PI * (BLIP - blipT)) / BLIP);
+    blipT = Math.max(0, blipT - dt);
+  }
   target = clamp(target, IDLE * 0.9, REDLINE);
 
   // the starter: cranking, the catch, then idle

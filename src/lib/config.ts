@@ -109,6 +109,10 @@ export const CONFIG = {
     shakeRollDeg: 0.9, // degrees of roll at trauma 1
     shakeHz: 6, // noise speed (the layers run at 1x, 2.1x and 4.3x)
     popFlash: 8, // brightness of the exhaust flash
+    launchFov: 5, // degrees the lens kicks wider launching out of a stop
+    launchTrauma: 0.45, // trauma spike at the launch
+    launchStreaks: 0.45, // speed streaks at the launch (they fade with the kick)
+    launchSeconds: 1.4, // how long the burst takes to fade
   },
 
   smoke: {
@@ -277,6 +281,10 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     popFlash: [0, 20, 0.1],
   },
   drift: {
+    launchFov: [0, 12, 0.1],
+    launchTrauma: [0, 1, 0.01],
+    launchStreaks: [0, 2, 0.01],
+    launchSeconds: [0.2, 4, 0.05],
     yawPeakDeg: [0, 60, 0.5],
     slipRefDeg: [5, 60, 0.5],
     rollDeg: [0, 10, 0.1],

@@ -767,7 +767,8 @@ export function directShot(out: CityShot) {
   }
   out.look.copy(o.look);
   const kick = smoothstep(speed, 8, 60) * CONFIG.feel.fovKick + smoothstep(carState.accel, 2, 12) * CONFIG.feel.fovKickAccel;
-  out.fov = driving ? clamp(o.fov + kick, CONFIG.camera.fovMin, CONFIG.camera.fovMax) : o.fov;
+  // (and the launch out of a stop kicks it wider for a moment, whichever rig is up)
+  out.fov = clamp((driving ? o.fov + kick : o.fov) + feel.kick * CONFIG.feel.launchFov, CONFIG.camera.fovMin, CONFIG.camera.fovMax);
   out.focus.copy(o.focus);
   out.dof = o.dof;
   out.focusRange = o.focusRange;

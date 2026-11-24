@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "tsx scripts/check-route.ts",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "check:route": "tsx scripts/check-route.ts",
     "city": "node scripts/optimize-city.mjs && node scripts/build-route.mjs"
   },
   "dependencies": {
@@ -35,6 +37,7 @@
     "@types/three": "^0.187.0",
     "meshoptimizer": "^1.1.1",
     "sharp": "^0.35.5",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }

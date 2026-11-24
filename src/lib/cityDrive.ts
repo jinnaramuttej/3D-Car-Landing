@@ -54,7 +54,7 @@ function buildKeys(): Key[] {
       out.push({ p: c.end, s: stop.s - 20 + FINALE_ROLL, v: holdV });
       continue;
     }
-    const a = c.start + ARRIVE * len;
+    const a = c.start + ((stop as { arrive?: number }).arrive ?? ARRIVE) * len;
     const l = c.start + LEAVE * len;
     const creep = (HOLD_BEFORE + HOLD_AFTER) / (l - a);
     out.push({ p: a, s: stop.s - HOLD_BEFORE, v: creep });

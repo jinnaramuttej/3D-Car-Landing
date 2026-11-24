@@ -105,9 +105,11 @@ const fragMain = /* glsl */ `
     if (abs(cn.y) < 0.35) {
       vec2 t2 = normalize(vec2(-cn.z, cn.x) + 1e-5);
       float h = dot(vCityPos.xz, t2);
-      vec2 cell = vec2(floor(h / 3.6), floor(vCityPos.y / 3.3));
-      vec2 f = vec2(fract(h / 3.6), fract(vCityPos.y / 3.3));
-      float win = smoothstep(0.14, 0.18, f.x) * smoothstep(0.86, 0.82, f.x) * smoothstep(0.2, 0.25, f.y) * smoothstep(0.88, 0.84, f.y);
+      vec2 cell = vec2(floor(h / 4.2), floor(vCityPos.y / 3.3));
+      vec2 f = vec2(fract(h / 4.2), fract(vCityPos.y / 3.3));
+      // a wide pane with a soft edge, lit unevenly from inside (a lamp low on one side)
+      float win = smoothstep(0.1, 0.14, f.x) * smoothstep(0.9, 0.86, f.x) * smoothstep(0.3, 0.35, f.y) * smoothstep(0.82, 0.77, f.y);
+      win *= 0.55 + 0.45 * smoothstep(0.85, 0.3, f.y) * (0.7 + 0.3 * sin(f.x * 3.14));
       // one seed per facade plane, per window
       float facade = floor(dot(vCityPos.xz, cn.xz) * 0.25);
       float seed = cityHash(cell + vec2(facade * 7.13, facade * 3.71) + cn.xz * 31.0);
@@ -115,7 +117,7 @@ const fragMain = /* glsl */ `
       float floorOn = step(0.28, cityHash(vec2(cell.y, facade * 1.3)));
       float lit = step(seed, 0.26) * floorOn;
       float tone = cityHash(cell * 1.7 + facade);
-      vec3 tint = tone < 0.62 ? vec3(1.0, 0.66, 0.36) : tone < 0.88 ? vec3(1.0, 0.86, 0.66) : vec3(0.7, 0.82, 1.0);
+      vec3 tint = tone < 0.62 ? vec3(1.0, 0.55, 0.24) : tone < 0.9 ? vec3(1.0, 0.76, 0.5) : vec3(0.62, 0.76, 1.0);
       float glass = 1.0 - smoothstep(0.3, 0.75, luma);
       float level = 0.25 + 0.9 * pow(cityHash(cell * 3.1 + facade), 2.0);
       totalEmissiveRadiance += win * lit * tint * level * (0.4 + 0.6 * glass) * uWindowGlow * uCity;

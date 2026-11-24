@@ -14,6 +14,7 @@ import { useStore } from '@/lib/store';
 import { Car } from './Car';
 import { CameraRig } from './CameraRig';
 import { ChapterProps } from './ChapterProps';
+import { Billboards } from './city/Billboards';
 import { City } from './city/City';
 import { RouteDebug } from './city/RouteDebug';
 import { StreetLights } from './city/StreetLights';
@@ -150,6 +151,7 @@ export function Scene() {
       <Suspense fallback={null}>
         <City />
         <StreetLights />
+        <Billboards />
         <RouteDebug />
       </Suspense>
       <CameraRig />

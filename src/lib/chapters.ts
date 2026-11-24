@@ -195,7 +195,7 @@ const CLEARING: Env = { ...NIGHT, rain: 0.7, fog: 0.011, env: 0.6, groundEnv: 0.
  */
 const CITY: Env = {
   ...NIGHT,
-  rain: 0.9,
+  rain: 0.7,
   fog: 0.0105,
   fogColor: '#141018',
   exposure: 1.02,
@@ -263,7 +263,7 @@ const chapterList: Omit<Chapter, 'start' | 'end'>[] = [
   { id: 'clearing', numeral: 'IV', title: 'Clearing', pages: 2.4, env: CLEARING, blend: 0.3, cloud: true },
   { id: 'arrival', numeral: 'V', title: 'Arrival', pages: 2, env: CITY, blend: 0.25, stop: 'arrival' },
   { id: 'robowars', numeral: 'VI', title: 'Robowars', pages: 2.4, env: ROBOWARS_AIR, blend: 0.25, stop: 'robowars' },
-  { id: 'competitions', numeral: 'VII', title: 'Competitions', pages: 2.6, env: CITY, blend: 0.25, stop: 'competitions' },
+  { id: 'competitions', numeral: 'VII', title: 'Competitions', pages: 3, env: CITY, blend: 0.25, stop: 'competitions' },
   { id: 'speakers', numeral: 'VIII', title: 'Speakers', pages: 2.4, env: SPEAKERS_AIR, blend: 0.25, stop: 'speakers' },
   { id: 'expo', numeral: 'IX', title: 'Expo', pages: 2.4, env: EXPO_AIR, blend: 0.25, stop: 'expo' },
   { id: 'dkms', numeral: 'X', title: 'DKMS', pages: 2.4, env: DKMS_AIR, blend: 0.3, stop: 'dkms' },

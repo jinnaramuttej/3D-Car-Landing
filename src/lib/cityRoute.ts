@@ -34,6 +34,8 @@ export const BRIDGE = {
 export type StopSpec = {
   /** Metres along the route where the car is closest to the billboard. */
   s: number;
+  /** Fraction of the chapter where the car reaches the stop (later = a longer drive in). */
+  arrive?: number;
   /** Which side of the road the billboard stands on: 1 = left, -1 = right. */
   side: 1 | -1;
   /** Billboard size (m) and height of its bottom edge above the road. */
@@ -44,17 +46,20 @@ export type StopSpec = {
 
 /**
  * The eight stops. `s` is in route metres: 0 is the start of the drive, the city part
- * ends at ROUTE_LENGTH and the bridge starts there. Move a stop by changing its `s`
- * (the billboard finds the nearest facade on its side of the road by itself).
+ * ends at ROUTE_LENGTH and the bridge starts there. Each city stop sits where a scan of
+ * the model found a flat, road-facing wall big enough for its billboard (side 1 = left of
+ * the road, -1 = right); the billboard finds that wall by itself (raycast, Billboards.tsx)
+ * and stands on legs if it can't. Between robowars and competitions there is no such wall
+ * for 200 m (the big curve), so that leg is a longer drive.
  */
 export const STOPS = {
-  arrival: { s: 70, side: 1, width: 15, height: 8.4, lift: 6 },
-  robowars: { s: 185, side: -1, width: 16, height: 9, lift: 7 },
-  competitions: { s: 300, side: 1, width: 16, height: 9, lift: 7 },
-  speakers: { s: 420, side: -1, width: 16, height: 9, lift: 7 },
-  expo: { s: 540, side: 1, width: 16, height: 9, lift: 7 },
-  dkms: { s: 650, side: -1, width: 14, height: 7.9, lift: 6 },
-  twmun: { s: 760, side: 1, width: 16, height: 9, lift: 7 },
+  arrival: { s: 58, side: -1, width: 16, height: 9, lift: 9.5 },
+  robowars: { s: 134, side: 1, width: 16, height: 9, lift: 6.5 },
+  competitions: { s: 336, side: -1, width: 14, height: 7.9, lift: 6.5, arrive: 0.34 },
+  speakers: { s: 462, side: -1, width: 16, height: 9, lift: 6.5 },
+  expo: { s: 562, side: -1, width: 16, height: 9, lift: 6.5 },
+  dkms: { s: 638, side: -1, width: 14, height: 7.9, lift: 6.5 },
+  twmun: { s: 746, side: -1, width: 16, height: 9, lift: 6.5 },
   finale: { s: ROUTE_LENGTH + 400, side: 1, width: 18, height: 10, lift: 0 },
 } satisfies Record<string, StopSpec>;
 

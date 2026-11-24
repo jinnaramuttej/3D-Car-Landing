@@ -3,7 +3,7 @@ import { easing } from 'maath';
 import { chapterById, stageSwitchAt } from '@/lib/chapters';
 import { chapterState } from '@/lib/chapterRuntime';
 import { HOLD, nearestStop } from '@/lib/cityDrive';
-import { STOPS } from '@/lib/cityRoute';
+import { getRoute, sampleRoute, STOPS } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
 import { carState, forwardOf, leftOf } from '@/lib/motion';
 import { stopAnchor } from '@/lib/stops';
@@ -50,20 +50,22 @@ export function cityShot(out: CityShot) {
 
   if (hold > 0.001) {
     const a = stopAnchor(stop);
-    // across the road from the billboard, a little behind the car, low
-    forwardOf(carState.pathHeading, _f);
-    leftOf(carState.pathHeading, _l);
-    _a.copy(carState.position)
-      .addScaledVector(_l, -spec.side * 5.5)
-      .addScaledVector(_f, -9)
-      .setY(carState.position.y + 1.5);
-    _b.copy(carState.position).setY(carState.position.y + 1).lerp(a.centre, 0.42);
+    const r = getRoute();
+    // a rear three-quarter from back down the road, on the far half of it, low: the car
+    // rolls away from the lens toward the billboard (never into its own headlights)
+    const ahead = spec.s - 30;
+    const h = sampleRoute(ahead, _a);
+    leftOf(h, _l);
+    // (on the far half of the road itself: beyond it there are barriers and walls)
+    const opposite = r.room(ahead)[spec.side === 1 ? 1 : 0];
+    _a.addScaledVector(_l, -spec.side * Math.min(opposite * 0.55, 3.2)).setY(_a.y + 1.45);
+    _b.copy(a.centre).lerp(_f.copy(carState.position).setY(carState.position.y + 0.9), 0.5);
     out.pos.lerp(_a, hold);
     out.look.lerp(_b, hold);
-    out.fov = lerp(out.fov, 32, hold);
+    out.fov = lerp(out.fov, 34, hold);
     out.focus.lerp(a.centre, hold);
-    out.dof = lerp(out.dof, 2.4, hold);
-    out.focusRange = lerp(out.focusRange, 9, hold);
+    out.dof = lerp(out.dof, 2.2, hold);
+    out.focusRange = lerp(out.focusRange, 8, hold);
     if (hold > 0.5) out.id = `stop:${stop}`;
   }
 

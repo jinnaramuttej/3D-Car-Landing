@@ -4,7 +4,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { chapters, credits, hints, SITE, UI } from '@/content';
 import { CHAPTERS, chapterById, type ChapterId, IGNITION } from '@/lib/chapters';
-import { DRIFT, progressAtTime, progressAtZone, timeAtS, ZONES } from '@/lib/pacing';
+import { DRIFTS, progressAtTime, progressAtZone, timeAtS, ZONES } from '@/lib/pacing';
 import { FINALE_CARD, TITLE_CARD } from '@/lib/playhead';
 import { chapterState } from '@/lib/chapterRuntime';
 import { layoutState, overlap, type Rect } from '@/lib/layout';
@@ -119,8 +119,10 @@ export function Overlay() {
     // (no transform on the block: its slot is placed with CSS translate, which a GSAP y would take over)
     tl.to(q('.title-block'), { autoAlpha: 0, filter: 'blur(10px)', duration: IGNITION.driveAt - IGNITION.at }, IGNITION.at);
     // cinema bars through the slide
-    tl.fromTo(q('.letterbox'), { scaleY: 0 }, { scaleY: 1, duration: atS(DRIFT.flick) - atS(DRIFT.from), ease: 'power2.out' }, atS(DRIFT.from));
-    tl.to(q('.letterbox'), { scaleY: 0, duration: atS(DRIFT.to) - atS(DRIFT.hold), ease: 'power2.inOut' }, atS(DRIFT.hold));
+    for (const d of DRIFTS) {
+      tl.fromTo(q('.letterbox'), { scaleY: 0 }, { scaleY: 1, duration: atS(d.flick) - atS(d.from), ease: 'power2.out', immediateRender: false }, atS(d.from));
+      tl.to(q('.letterbox'), { scaleY: 0, duration: atS(d.to) - atS(d.hold), ease: 'power2.inOut' }, atS(d.hold));
+    }
     // a stop's title follows its slow zone: in at 0.1, out by 0.85 as the car launches
     // (the Stage's board shot fills the right of the frame from 0.35: its title makes way
     // for it first)

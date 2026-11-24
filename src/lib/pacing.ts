@@ -9,14 +9,17 @@
  * jump.
  *
  *   parked      the title, the engine catches (IGNITE_AT), the car pulls away (GO_AT)
- *   run         fast, about 60-70 km/h, the drift through the plaza on the way
+ *   run         fast, up to about 90 km/h, slowing for the corners it can't take flat
+ *               (CORNERS): the first slide round the north-east corner on the way
  *   slow zone   at a stop: down to 8-15 km/h as the car rolls past the billboard, the
  *               panel follows the zone's progress (0 -> 1 across the zone)
- *   ...four stops...
+ *   ...six stops, the second slide (the U-turn) between the third and the fourth...
  *   bridge      the last run, out over the sea, rolling to a stop under the far pylon
  *
  * Runs are planned from the distance between zones: accelerate at RUN.accel, cruise at
- * RUN.speed, brake at RUN.brake; a run too short to reach the cruise speed peaks lower.
+ * RUN.speed, brake at RUN.brake; a run too short to reach the cruise speed peaks lower, and
+ * a run with a corner in it is planned as a run to the corner, the corner at its speed, and
+ * a run on from it.
  * A ramp eased with smoothstep covers the same distance as a straight one, so the plan's
  * arithmetic holds for the eased curve.
  *
@@ -24,32 +27,49 @@
  */
 import { STOPS } from './cityRoute';
 
-/** Where the car is parked at the start (the straight before the plaza). */
-export const PARK_S = 112;
-/** The drift on the first run, route metres. */
+/** Where the car is parked at the start (on the north arc, facing east). */
+export const PARK_S = 40;
+/** The slide on the first run, round the north-east corner (a right-hander), route metres. */
 export const DRIFT = {
-  from: 160,
-  /** The flick: the tail starts to come round going into the plaza... */
-  flick: 174,
+  /** The cinema bars come in... */
+  from: 184,
+  /** The flick: the tail starts to come round going into the corner... */
+  flick: 196,
   /** ...and is fully out by here... */
-  full: 190,
-  /** ...held down the long left-hander... */
-  hold: 350,
+  full: 210,
+  /** ...held round the corner... */
+  hold: 246,
   /** ...and straight again by here. */
-  to: 372,
-  /** +1: tail out to the right (a left-hander). */
-  sign: 1,
+  to: 268,
+  /** +1: tail out to the right (a left-hander); -1 a right-hander. */
+  sign: -1,
 };
+/** The second slide: the U-turn in the cross-street junction (a teardrop, the loop to the left). */
+export const DRIFT2 = { from: 1074, flick: 1088, full: 1099, hold: 1127, to: 1146, sign: 1 };
+/** Both slides, in route order. */
+export const DRIFTS = [DRIFT, DRIFT2];
 /** Seconds: the title on a still street, then the engine catches, then the car pulls away. */
 export const IGNITE_AT = 5.5;
 export const GO_AT = 7.5;
 
-/** The fast runs: cruise speed (m/s) and average acceleration and braking (m/s^2). */
-export const RUN = { speed: 18.5, accel: 6.5, brake: 7.5 };
+/** The fast runs: cruise speed (m/s, 90 km/h) and average acceleration and braking (m/s^2). */
+export const RUN = { speed: 25, accel: 8, brake: 9 };
 /** The bridge: a touch faster, the sea opening up. */
-const BRIDGE_SPEED = 19.5;
+const BRIDGE_SPEED = 28;
 
-export type ZoneId = 'robowars' | 'competitions' | 'speakers' | 'dkms';
+/**
+ * Corners a run can't take flat: route metres and the speed through them (m/s). The first
+ * slide's corner, the hard right off the east road, the U-turn, and the flyover's bends
+ * down to the bridge.
+ */
+export const CORNERS: { from: number; to: number; v: number }[] = [
+  { from: 196, to: 250, v: 72 / 3.6 },
+  { from: 498, to: 530, v: 38 / 3.6 },
+  { from: 1074, to: 1150, v: 36 / 3.6 },
+  { from: 1712, to: 1806, v: 56 / 3.6 },
+];
+
+export type ZoneId = 'robowars' | 'competitions' | 'catalyst' | 'workshops' | 'speakers' | 'dkms';
 
 /**
  * A slow zone: route metres either side of the billboard, the speed the car rolls in and
@@ -61,14 +81,18 @@ export type Zone = { id: ZoneId; board: number; before: number; after: number; e
 
 const kmh = (v: number) => v / 3.6;
 
-/** The four stops, in route order (their billboards: STOPS in cityRoute.ts). */
+/** The six stops, in route order (their billboards: STOPS in cityRoute.ts). */
 export const ZONES: Zone[] = [
   // The Arena
   { id: 'robowars', board: STOPS.robowars.s, before: 24, after: 6, edge: kmh(15), slow: kmh(9) },
   // The Pit Lane
   { id: 'competitions', board: STOPS.competitions.s, before: 24, after: 6, edge: kmh(15), slow: kmh(9) },
+  // Catalyst (a smaller board, nearer the road)
+  { id: 'catalyst', board: STOPS.catalyst.s, before: 20, after: 6, edge: kmh(15), slow: kmh(9) },
+  // Workshops and Techfest World MUN
+  { id: 'workshops', board: STOPS.workshops.s, before: 24, after: 6, edge: kmh(15), slow: kmh(9) },
   // The Stage: past speakers and the TechExpo exhibits, a little longer
-  { id: 'speakers', board: STOPS.speakers.s, before: 32, after: 2, edge: kmh(15), slow: kmh(8.5) },
+  { id: 'speakers', board: STOPS.speakers.s, before: 28, after: 2, edge: kmh(15), slow: kmh(8.5) },
   // The Heartbeat: the slowest and quietest
   { id: 'dkms', board: STOPS.dkms.s, before: 20, after: 6, edge: kmh(12), slow: kmh(8) },
 ];
@@ -109,12 +133,31 @@ function build(finaleBoard: number) {
   let s = PARK_S;
   let v = 0;
   const zoneTimes: Record<string, { t0: number; t1: number; tBoard: number }> = {};
+  /** A run from (s, v) to (s1, v1) through any corners on the way. */
+  const runTo = (name: string, s1: number, v1: number, cruise: number) => {
+    let vMax = 0;
+    const t0 = t;
+    for (const c of CORNERS) {
+      if (c.from < s || c.to > s1) continue;
+      const r = planRun(keys, t, s, v, c.from, c.v, cruise);
+      vMax = Math.max(vMax, r.vMax);
+      t = r.t + (c.to - c.from) / c.v;
+      keys.push({ t, v: c.v });
+      s = c.to;
+      v = c.v;
+    }
+    const r = planRun(keys, t, s, v, s1, v1, cruise);
+    legs.push({ name, kind: 'run', s0: legStart, s1, t0, t1: r.t, vMax: Math.max(vMax, r.vMax) });
+    t = r.t;
+    s = s1;
+    v = v1;
+  };
+  let legStart = s;
   for (const z of ZONES) {
     const from = z.board - z.before;
     const to = z.board + z.after;
-    const run = planRun(keys, t, s, v, from, z.edge, RUN.speed);
-    legs.push({ name: `run to ${z.id}`, kind: 'run', s0: s, s1: from, t0: t, t1: run.t, vMax: run.vMax });
-    t = run.t;
+    legStart = s;
+    runTo(`run to ${z.id}`, from, z.edge, RUN.speed);
     // the zone: eased down to the slowest over its first third, held, eased up over its last
     // fifth (a ramp's distance is its mean speed times its time)
     const L = to - from;
@@ -135,10 +178,10 @@ function build(finaleBoard: number) {
   }
   // the bridge: up to speed, out over the sea, easing off toward the far pylon, a roll to a
   // stop under it, and a held beat for the call to action
-  const finale: FinalePlan = { slowAt: finaleBoard - 6, stopAt: finaleBoard + 8, roll: kmh(12), hold: 4 };
-  const run = planRun(keys, t, s, v, finale.slowAt, finale.roll, BRIDGE_SPEED);
-  legs.push({ name: 'run over the bridge', kind: 'run', s0: s, s1: finale.slowAt, t0: t, t1: run.t, vMax: run.vMax });
-  t = run.t;
+  const finale: FinalePlan = { slowAt: finaleBoard - 6, stopAt: finaleBoard + 4, roll: kmh(12), hold: 3.5 };
+  legStart = s;
+  runTo('run over the bridge', finale.slowAt, finale.roll, BRIDGE_SPEED);
+  const run = { t };
   const tRoll = (2 * (finale.stopAt - finale.slowAt)) / finale.roll;
   keys.push({ t: t + tRoll, v: 0 });
   keys.push({ t: t + tRoll + finale.hold, v: 0 });

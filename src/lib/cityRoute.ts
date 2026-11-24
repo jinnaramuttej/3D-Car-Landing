@@ -48,25 +48,28 @@ export type StopSpec = {
 };
 
 /**
- * The four stops and the finale. `s` is in route metres (where the billboard stands): 0 is
+ * The six stops and the finale. `s` is in route metres (where the billboard stands): 0 is
  * the start of the route, the city part ends at ROUTE_LENGTH and the bridge starts there.
- * The first ~380 m are the intro (parked, the drive-off, the drift down the long
- * left-hander); the stops come after, as far apart as the facades allow (the usable walls
- * are all between 500 and 750 m). Each sits on the clearest flat, road-facing wall a scan of
- * the model found near it (side 1 = left of the road, -1 = right; `node
- * scripts/find-walls.mjs` lists them); the billboard finds that wall by itself (raycast,
- * Billboards.tsx) and stands on legs if it can't. The slow zone around each billboard and
- * the pace of the whole drive are src/lib/pacing.ts.
+ * The first ~390 m are the intro (parked on the north arc, the drive-off, the slide round
+ * the north-east corner); the stops follow round the loop, each on the clearest flat,
+ * road-facing wall within 15 m of the road's edge that a scan of the model found (side 1 =
+ * left of the road, -1 = right; `node scripts/find-walls.mjs` lists them). The billboard
+ * finds that wall by itself (raycast, Billboards.tsx) and stands on legs if it can't. The
+ * slow zone around each billboard and the pace of the whole drive are src/lib/pacing.ts.
  */
-export const STOPS: Record<'robowars' | 'competitions' | 'speakers' | 'dkms' | 'finale', StopSpec> = {
-  /** The Arena. */
-  robowars: { s: 510, side: -1, width: 16, height: 9, lift: 6.5 },
-  /** The Pit Lane. */
-  competitions: { s: 590, side: -1, width: 16, height: 9, lift: 6.5 },
-  /** The Stage: past speakers, and the TechExpo / Ignite exhibits. */
-  speakers: { s: 678, side: -1, width: 16, height: 9, lift: 6.5 },
-  /** The Heartbeat. */
-  dkms: { s: 746, side: -1, width: 16, height: 9, lift: 6.5 },
+export const STOPS: Record<'robowars' | 'competitions' | 'catalyst' | 'workshops' | 'speakers' | 'dkms' | 'finale', StopSpec> = {
+  /** The Arena: down the east road. */
+  robowars: { s: 420, side: -1, width: 16, height: 9, lift: 6.5 },
+  /** The Pit Lane: round onto the south ring. */
+  competitions: { s: 560, side: -1, width: 16, height: 9, lift: 6.5 },
+  /** Catalyst: up the west curve (a smaller wall: a smaller board). */
+  catalyst: { s: 922, side: -1, width: 12, height: 6.75, lift: 6 },
+  /** Workshops and Techfest World MUN: on the way back down, on the left. */
+  workshops: { s: 1338, side: 1, width: 16, height: 9, lift: 6.5 },
+  /** The Stage: past speakers, and the TechExpo / Ignite exhibits; up on the ramp. */
+  speakers: { s: 1530, side: -1, width: 16, height: 9, lift: 6.5 },
+  /** The Heartbeat: where the ramp turns for the bridge. */
+  dkms: { s: 1700, side: -1, width: 16, height: 9, lift: 6.5 },
   finale: { s: ROUTE_LENGTH + 340, side: 1, width: 18, height: 10, lift: 0 },
 };
 
@@ -74,15 +77,13 @@ export type StopKey = keyof typeof STOPS;
 
 /**
  * Billboards the car drives past without stopping (each with a small card in the DOM):
- *   catalyst  on the wall just ahead of where the car is parked (chapters I and II)
  *   also      a gantry over the bridge deck, just past the ramp
- *   ces       across the first pylon of the bridge
+ *   ces       across the first pylon of the bridge (the finale's)
  * `mount` 'wall' hangs on a facade like a stop's; 'gantry' spans the deck on two posts;
  * 'pylon' sits on the pylon's cross-beam.
  */
 export type ExtraSpec = StopSpec & { mount: NonNullable<StopSpec['mount']> };
-export const EXTRAS: Record<'catalyst' | 'also' | 'ces', ExtraSpec> = {
-  catalyst: { s: 134, side: 1, width: 16, height: 9, lift: 6.5, mount: 'wall' },
+export const EXTRAS: Record<'also' | 'ces', ExtraSpec> = {
   also: { s: ROUTE_LENGTH + 92, side: 1, width: 20, height: 6.4, lift: 7.4, mount: 'gantry' },
   ces: { s: ROUTE_LENGTH + BRIDGE.pylons[0], side: 1, width: 18, height: 10, lift: 30, mount: 'pylon' },
 };

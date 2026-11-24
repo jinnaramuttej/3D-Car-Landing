@@ -4,8 +4,8 @@ import { CONFIG } from './config';
 import { engine } from './engineAudio';
 import { forwardOf, leftOf } from './motion';
 import { CHAPTERS, type ChapterLook, chapterIndexAt, type Env, IGNITION, type StopId } from './chapters';
-import { citySAt } from './cityDrive';
-import { DRIFT, journeySeconds, zoneById, zoneProgress } from './pacing';
+import { citySAt, onDrift } from './cityDrive';
+import { journeySeconds, zoneById, zoneProgress } from './pacing';
 import { playhead, stepPlayhead } from './playhead';
 import { getRoute, sampleRoute } from './cityRoute';
 
@@ -143,7 +143,7 @@ export function stepChapters(raw: number, dt: number, playing = false) {
   st.chapter = ci;
   st.chapterLocal = clamp((p - ch.start) / (ch.end - ch.start), 0, 1);
   const s = citySAt(p);
-  st.drift = s >= DRIFT.from && s <= DRIFT.to + 20;
+  st.drift = onDrift(s);
 
   // Environment: target for this point of the chapter, damped so nothing jumps
   targetEnv(ci, st.chapterLocal, _env);

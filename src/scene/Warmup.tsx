@@ -4,7 +4,7 @@ import { useEffect, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { type Material, type Object3D, type Texture, WebGLRenderTarget } from 'three';
 import { chapterAt, IGNITION } from '@/lib/chapters';
-import { DRIFT, progressAtTime, progressAtZone, timeAtS, ZONES } from '@/lib/pacing';
+import { DRIFT, DRIFT2, progressAtTime, progressAtZone, timeAtS, ZONES } from '@/lib/pacing';
 import { chapterState } from '@/lib/chapterRuntime';
 import { carState } from '@/lib/motion';
 import { useStore } from '@/lib/store';
@@ -23,6 +23,7 @@ function warmupStops() {
   const atS = (s: number) => progressAtTime(timeAtS(s));
   const out = [IGNITION.at * 0.5, IGNITION.at + 0.004, IGNITION.driveAt + 0.004];
   for (const s of [DRIFT.from, DRIFT.flick, DRIFT.full + 20, (DRIFT.full + DRIFT.hold) / 2, DRIFT.hold, DRIFT.to + 30, DRIFT.to + 90]) out.push(atS(s));
+  for (const s of [DRIFT2.flick, (DRIFT2.full + DRIFT2.hold) / 2, DRIFT2.to + 10]) out.push(atS(s));
   // every stop: rolling in, at the board, launching out
   for (const z of ZONES) for (const f of [0.1, 0.5, 0.9]) out.push(progressAtZone(z.id, f));
   out.push(chapterAt('finale', 0.2), chapterAt('finale', 0.35), chapterAt('finale', 0.9));

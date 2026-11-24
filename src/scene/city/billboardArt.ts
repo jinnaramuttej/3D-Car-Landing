@@ -244,6 +244,26 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
       ctx.fillText(it.value, 64, y + 44);
     });
   },
+  workshops(ctx) {
+    base(ctx, BASE_TOP, BASE_BOTTOM);
+    kicker(ctx, UI.extras.workshops, 64, 92);
+    ctx.fillStyle = '#fff';
+    fit(ctx, 'WORKSHOPS', 900, 116, 880);
+    ctx.fillText('WORKSHOPS', 58, 210);
+    ctx.fillStyle = 'rgba(255,255,255,0.82)';
+    ctx.font = `700 34px ${display}`;
+    const hands = ALSO.items.find((it) => 'href' in it)?.name ?? 'Hands-on workshops';
+    ctx.fillText(hands, 64, 262);
+    ctx.fillStyle = ACCENT;
+    ctx.font = `700 26px ${display}`;
+    ctx.fillText(TWMUN.name.toUpperCase(), 64, 350);
+    ctx.fillStyle = '#fff';
+    fit(ctx, TWMUN.tagline, 800, 66, 880);
+    ctx.fillText(TWMUN.tagline, 62, 420);
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = `600 28px ${display}`;
+    ctx.fillText(`${TWMUN.committees.length} committees · ${TWMUN.committees.slice(0, 4).join(' · ')}`, 64, 480);
+  },
   also(ctx) {
     base(ctx, BASE_TOP, BASE_BOTTOM);
     kicker(ctx, ALSO.heading, 64, 92);

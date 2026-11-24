@@ -556,7 +556,7 @@ function zoneRig(id: ZoneId, out: Pose) {
  * face the board, the lens sized so the whole board fits, pushing in a little while it
  * holds; then it settles back behind the car for the launch.
  */
-const ACROSS: Record<ZoneId, boolean> = { robowars: false, competitions: false, speakers: true, dkms: false };
+const ACROSS: Record<ZoneId, boolean> = { robowars: false, competitions: false, catalyst: false, workshops: false, speakers: true, dkms: false };
 
 const _ap = new Vector3();
 const _ax = new Vector3();

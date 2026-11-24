@@ -4,7 +4,7 @@ import { type StopId } from './chapters';
 import { getRoute, routeCurvature, sampleRoute, STOPS } from './cityRoute';
 import { CONFIG } from './config';
 import { carState, forwardOf, leftOf } from './motion';
-import { DRIFT, journeySeconds, PARK_S, sAtTime, speedAtS, timeAtProgress, ZONES, zoneAtS } from './pacing';
+import { DRIFT, DRIFT2, DRIFTS, journeySeconds, PARK_S, sAtTime, speedAtS, timeAtProgress, ZONES, zoneAtS } from './pacing';
 import { fitContacts, hasRoad, makeContact } from './ground';
 
 /** The car's last fit to the road under its wheels (src/lib/ground.ts): the HUD and the wheels read it. */
@@ -12,7 +12,7 @@ export const carContact = makeContact();
 /** Did the last fit find road under the car (false before the city loads: the route line then)? */
 export const contactState = { ok: false };
 
-export { DRIFT, PARK_S };
+export { DRIFT, DRIFT2, PARK_S };
 
 const { clamp, degToRad, smootherstep, smoothstep } = MathUtils;
 
@@ -59,13 +59,23 @@ export function nearestStop(s: number): StopId {
 let yawProfile: Float32Array | null = null;
 const STEP = 1;
 
-/** The chapter III slide, 0..1 at route metres s. */
-export function driftEnvelope(s: number) {
-  if (s <= DRIFT.flick || s >= DRIFT.to) return 0;
-  if (s < DRIFT.full) return smootherstep(s, DRIFT.flick, DRIFT.full);
-  if (s <= DRIFT.hold) return 1;
-  return 1 - smootherstep(s, DRIFT.hold, DRIFT.to);
+/** A slide's build-up, hold and release, 0..1 at route metres s. */
+function envelopeOf(d: (typeof DRIFTS)[number], s: number) {
+  if (s <= d.flick || s >= d.to) return 0;
+  if (s < d.full) return smootherstep(s, d.flick, d.full);
+  if (s <= d.hold) return 1;
+  return 1 - smootherstep(s, d.hold, d.to);
 }
+
+/** The big slides (round the north-east corner, and the U-turn), 0..1 at route metres s. */
+export function driftEnvelope(s: number) {
+  let e = 0;
+  for (const d of DRIFTS) e = Math.max(e, envelopeOf(d, s));
+  return e;
+}
+
+/** Is route metre s on one of the big slides (from its cinema bars to its end)? */
+export const onDrift = (s: number) => DRIFTS.some((d) => s >= d.from && s <= d.to + 20);
 
 /** Signed drift yaw target (radians, + = tail out to the right in a left-hander) every metre. */
 function buildYaw() {
@@ -76,7 +86,7 @@ function buildYaw() {
   const peak = degToRad(CONFIG.city.driftYawDeg);
   for (let i = 0; i < n; i++) {
     const s = i * STEP;
-    if (s < DRIFT.to + 10 || s > r.bridgeStart - 20 || inHold(s)) continue;
+    if (s < DRIFT.to + 10 || s > r.bridgeStart - 20 || inHold(s) || (s > DRIFT2.from - 10 && s < DRIFT2.to + 10)) continue;
     const v = speedAtS(s); // m/s
     const kappa = routeCurvature(s, 5);
     const lat = v * v * Math.abs(kappa);
@@ -102,12 +112,13 @@ function buildYaw() {
   for (const v of smooth) m = Math.max(m, Math.abs(v));
   const gain = m > 1e-4 ? Math.min(2.2, peak / m) : 1;
   for (let i = 0; i < smooth.length; i++) smooth[i] = clamp(smooth[i] * gain, -peak, peak);
-  // the big one: chapter III
-  const big = degToRad(CONFIG.drift.yawPeakDeg) * DRIFT.sign;
-  for (let i = 0; i < n; i++) {
-    const e = driftEnvelope(i * STEP);
-    if (e > 0) smooth[i] = big * e;
-  }
+  // the big ones: round the north-east corner, and the U-turn
+  const big = degToRad(CONFIG.drift.yawPeakDeg);
+  for (let i = 0; i < n; i++)
+    for (const d of DRIFTS) {
+      const e = envelopeOf(d, i * STEP);
+      if (e > 0) smooth[i] = big * d.sign * e;
+    }
   return fitToRoad(smooth);
 }
 

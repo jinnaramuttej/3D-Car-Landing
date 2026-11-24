@@ -30,18 +30,35 @@ const OUT = path.join(process.cwd(), 'src', 'lib', 'cityRoute.data.ts');
 const CELL = 0.5;
 const STEP = 0.6;
 
-/** [x, z, expected road height] in city metres. Down the north-west diagonal, round the
- *  west side, east along the south ring, up the ramp, east on the flyover and out to the
- *  south (where the bridge starts). */
+/**
+ * [x, z, expected road height] in city metres. Round most of the city's loop without the
+ * tangled interchange at the top (where the north arc drops into an underpass beside a ramp
+ * and a plaza): east along the north arc from just past it, round the north-east corner and
+ * down the east road, right onto the south ring and all the way west along it, up the west
+ * curve's inner carriageway, round in the cross-street junction (the second slide), back
+ * down the outer carriageway on its own deck, and up the slip onto the ramp, the flyover and
+ * out to the south, where the bridge starts.
+ */
 const VIA = [
-  [-93.7, -87.7, 6],
-  [-159.9, -47.5, 14],
-  [-207.3, -4.9, 20],
-  [-226.2, 32.9, 21],
-  [-223.8, 89.7, 21],
-  [-197.8, 141.8, 21],
-  [-141.0, 174.9, 21],
-  [-84.3, 184.3, 22],
+  [-14, -114.5, 0],
+  [110, -131.3, 3.5],
+  [205, -100, 3.5],
+  [241.3, -60, 3.5],
+  [269.3, 70, 11],
+  [269.8, 155, 19.5],
+  [240, 183.3, 21],
+  [90, 181.8, 21],
+  [-60, 181.8, 21],
+  [-139.3, 172, 21],
+  [-184, 145, 21],
+  [-212.3, 100, 21],
+  [-218, 60, 21],
+  [-220.5, 54, 21],
+  [-229.1, 54, 21],
+  [-229.8, 80, 24.2],
+  [-209, 135, 26.3],
+  [-169.8, 172, 25.2],
+  [-110, 186, 21.5],
   [-46.4, 196.2, 25],
   [0.9, 207.0, 29],
   [95.5, 212.7, 29],
@@ -50,6 +67,64 @@ const VIA = [
   [299.0, 255.3, 29],
   [307.5, 293.1, 29],
 ];
+
+/**
+ * Turns the search can't make (it takes the shortest way, and the smoothing below rounds a
+ * corner by ~7 m): drawn here instead, from the via point at the key to the next, and left
+ * as drawn. The U-turn in the cross-street junction is a teardrop: a 6 m swing right by
+ * 41 degrees, an 8 m loop left, a 6 m swing right, from the inner carriageway heading north
+ * to the outer one heading south 9 m to the west; it stays on the junction's paving.
+ */
+function teardrop([x, z], R1, R2, th, step = 0.5) {
+  let h = -Math.PI / 2; // heading north (-z)
+  const out = [[x, z]];
+  const arc = (R, ang, sign) => {
+    const n = Math.ceil((ang * R) / step);
+    for (let i = 0; i < n; i++) {
+      h += (sign * ang) / n;
+      x += (Math.cos(h) * R * ang) / n;
+      z += (Math.sin(h) * R * ang) / n;
+      out.push([x, z]);
+    }
+  };
+  arc(R1, th, 1);
+  arc(R2, Math.PI + 2 * th, -1);
+  arc(R1, th, 1);
+  return out;
+}
+
+/**
+ * Blends the curvature where a drawn turn's pieces meet (a sudden change reads as a kink):
+ * a light moving average, the ends held so it still starts and finishes on its carriageways.
+ */
+function blend(out, passes = 4, rad = 7) {
+  let pts = out;
+  for (let pass = 0; pass < passes; pass++)
+    pts = pts.map((q, i) => {
+      if (i < 2 || i > pts.length - 3) return q;
+      let sx = 0;
+      let sz = 0;
+      let n = 0;
+      for (let j = Math.max(0, i - rad); j <= Math.min(pts.length - 1, i + rad); j++) {
+        sx += pts[j][0];
+        sz += pts[j][1];
+        n++;
+      }
+      return [sx / n, sz / n];
+    });
+  return pts;
+}
+const UTURN = 13;
+/** A straight from a to b, a point every half metre (a drawn turn's run-in and run-out). */
+const straight = ([ax, az], [bx, bz]) => {
+  const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 0.5));
+  return Array.from({ length: n + 1 }, (_, i) => [ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n]);
+};
+const loop = teardrop([-220.3, 40], 6, 8, (41 * Math.PI) / 180);
+const DRAWN = {
+  // up the inner carriageway's centre, round, and down the outer one's
+  [UTURN]: blend([...straight([-220.5, 54], [-220.3, 40]), ...loop.slice(1), ...straight(loop.at(-1), [-229.1, 54]).slice(1)]),
+};
 
 await MeshoptDecoder.ready;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
@@ -330,7 +405,22 @@ async function preview(file, path) {
   for (const k of snapped) for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) img.set([255, 0, 0], (k + dy * W + dx) * 3);
   await sharp(img, { raw: { width: W, height: H, channels: 3 } }).png().toFile(file);
 }
+/** Path positions (index into cells) that were drawn, not searched: the smoothing leaves them. */
+const pinned = new Set();
+const drawnAt = new Map();
 for (let i = 0; i < snapped.length - 1; i++) {
+  if (DRAWN[i]) {
+    const pts = DRAWN[i];
+    if (Math.hypot(pts[0][0] - VIA[i][0], pts[0][1] - VIA[i][1]) > 0.5 || Math.hypot(pts.at(-1)[0] - VIA[i + 1][0], pts.at(-1)[1] - VIA[i + 1][1]) > 1)
+      throw new Error(`drawn segment ${i} doesn't run from via ${i} to via ${i + 1}`);
+    for (const q of pts.slice(i ? 1 : 0)) {
+      pinned.add(cells.length);
+      drawnAt.set(cells.length, q);
+      const [cx, cy] = cellOf(q[0], q[1]);
+      cells.push(cy * W + cx);
+    }
+    continue;
+  }
   const seg = astar(snapped[i], snapped[i + 1]);
   if (!seg) {
     console.error(`no path between via ${i} and ${i + 1}: ${VIA[i]} -> ${VIA[i + 1]}`);
@@ -358,10 +448,27 @@ for (let i = 0; i < snapped.length - 1; i++) {
 }
 
 /* 4. resample, smooth, heights ------------------------------------------------- */
-let pts = cells.map((k) => [minX + (k % W) * CELL, minZ + Math.floor(k / W) * CELL]);
+let pts = cells.map((k, i) => drawnAt.get(i) ?? [minX + (k % W) * CELL, minZ + Math.floor(k / W) * CELL]);
 // moving average over ~10 m to iron out the cell staircase
-const smooth = (arr, r) =>
+// (the window narrows toward a drawn turn, so the searched path meets it without a step)
+const toPinned = (() => {
+  const d = new Float32Array(cells.length).fill(1e9);
+  let last = -1e9;
+  for (let i = 0; i < d.length; i++) {
+    if (pinned.has(i)) last = i;
+    d[i] = i - last;
+  }
+  last = 1e9;
+  for (let i = d.length - 1; i >= 0; i--) {
+    if (pinned.has(i)) last = i;
+    d[i] = Math.min(d[i], last - i);
+  }
+  return d;
+})();
+const smooth = (arr, r0) =>
   arr.map((_, i) => {
+    if (pinned.has(i)) return arr[i];
+    const r = Math.max(1, Math.min(r0, Math.floor(toPinned[i] / 2)));
     let sx = 0;
     let sz = 0;
     let n = 0;
@@ -373,14 +480,15 @@ const smooth = (arr, r) =>
     return [sx / n, sz / n];
   });
 pts = smooth(smooth(smooth(pts, 14), 14), 14);
-// resample every SPACING metres along the path
+// resample every SPACING metres along the path (every metre through a drawn turn: 3 m apart,
+// the curve through an 8 m loop turns 20-30 degrees a point and kinks between them)
 const SPACING = 3;
 const res = [pts[0]];
 let acc = 0;
 for (let i = 1; i < pts.length; i++) {
   const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
   acc += d;
-  if (acc >= SPACING) {
+  if (acc >= (pinned.has(i) ? 1 : SPACING)) {
     res.push(pts[i]);
     acc = 0;
   }

@@ -1,4 +1,4 @@
-import { DRIFT, GO_AT, IGNITE_AT, journeySeconds, moments, progressAtTime, timeAtS } from './pacing';
+import { DRIFT, GO_AT, IGNITE_AT, journeySeconds, moments, progressAtTime, progressAtZone, timeAtS, ZONES } from './pacing';
 
 /**
  * CHAPTERS
@@ -29,7 +29,7 @@ import { DRIFT, GO_AT, IGNITE_AT, journeySeconds, moments, progressAtTime, timeA
  * never jump.
  */
 
-export type StopId = 'robowars' | 'competitions' | 'speakers' | 'dkms' | 'finale';
+export type StopId = 'robowars' | 'competitions' | 'catalyst' | 'workshops' | 'speakers' | 'dkms' | 'finale';
 export type ChapterId = 'intro' | StopId;
 
 /** Everything about the world that changes from night to morning. Colours are hex. */
@@ -182,6 +182,8 @@ const ends = () => {
     intro: timeAtS(DRIFT.to),
     robowars: m.zones.robowars.t1,
     competitions: m.zones.competitions.t1,
+    catalyst: m.zones.catalyst.t1,
+    workshops: m.zones.workshops.t1,
     speakers: m.zones.speakers.t1,
     dkms: m.zones.dkms.t1,
     finale: m.duration,
@@ -195,8 +197,10 @@ const chapterList: ChapterDef[] = [
   { id: 'intro', numeral: '00', title: 'Techfest 2026', env: STILL, envEnd: STORM, envSpan: [0.3, 0.55], blend: 0.2, look: { headlights: 0 }, anchor: 0.02 },
   { id: 'robowars', numeral: '01', title: 'The Arena', env: WAKE, envEnd: CITY, envSpan: [0.1, 0.5], blend: 0.2, look: LIT, stop: 'robowars', anchor: 0.62 },
   { id: 'competitions', numeral: '02', title: 'The Pit Lane', env: CITY, blend: 0.2, look: LIT, stop: 'competitions', anchor: 0.45 },
-  { id: 'speakers', numeral: '03', title: 'The Stage', env: CITY, blend: 0.25, look: LIT, stop: 'speakers', anchor: 0.45 },
-  { id: 'dkms', numeral: '04', title: 'The Heartbeat', env: DKMS_AIR, blend: 0.3, look: LIT, stop: 'dkms', anchor: 0.45 },
+  { id: 'catalyst', numeral: '03', title: 'Catalyst', env: CITY, blend: 0.2, look: LIT, stop: 'catalyst', anchor: 0.45 },
+  { id: 'workshops', numeral: '04', title: 'Workshops & TWMUN', env: CITY, blend: 0.2, look: LIT, stop: 'workshops', anchor: 0.45 },
+  { id: 'speakers', numeral: '05', title: 'The Stage', env: CITY, blend: 0.25, look: LIT, stop: 'speakers', anchor: 0.45 },
+  { id: 'dkms', numeral: '06', title: 'The Heartbeat', env: DKMS_AIR, blend: 0.3, look: LIT, stop: 'dkms', anchor: 0.45 },
   // up the ramp and over the sea: the rain stops and dawn comes up while the car crosses
   { id: 'finale', numeral: 'Fin', title: 'Finale', env: { ...CITY, rain: 0.3 }, envEnd: DAWN, envSpan: [0.06, 0.62], blend: 0, look: LIT, stop: 'finale', anchor: 0.8 },
 ];
@@ -241,7 +245,14 @@ export const chapterAt = (id: ChapterId, f: number) => {
 };
 
 /** Global progress the mini-map jumps to. */
-export const chapterAnchor = (id: ChapterId) => chapterAt(id, chapterById(id).anchor);
+/**
+ * Where the mini-map and the chapter buttons land in a chapter: inside a stop's slow zone,
+ * as its details play (the run in can be most of a chapter), elsewhere at `anchor`.
+ */
+export const chapterAnchor = (id: ChapterId) => {
+  const zone = ZONES.find((z) => z.id === id);
+  return zone ? progressAtZone(zone.id, 0.42) : chapterAt(id, chapterById(id).anchor);
+};
 
 /* ----------------------------------------------------------- set moments */
 

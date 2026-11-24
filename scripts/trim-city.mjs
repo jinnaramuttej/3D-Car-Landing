@@ -25,7 +25,7 @@ import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 const SRC = process.argv[2] ?? path.join(process.cwd(), 'assets', 'city-full.glb');
 const OUT = process.argv[3] ?? path.join(process.cwd(), 'public', 'models', 'city.glb');
 /** Metres from the route (or the bridge) within which geometry is kept. */
-const KEEP = Number(process.env.KEEP ?? 120);
+const KEEP = Number(process.env.KEEP ?? 150);
 /** Landmark proxies: how many, how tall at least, how far apart. */
 const LANDMARKS = 10;
 const MIN_HEIGHT = 35;

@@ -24,6 +24,8 @@ export const cityUniforms = {
   uTime: { value: 0 },
   /** 0 dry .. 1 soaked (chapter env `wet`). */
   uWet: { value: 1 },
+  /** Most a light's direct specular may add (see the patch after the lights). */
+  uSpecCap: { value: 3 },
   /** Lit windows, signs and LEDs (chapter env `city`: dims as the sun comes up). */
   uCity: { value: 1 },
   /** Albedo multiplier: dark at night, back toward 1 at dawn. */
@@ -63,6 +65,7 @@ const vertMain = /* glsl */ `
 const fragPars = /* glsl */ `
 uniform float uTime;
 uniform float uWet;
+uniform float uSpecCap;
 uniform float uCity;
 uniform float uNight;
 uniform float uPuddles;
@@ -165,7 +168,9 @@ const fragMain = /* glsl */ `
     float rim = (smoothstep(th - 0.09, th, nz) - puddle) * uPuddles;
     float wet = uWet * up;
     diffuseColor.rgb *= mix(1.0, 0.55, wet) * mix(1.0, 0.55, puddle * wet) * mix(1.0, 0.8, rim * wet);
-    roughnessFactor = mix(roughnessFactor, mix(0.3, 0.04, puddle), wet);
+    // (puddles stay a touch rough: a mirror-smooth one turns a headlight's specular peak
+    // into a white-out once bloom spreads it)
+    roughnessFactor = mix(roughnessFactor, mix(0.32, 0.12, puddle), wet);
 
     // the street reflected in the wet surface (only near the mirror's plane)
     float nearPlane = 1.0 - smoothstep(0.35, 1.4, abs(vCityPos.y - uReflPlaneY));
@@ -212,7 +217,14 @@ export function patchCityMaterial(mat: MeshStandardMaterial) {
       .replace('#include <project_vertex>', `#include <project_vertex>\n${vertMain}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${fragPars}`)
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${fragMain}`);
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${fragMain}`)
+      // a light's specular peak on a wet road runs to hundreds of times its diffuse: more
+      // than bloom can spread without whiting the frame out (headlights coming at the
+      // lens). Cap it; the lamps' streaks on the wet road still bloom
+      .replace(
+        '#include <lights_fragment_end>',
+        '#include <lights_fragment_end>\nreflectedLight.directSpecular = min(reflectedLight.directSpecular, vec3(uSpecCap));',
+      );
   };
   mat.customProgramCacheKey = () => `city-${kind}`;
   mat.needsUpdate = true;

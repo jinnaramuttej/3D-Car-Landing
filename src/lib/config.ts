@@ -181,6 +181,7 @@ export const CONFIG = {
     reflectionScale: 0.5, // (mount-ish) reflection resolution, fraction of the canvas width
     lampLight: 260, // each of the real sodium lights that follow the camera
     lampShafts: 0.14, // the cone of light under each lamp, in the rain
+    specCap: 3, // most a light's specular peak may add on the city (wet-road glare)
     billboardGlow: 2.2, // LED billboard brightness (blooms above ~1)
     billboardLight: 420, // the light the active billboard spills on the street
     heartbeatBpm: 56, // the DKMS billboard's slow pulse
@@ -334,6 +335,7 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     reflectionScale: [0.2, 1, 0.05],
     lampLight: [0, 1500, 5],
     lampShafts: [0, 0.5, 0.005],
+    specCap: [0.2, 40, 0.1],
     billboardGlow: [0, 8, 0.05],
     billboardLight: [0, 3000, 10],
     heartbeatBpm: [30, 120, 1],

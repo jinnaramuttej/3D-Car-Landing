@@ -67,6 +67,7 @@ export function City() {
     const u = cityUniforms;
     u.uTime.value = state.clock.elapsedTime;
     u.uWet.value = e.wet;
+    u.uSpecCap.value = CONFIG.city.specCap;
     u.uCity.value = e.city;
     u.uNight.value = MathUtils.lerp(c.nightAlbedo, 0.95, 1 - MathUtils.clamp(e.city, 0, 1));
     u.uPuddles.value = c.puddles;

@@ -17,6 +17,7 @@ import { ChapterProps } from './ChapterProps';
 import { Billboards } from './city/Billboards';
 import { Bridge } from './city/Bridge';
 import { City } from './city/City';
+import { EdgeSeal } from './city/EdgeSeal';
 import { RouteDebug } from './city/RouteDebug';
 import { Sea } from './city/Sea';
 import { StreetLights } from './city/StreetLights';
@@ -162,6 +163,7 @@ export function Scene() {
         <Billboards />
         <Sea />
         <Bridge />
+        <EdgeSeal />
         <RouteDebug />
       </Suspense>
       <CameraRig />

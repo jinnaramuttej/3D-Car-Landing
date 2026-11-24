@@ -5,7 +5,7 @@ import { DRIFT, inHold, nearestStop, PARK_S } from '@/lib/cityDrive';
 import { getRoute, routeCurvature, sampleRoute, STOPS } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
 import { carState, forwardOf, leftOf } from '@/lib/motion';
-import { stopAnchor } from '@/lib/stops';
+import { boardS, mountOf, stopAnchor } from '@/lib/stops';
 import { onWarmupEnd } from '@/lib/warmup';
 import { bridgeInfo } from './Bridge';
 import type { CityShot } from './cityCamera';
@@ -363,7 +363,7 @@ function driveRig(rig: DriveRig, side: 1 | -1, key: string, out: Pose) {
 }
 
 /** Where each stop's camera stands (fixed per stop, so it never jumps as the car creeps). */
-const stopPlaces = new Map<string, { pos: Vector3; fov: number }>();
+const stopPlaces = new Map<string, { pos: Vector3; fov: number; shift: number }>();
 
 /**
  * At a stop: the billboard and the car, both in frame. A rear three-quarter from back down
@@ -380,14 +380,26 @@ function stopRig(stop: ReturnType<typeof nearestStop>, out: Pose) {
     const carAt = new Vector3();
     sampleRoute(spec.s, carAt);
     carAt.y += 0.7;
-    // start close (the car big in frame) and back off only as far as the billboard needs
-    let back = 15;
+    // a board on a gantry is straight ahead over the road: sit right behind the car, a
+    // little higher, with the car low and the board above it
+    const gantry = mountOf(stop) === 'gantry';
+    // start close (the car big in frame) and back off only as far as the billboard needs,
+    // but never so far that another stop's gantry ends up hanging across the shot
+    let back = gantry ? 17 : 15;
+    let maxBack = Infinity;
+    for (const c of CHAPTERS) {
+      if (!c.stop || c.stop === stop || mountOf(c.stop) !== 'gantry') continue;
+      const gs = boardS(c.stop);
+      if (gs < spec.s) maxBack = Math.min(maxBack, spec.s - gs - 2.5);
+    }
+    back = Math.min(back, maxBack);
     const put = () => {
       const at = spec.s - back;
       const h = sampleRoute(at, pos);
       leftOf(h, _l);
       const opposite = r.room(at)[spec.side === 1 ? 1 : 0];
-      pos.addScaledVector(_l, -spec.side * Math.min(opposite * 0.55, 3.2)).setY(pos.y + 1.45);
+      const lateral = gantry ? 0 : -spec.side * Math.min(opposite * 0.55, 3.2);
+      pos.addScaledVector(_l, lateral).setY(pos.y + (gantry ? 2.1 : 1.45));
     };
     // angular spread of the car and the billboard (its middle and bottom edge: the top may
     // crop, the car must not be a speck) seen from the camera -> the lens that fits both
@@ -403,12 +415,12 @@ function stopRig(stop: ReturnType<typeof nearestStop>, out: Pose) {
     };
     put();
     let fov = need();
-    for (let i = 0; i < 6 && fov > CONFIG.camera.fovMax; i++) {
+    for (let i = 0; i < 6 && fov > CONFIG.camera.fovMax && back + 7 <= maxBack; i++) {
       back += 7;
       put();
       fov = need();
     }
-    place = { pos, fov: clamp(fov, 30, CONFIG.camera.fovMax) };
+    place = { pos, fov: clamp(fov, 30, CONFIG.camera.fovMax), shift: gantry ? 0.19 : 0.28 };
     if (a.placed) stopPlaces.set(stop, place);
   }
   out.pos.copy(place.pos);
@@ -420,7 +432,7 @@ function stopRig(stop: ReturnType<typeof nearestStop>, out: Pose) {
   const dist = _c.length();
   _d.crossVectors(_c, _b.set(0, 1, 0)).normalize();
   const halfW = Math.tan(MathUtils.degToRad(place.fov) / 2) * (16 / 9);
-  out.look.addScaledVector(_d, -dist * halfW * 0.28);
+  out.look.addScaledVector(_d, -dist * halfW * place.shift);
   out.fov = place.fov;
   out.focus.copy(a.centre);
   out.dof = 2.2;

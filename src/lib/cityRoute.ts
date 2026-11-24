@@ -41,6 +41,10 @@ export type StopSpec = {
   width: number;
   height: number;
   lift: number;
+  /** On a facade (default), on a gantry across the road, or on a pylon's cross-beam. */
+  mount?: 'wall' | 'gantry' | 'pylon';
+  /** Route metres where the billboard stands, when that isn't `s` (a gantry up ahead). */
+  boardS?: number;
 };
 
 /**
@@ -50,12 +54,14 @@ export type StopSpec = {
  * after. Each city stop sits where a scan of the model found a flat, road-facing wall big
  * enough for its billboard (side 1 = left of the road, -1 = right; `node
  * scripts/find-walls.mjs` lists them); the billboard finds that wall by itself (raycast,
- * Billboards.tsx) and stands on legs if it can't.
+ * Billboards.tsx) and stands on legs if it can't. Competitions is the exception: its wall
+ * has a canopy across it at board height, so its board spans the road on a gantry just
+ * ahead of the stop, face-on to the car and the stop camera behind it.
  */
 export const STOPS: Record<'arrival' | 'robowars' | 'competitions' | 'speakers' | 'expo' | 'dkms' | 'twmun' | 'finale', StopSpec> = {
   arrival: { s: 462, side: -1, width: 16, height: 9, lift: 6.5 },
   robowars: { s: 510, side: -1, width: 16, height: 9, lift: 6.5 },
-  competitions: { s: 562, side: -1, width: 14, height: 7.9, lift: 6.5 },
+  competitions: { s: 562, side: -1, width: 14, height: 7.9, lift: 6.2, mount: 'gantry', boardS: 578 },
   speakers: { s: 596, side: -1, width: 16, height: 9, lift: 6.5 },
   expo: { s: 638, side: -1, width: 16, height: 9, lift: 6.5 },
   dkms: { s: 678, side: -1, width: 14, height: 7.9, lift: 6.5 },
@@ -73,7 +79,7 @@ export type StopKey = keyof typeof STOPS;
  * `mount` 'wall' hangs on a facade like a stop's; 'gantry' spans the deck on two posts;
  * 'pylon' sits on the pylon's cross-beam.
  */
-export type ExtraSpec = StopSpec & { mount: 'wall' | 'gantry' | 'pylon' };
+export type ExtraSpec = StopSpec & { mount: NonNullable<StopSpec['mount']> };
 export const EXTRAS: Record<'catalyst' | 'also' | 'ces', ExtraSpec> = {
   catalyst: { s: 134, side: 1, width: 16, height: 9, lift: 6.5, mount: 'wall' },
   also: { s: ROUTE_LENGTH + 92, side: 1, width: 20, height: 6.4, lift: 7.4, mount: 'gantry' },

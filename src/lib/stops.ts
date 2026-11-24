@@ -8,8 +8,14 @@ import { forwardOf, leftOf } from './motion';
 /** Every LED billboard: the stops' and the ones the car drives past (cityRoute.EXTRAS). */
 export type BoardId = StopId | ExtraId;
 export const isExtra = (id: BoardId): id is ExtraId => id in EXTRAS;
+const specOf = (id: BoardId) => (isExtra(id) ? EXTRAS[id] : STOPS[id]);
 /** Route metres of a billboard. */
-export const boardS = (id: BoardId) => (isExtra(id) ? EXTRAS[id].s : STOPS[id].s);
+export const boardS = (id: BoardId) => {
+  const spec = specOf(id);
+  return spec.boardS ?? spec.s;
+};
+/** How a billboard is hung: on a facade, a gantry across the road, or a pylon's cross-beam. */
+export const mountOf = (id: BoardId) => specOf(id).mount ?? (id === 'finale' ? 'pylon' : 'wall');
 
 export type SpeakerCategory = keyof typeof VOICES.categories;
 export const SPEAKER_CATEGORIES = Object.keys(VOICES.categories) as SpeakerCategory[];
@@ -69,9 +75,9 @@ const _l = new Vector3();
 export function stopAnchor(id: BoardId): StopAnchor {
   let a = anchors.get(id);
   if (a) return a;
-  const spec = isExtra(id) ? EXTRAS[id] : STOPS[id];
+  const spec = specOf(id);
   const r = getRoute();
-  const mount = isExtra(id) ? EXTRAS[id].mount : id === 'finale' ? 'pylon' : 'wall';
+  const mount = mountOf(id);
   if (mount === 'pylon') {
     // across a pylon's cross-beam (the far one for the finale), facing back down the deck
     const h = sampleRoute(r.bridgeStart + (id === 'finale' ? BRIDGE.pylons[1] : BRIDGE.pylons[0]), _p);
@@ -79,8 +85,8 @@ export function stopAnchor(id: BoardId): StopAnchor {
     centre.y += 30;
     a = { centre, normal: new Vector3(-Math.sin(h), 0, -Math.cos(h)), width: spec.width, height: spec.height, placed: true };
   } else if (mount === 'gantry') {
-    // over the middle of the deck, facing the oncoming car
-    const h = sampleRoute(spec.s, _p);
+    // over the middle of the road (or the deck), facing the oncoming car
+    const h = sampleRoute(boardS(id), _p);
     const centre = _p.clone();
     centre.y += spec.lift + spec.height / 2;
     a = { centre, normal: forwardOf(h, new Vector3()).negate(), width: spec.width, height: spec.height, placed: true };

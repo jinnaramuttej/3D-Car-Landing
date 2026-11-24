@@ -24,7 +24,7 @@ import { EXTRAS, getRoute, sampleRoute, STOPS } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { carState, leftOf } from '@/lib/motion';
-import { type BoardId, boardS, expoIndexAt, heartbeatPulse, isExtra, stopAnchor, stopFx, useStops } from '@/lib/stops';
+import { type BoardId, boardS, expoIndexAt, heartbeatPulse, isExtra, mountOf, stopAnchor, stopFx, useStops } from '@/lib/stops';
 import { ART_H, ART_W, type ArtState, drawStop, resolveFont } from './billboardArt';
 import { CITY_URL, useCityLayer } from './City';
 
@@ -32,7 +32,6 @@ const STOP_IDS = CHAPTERS.filter((c) => c.stop).map((c) => c.stop!) as StopId[];
 /** The stops' boards and the ones the car drives past. */
 const BOARD_IDS: BoardId[] = [...STOP_IDS, ...(Object.keys(EXTRAS) as BoardId[])];
 const specOf = (id: BoardId) => (isExtra(id) ? EXTRAS[id] : STOPS[id]);
-const mountOf = (id: BoardId) => (isExtra(id) ? EXTRAS[id].mount : id === 'finale' ? 'pylon' : 'wall');
 
 const ledVert = /* glsl */ `
 #include <common>

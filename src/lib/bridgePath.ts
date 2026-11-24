@@ -1,5 +1,5 @@
 import { BufferAttribute, BufferGeometry, Vector3 } from 'three';
-import { BRIDGE, getRoute, sampleRoute } from './cityRoute';
+import { BRIDGE, CITY_ORIGIN, getRoute, sampleRoute } from './cityRoute';
 import { ROUTE_PATCHES } from './cityRoute.data';
 import { CORRIDOR_PATCHES, PATCH_DROP } from './corridor.data';
 import { forwardOf, leftOf } from './motion';
@@ -68,7 +68,6 @@ export const PATCH_COLS = 9;
  */
 export function patchGeometry() {
   const drop = new Map(PATCH_DROP.map(([m, ...ys]) => [m, ys]));
-  const flat = new Array(PATCH_COLS).fill(-0.04);
   return patchSpans().map(([s0, s1]) => {
     const n = Math.ceil(s1 - s0) + 1;
     const pos = new Float32Array(n * PATCH_COLS * 3);
@@ -77,10 +76,11 @@ export function patchGeometry() {
     for (let i = 0; i < n; i++) {
       const s = s0 + ((s1 - s0) * i) / (n - 1);
       const { p, l } = deckFrameAt(s);
-      const ys = drop.get(Math.round(s)) ?? flat;
+      const ys = drop.get(Math.round(s));
       for (let j = 0; j < PATCH_COLS; j++) {
         const lat = -PATCH_HALF + (2 * PATCH_HALF * j) / (PATCH_COLS - 1);
-        pos.set([p.x + l.x * lat, p.y + (ys[j] ?? -0.04), p.z + l.z * lat], (i * PATCH_COLS + j) * 3);
+        const y = ys?.[j] !== undefined ? CITY_ORIGIN.y + ys[j] : p.y - 0.04;
+        pos.set([p.x + l.x * lat, y, p.z + l.z * lat], (i * PATCH_COLS + j) * 3);
         uv.set([j / (PATCH_COLS - 1), s / 30], (i * PATCH_COLS + j) * 2);
         if (i < n - 1 && j < PATCH_COLS - 1) {
           const v = i * PATCH_COLS + j;

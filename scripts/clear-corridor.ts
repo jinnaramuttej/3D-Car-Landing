@@ -25,7 +25,8 @@ import { compactPrimitive, meshopt, prune } from '@gltf-transform/functions';
 import { MeshoptEncoder } from 'meshoptimizer';
 import { Box3, Matrix4, Quaternion, Raycaster, Vector3 } from 'three';
 import { PATCH_COLS, PATCH_HALF, patchSpans } from '../src/lib/bridgePath';
-import { CITY_ORIGIN, sampleRoute } from '../src/lib/cityRoute';
+import { CITY_ORIGIN, getRoute, sampleRoute } from '../src/lib/cityRoute';
+import { ROUTE_POINTS } from '../src/lib/cityRoute.data';
 import { CORRIDOR_CUTS, CORRIDOR_PATCHES } from '../src/lib/corridor.data';
 import { CORRIDOR, corridorEnvelope, journeyPoses, pieces, routePoses, sweep, weldIds } from './lib/corridor';
 import { CITY_FILE, cityIO, cityMeshes } from './lib/world';
@@ -228,9 +229,9 @@ async function main() {
     barriers.splice(i, 1);
   }
 
-  // how far under the route line the model's road is, across each strip (a column a metre)
-  // and metre by metre: just under the road where it is, and bridging each hole from the road
-  // either side of it
+  // the height of each strip (city-local), across it (a column a metre) and metre by metre:
+  // just under the model's road where it is, and bridging each hole from the road either
+  // side of it
   CORRIDOR_PATCHES.length = 0;
   CORRIDOR_PATCHES.push(...patches);
   const drops: number[][] = [];
@@ -239,32 +240,62 @@ async function main() {
   ray.far = 4;
   const cols = PATCH_COLS;
   for (const [a, b] of patchSpans()) {
+    const grid: number[][] = [];
     for (let m = a; m <= b; m++) {
       const row: number[] = [];
+      const h = sampleRoute(m, rp);
       for (let j = 0; j < cols; j++) {
         const lat = -PATCH_HALF + (2 * PATCH_HALF * j) / (cols - 1);
-        let low = Infinity;
-        for (const ds of [-0.5, 0, 0.5])
-          for (const dl of [-0.5, 0, 0.5]) {
-            const h = sampleRoute(m + ds, rp);
-            const y0 = rp.y;
-            ray.set(v.set(rp.x + Math.cos(h) * (lat + dl), y0 + 1.5, rp.z - Math.sin(h) * (lat + dl)), DOWN);
-            const hit = ray.intersectObjects(roads, false)[0];
-            if (hit && Math.abs(hit.point.y - y0) < 1) low = Math.min(low, hit.point.y - y0);
-          }
-        row.push(low - 0.03);
+        // (the road right there: the lowest within half a metre took the level lane beside a
+        // ramp, 10 cm down, and the strip showed through as a step)
+        ray.set(v.set(rp.x + Math.cos(h) * lat, rp.y + 1.5, rp.z - Math.sin(h) * lat), DOWN);
+        const hit = ray.intersectObjects(roads, false)[0];
+        row.push(hit && Math.abs(hit.point.y - rp.y) < 1 ? hit.point.y - 0.03 - CITY_ORIGIN.y : NaN);
       }
-      // holes: from the road either side
+      grid.push(row);
+    }
+    // holes: along the road from either end first (a median splits a ramp from a level lane,
+    // and across it the two would meet in the middle, well under both), then across
+    const along = (j: number, i: number) => {
+      let p = i - 1;
+      while (p >= 0 && !Number.isFinite(grid[p][j])) p--;
+      let n = i + 1;
+      while (n < grid.length && !Number.isFinite(grid[n][j])) n++;
+      return p >= 0 && n < grid.length ? grid[p][j] + ((grid[n][j] - grid[p][j]) * (i - p)) / (n - p) : NaN;
+    };
+    const filled = grid.map((row, i) => row.map((y, j) => (Number.isFinite(y) ? y : along(j, i))));
+    filled.forEach((row, i) => {
       for (let j = 0; j < cols; j++) {
         if (Number.isFinite(row[j])) continue;
         let l = j - 1;
         while (l >= 0 && !Number.isFinite(row[l])) l--;
         let r = j + 1;
         while (r < cols && !Number.isFinite(row[r])) r++;
-        row[j] = l >= 0 && r < cols ? row[l] + ((row[r] - row[l]) * (j - l)) / (r - l) : l >= 0 ? row[l] : r < cols ? row[r] : -0.04;
+        row[j] = l >= 0 && r < cols ? row[l] + ((row[r] - row[l]) * (j - l)) / (r - l) : l >= 0 ? row[l] : r < cols ? row[r] : (sampleRoute(a + i, rp), rp.y - CITY_ORIGIN.y - 0.04);
       }
-      drops.push([m, ...row.map((y) => +y.toFixed(3))]);
-    }
+      drops.push([a + i, ...row.map((y) => +y.toFixed(3))]);
+    });
+  }
+
+  // the route line's own height where it runs over a strip: on the road the strip lies under
+  // (it was measured on the kerb tops of the medians the sweep cut back, 13 cm up)
+  const centre = new Map(drops.map((r) => [r[0], r[1 + (PATCH_COLS - 1) / 2] + 0.03]));
+  const pts = ROUTE_POINTS.map((p) => [...p] as [number, number, number]);
+  const pointS = getRoute().pointS;
+  const lowered: string[] = [];
+  pts.forEach((p, i) => {
+    const road = centre.get(Math.round(pointS[i]));
+    if (road === undefined || Math.abs(road - p[1]) <= 0.03) return;
+    lowered.push(`${pointS[i].toFixed(0)} m ${((road - p[1]) * 100).toFixed(0)} cm`);
+    p[1] = +road.toFixed(2);
+  });
+  if (lowered.length) {
+    const file = 'src/lib/cityRoute.data.ts';
+    const src = fs.readFileSync(file, 'utf8');
+    const at = src.indexOf('export const ROUTE_POINTS');
+    const from = src.indexOf('= [[', at) + 2;
+    const to = src.indexOf(']];', from) + 2;
+    fs.writeFileSync(file, src.slice(0, from) + JSON.stringify(pts) + src.slice(to));
   }
 
   // write the model back without them
@@ -295,7 +326,7 @@ export const CORRIDOR_CUTS: { s: [number, number]; lat: [number, number]; y: [nu
 /** Road strips laid under the street-level cuts (route metres): the model has no road under a kerb. */
 export const CORRIDOR_PATCHES: [number, number][] = ${JSON.stringify(patches)};
 
-/** How far under the route line (m) each road strip lies, metre by metre: [metre, then one height per column from right to left]. */
+/** The height (city-local) of each road strip, metre by metre: [metre, then one height per column from right to left]. */
 export const PATCH_DROP: number[][] = ${JSON.stringify(drops)};
 
 /** Barrier lines just outside the corridor where a cut piece carries on: [route metre, lateral offset] points. */
@@ -307,6 +338,7 @@ export const CORRIDOR_BARRIERS: { s: [number, number]; side: 1 | -1; lat: [numbe
     console.log(
       `  s ${c.s[0]}-${c.s[1]} m  ${c.material}  ${c.what}  (${c.lat[0]} to ${c.lat[1]} m off the line, ${c.y[0]} to ${c.y[1]} m above the road)${c.street ? '  + road strip, barriers' : ''}`,
     );
+  for (const l of lowered) console.log(`  route line set on the road at ${l}`);
   for (const s of cracks) console.log(`  s ${s} m  no road under a wheel (a crack between road tiles)  + road strip`);
   void CITY_ORIGIN;
 }

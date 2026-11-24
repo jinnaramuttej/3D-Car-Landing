@@ -14,6 +14,7 @@ import {
   type BloomEffect,
   type ChromaticAberrationEffect,
   type DepthOfFieldEffect,
+  type EffectComposer as EffectComposerImpl,
   EffectPass,
   LUT3DEffect,
   ToneMappingMode,
@@ -56,6 +57,8 @@ export function Effects() {
   const bloom = useRef<BloomEffect>(null!);
   const ca = useRef<ChromaticAberrationEffect>(null!);
   const vignette = useRef<VignetteEffect>(null!);
+  const composer = useRef<EffectComposerImpl>(null);
+  const debug = useMemo(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug'), []);
   const caOffset = useMemo(() => new Vector2(CONFIG.look.chromaticOffset, CONFIG.look.chromaticOffset * 0.6), []);
 
   const fx = useMemo(() => {
@@ -139,6 +142,8 @@ export function Effects() {
     }
 
     fx.sanitize.exposure.value = chapterState.env.exposure;
+    // (?debug: the composer on the console, to time its passes)
+    if (debug) (window as unknown as { __gt3rComposer?: unknown }).__gt3rComposer = composer.current;
 
     camera.getWorldPosition(_pos);
 
@@ -189,7 +194,7 @@ export function Effects() {
   });
 
   return (
-    <EffectComposer multisampling={mobile ? 0 : 4}>
+    <EffectComposer ref={composer} multisampling={mobile ? 0 : CONFIG.post.msaa}>
       <primitive object={fx.sanitize.pass} />
       {/* tyre smoke, drawn in its own pass against the scene's depth (soft particles) */}
       <primitive object={fx.smokePass} />
@@ -205,6 +210,7 @@ export function Effects() {
       <Bloom
         ref={bloom}
         mipmapBlur
+        resolutionScale={0.5}
         intensity={CONFIG.look.bloomIntensity}
         luminanceThreshold={CONFIG.look.bloomThreshold}
         luminanceSmoothing={CONFIG.look.bloomSmoothing}

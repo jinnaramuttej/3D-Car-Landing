@@ -11,6 +11,7 @@ import { progressAtZone, type ZoneId, zoneById, zoneProgress } from '@/lib/pacin
 import { COMPETITION_TAGS, expoIndexAt, heartbeatPulse, initials, SPEAKER_CATEGORIES, useStops } from '@/lib/stops';
 import { layoutState, overlap, type Rect } from '@/lib/layout';
 import { useStore } from '@/lib/store';
+import { warmup } from '@/lib/warmup';
 
 gsap.registerPlugin(Flip);
 
@@ -425,7 +426,8 @@ function DkmsPanel() {
     const last = { dash: '', text: '', beat: '' };
     const tick = () => {
       const w = stopWeight('dkms');
-      if (started === null && w > 0.85) setStarted(performance.now());
+      // (not while the warm-up drives through behind the loader)
+      if (started === null && w > 0.85 && !warmup.active) setStarted(performance.now());
       const t = started === null ? 0 : Math.min(SWAB, (performance.now() - started) / 1000);
       if (w > 0) {
         const dash = `${((t / SWAB) * 100).toFixed(2)} 100`;

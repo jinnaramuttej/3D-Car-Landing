@@ -546,6 +546,67 @@ function zoneRig(id: ZoneId, out: Pose) {
   out.shake = 0.35;
   out.nearFade[0] = 0.35;
   out.nearFade[1] = 2;
+  if (ACROSS[id]) acrossBoard(z, a, u, out);
+}
+
+/**
+ * Stops whose billboard stands too far off the road for the trailing shot to hold all of
+ * it (the Stage's facade is 22 m out and there is no closer one): while the panel plays,
+ * the camera cranes forward and across to the far side of the road, rises, and turns to
+ * face the board, the lens sized so the whole board fits, pushing in a little while it
+ * holds; then it settles back behind the car for the launch.
+ */
+const ACROSS: Record<ZoneId, boolean> = { robowars: false, competitions: false, speakers: true, dkms: false };
+
+const _ap = new Vector3();
+const _ax = new Vector3();
+const _ay = new Vector3();
+const _az = new Vector3();
+
+/** Share of the frame's width the board may take: the stop's panel has the left column. */
+const BOARD_SHARE = 0.6;
+
+/** Vertical lens (degrees, 16:9, with a margin) that fits the whole board in the right BOARD_SHARE of the frame from pos. */
+function fovForBoard(a: ReturnType<typeof stopAnchor>, pos: Vector3) {
+  _az.subVectors(a.centre, pos).normalize();
+  _ax.crossVectors(_az, _b.set(0, 1, 0)).normalize();
+  _ay.crossVectors(_ax, _az);
+  _bf.set(0, 1, 0).cross(a.normal).normalize();
+  let tx = 0;
+  let ty = 0;
+  for (let ix = -1; ix <= 1; ix += 2)
+    for (let iy = -1; iy <= 1; iy += 2) {
+      _pr.copy(a.centre).addScaledVector(_bf, (ix * a.width) / 2).setY(a.centre.y + (iy * a.height) / 2).sub(pos);
+      const f = _pr.dot(_az);
+      tx = Math.max(tx, Math.abs(_pr.dot(_ax)) / f);
+      ty = Math.max(ty, Math.abs(_pr.dot(_ay)) / f);
+    }
+  const half = Math.max(ty, tx / ((16 / 9) * BOARD_SHARE)) * 1.1;
+  return clamp(MathUtils.radToDeg(2 * Math.atan(half)), CONFIG.camera.fovMin, CONFIG.camera.fovMax);
+}
+
+function acrossBoard(z: ReturnType<typeof zoneById>, a: ReturnType<typeof stopAnchor>, u: number, out: Pose) {
+  const w = smootherstep(u, 0.18, 0.46) * (1 - smootherstep(u, 0.76, 0.93));
+  if (w <= 0) return;
+  const spec = STOPS[z.id];
+  // across the road from the board, a little short of it, pushing in while it holds
+  const at = z.board - 12 + 4 * smoothstep(u, 0.46, 0.76);
+  const h = sampleRoute(at, _ap);
+  leftOf(h, _l);
+  const room = getRoute().room(at)[spec.side === 1 ? 1 : 0];
+  _ap.addScaledVector(_l, -spec.side * clamp(room - 1.2, 1, 6)).setY(_ap.y + 3.5);
+  // the board in the right part of the frame, centred in what the panel leaves
+  const fov = fovForBoard(a, _ap);
+  _az.subVectors(a.centre, _ap);
+  const dist = _az.length();
+  _ax.crossVectors(_az, _b.set(0, 1, 0)).normalize();
+  const halfW = Math.tan(MathUtils.degToRad(fov) / 2) * (16 / 9);
+  _ay.copy(a.centre).addScaledVector(_ax, -dist * halfW * (1 - BOARD_SHARE));
+  out.pos.lerp(_ap, w);
+  out.look.lerp(_ay, w);
+  out.fov = lerp(out.fov, fov, w);
+  out.focus.lerp(a.centre, w);
+  out.focusRange = lerp(out.focusRange, 10, w);
 }
 
 /** At a stop: a zone's rolling shot, or the finale's place on the bridge. */

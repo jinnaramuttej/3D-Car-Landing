@@ -121,11 +121,15 @@ export function Overlay() {
     tl.fromTo(q('.letterbox'), { scaleY: 0 }, { scaleY: 1, duration: atS(DRIFT.flick) - atS(DRIFT.from), ease: 'power2.out' }, atS(DRIFT.from));
     tl.to(q('.letterbox'), { scaleY: 0, duration: atS(DRIFT.to) - atS(DRIFT.hold), ease: 'power2.inOut' }, atS(DRIFT.hold));
     // a stop's title follows its slow zone: in at 0.1, out by 0.85 as the car launches
+    // (the Stage's board shot fills the right of the frame from 0.35: its title makes way
+    // for it first)
+    const TITLE_OUT: Partial<Record<ChapterId, number>> = { speakers: 0.26 };
     for (const z of ZONES) {
       const id = z.id as ChapterId;
       const zf = (f: number) => progressAtZone(z.id, f);
+      const out = TITLE_OUT[id] ?? 0.79;
       tl.fromTo(card(id), { autoAlpha: 0, y: 18, filter: 'blur(10px)' }, { autoAlpha: 1, y: 0, filter: 'blur(0px)', duration: zf(0.16) - zf(0.1), ease: 'power2.out' }, zf(0.1));
-      tl.to(card(id), { autoAlpha: 0, y: -14, filter: 'blur(8px)', duration: zf(0.85) - zf(0.79) }, zf(0.79));
+      tl.to(card(id), { autoAlpha: 0, y: -14, filter: 'blur(8px)', duration: zf(out + 0.06) - zf(out) }, zf(out));
     }
     // the finale's as the bridge opens up, gone before the CTA
     cardIn('finale', 0.3, 0.04);

@@ -47,6 +47,7 @@ function parseStat(v: string) {
  * stop's panel follows its slow zone (src/lib/pacing.ts: zone progress 0 -> 1 as the car
  * rolls past the billboard): the stop's title comes in at 0.1 (Overlay.tsx), the panel's
  * details stagger in from 0.3 to 0.7, and everything is gone by 0.85 as the car launches.
+ * On top of that a panel waits for the camera to settle on the stop (the layout loop).
  */
 function buildTimeline(q: Q, mobile: boolean) {
   const tl = gsap.timeline({ paused: true, defaults: { ease: 'none' } });
@@ -545,12 +546,24 @@ export function Stops() {
     const unsubscribe = useStore.subscribe((s) => tl?.progress(s.view));
     window.addEventListener('resize', measure);
 
-    // layout: panels sit on whichever side keeps them off the car and the billboard, and
-    // tell the title solver where they are once the camera has settled on the stop; the
-    // competition strip opens only at the stop. (Their fades are the timeline's, on the
-    // stop's slow zone.)
+    // layout: panels wait for the camera to settle on the stop, sit on whichever side keeps
+    // them off the car and the billboard, and the competition strip opens only at the stop.
+    // (Their fades are the timeline's, on the stop's slow zone; the wait is on top.)
     const comp = el.querySelector<HTMLElement>('.d-competitions');
-    const lay = { gate: 0, side: 'left' as 'left' | 'right', open: '0', until: 0 };
+    const lay = { gate: 0, side: 'left' as 'left' | 'right', open: '0', until: 0, gateOn: '', gateAt: '' };
+    // what the wait fades: each block's own children. The timeline owns the blocks' opacity,
+    // and a value eased on .stops would restyle every panel under it each frame. (The
+    // exhibit's detail card has its own fade and opens only at the stop.)
+    const gated = new Map<string, HTMLElement[]>();
+    const gatedAt = (id: string) => {
+      let els = gated.get(id);
+      if (!els) {
+        const blocks = id === 'speakers' ? ['.d-speakers', '.d-expo'] : [`.d-${id}`];
+        els = blocks.flatMap((b) => [...el.querySelectorAll<HTMLElement>(`:scope > ${b} > :not(.exhibit-detail)`)]);
+        gated.set(id, els);
+      }
+      return els;
+    };
     let raf = 0;
     let last = performance.now();
     const loop = () => {
@@ -561,6 +574,18 @@ export function Stops() {
       const id = CHAPTERS[chapterState.chapter].stop;
       const want = !id ? 0 : id === 'finale' ? 1 : L.atStop ? 1 : 0;
       lay.gate += (want - lay.gate) * (1 - Math.exp(-dt / (want > lay.gate ? 0.3 : 0.15)));
+      const on = id && id !== 'finale' ? id : '';
+      if (on !== lay.gateOn) {
+        // the stop left behind stays shut until the camera settles on it again
+        if (lay.gateOn) for (const g of gatedAt(lay.gateOn)) g.style.opacity = '0';
+        lay.gateOn = on;
+        lay.gateAt = '';
+      }
+      const gate = lay.gate.toFixed(2);
+      if (on && gate !== lay.gateAt) {
+        for (const g of gatedAt(on)) g.style.opacity = gate;
+        lay.gateAt = gate;
+      }
       if (id && id !== 'finale' && now > lay.until) {
         const col = el.querySelector<HTMLElement>(`.d-${id} .col`);
         if (col && col.offsetWidth) {

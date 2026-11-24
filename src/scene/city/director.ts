@@ -389,16 +389,17 @@ function stopRig(stop: ReturnType<typeof nearestStop>, out: Pose) {
       const opposite = r.room(at)[spec.side === 1 ? 1 : 0];
       pos.addScaledVector(_l, -spec.side * Math.min(opposite * 0.55, 3.2)).setY(pos.y + 1.45);
     };
-    // angular spread of billboard + car seen from the camera -> the lens that fits both
+    // angular spread of the car and the billboard (its middle and bottom edge: the top may
+    // crop, the car must not be a speck) seen from the camera -> the lens that fits both
     const need = () => {
       _c.copy(carAt).lerp(a.centre, 0.5).sub(pos).normalize();
       let worst = 0;
-      for (const p of [carAt, _b.copy(a.centre).setY(a.centre.y + a.height / 2), _d.copy(a.centre).setY(a.centre.y - a.height / 2)]) {
+      for (const p of [carAt, _b.copy(a.centre), _d.copy(a.centre).setY(a.centre.y - a.height / 2)]) {
         const d = p.clone().sub(pos).normalize();
         worst = Math.max(worst, Math.acos(clamp(d.dot(_c), -1, 1)));
       }
       // (room to spare: the group is framed off-centre, see below)
-      return MathUtils.radToDeg(worst) * 2 * 1.45;
+      return MathUtils.radToDeg(worst) * 2 * 1.3;
     };
     put();
     let fov = need();

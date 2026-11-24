@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { PerformanceMonitor } from '@react-three/drei';
 import { Leva } from 'leva';
-import { PAGES } from '@/lib/chapters';
+import { SCROLL_PX } from '@/lib/chapters';
 import { useStore } from '@/lib/store';
 import { useScrollTimeline } from '@/lib/useScrollTimeline';
 import { Scene } from '@/scene/Scene';
@@ -44,7 +44,7 @@ function AutoQuality({ onScale }: { onScale: (scale: number) => void }) {
 }
 
 /**
- * Fixed full-screen canvas, a tall scroll container above it (PAGES x 100vh, see
+ * Fixed full-screen canvas, a tall scroll container above it (SCROLL_PX + 100vh, see
  * src/lib/chapters.ts), and the DOM overlay on top. The scroll container is empty: it only gives Lenis/ScrollTrigger
  * a distance to scrub.
  */
@@ -91,7 +91,7 @@ export default function Experience() {
       <MiniMap />
       <PlayControls />
       <RouteHud />
-      <div ref={trackRef} className="scroll-track" style={{ height: `${PAGES * 100}vh` }} />
+      <div ref={trackRef} className="scroll-track" style={{ height: `calc(${SCROLL_PX}px + 100vh)` }} />
 
       <ColdOpen />
       <Loader />

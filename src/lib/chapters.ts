@@ -206,8 +206,15 @@ const chapterList: ChapterDef[] = [
 /** Scroll length per second of the drive, viewport heights (an even scroll, an even pace). */
 const PAGES_PER_SECOND = 0.22;
 
-/** Total scroll height in viewport heights (the scroll track is PAGES * 100vh). */
+/** Total scroll height in viewport heights (the chapters' `pages`; the track itself is SCROLL_PX). */
 export const PAGES = journeySeconds() * PAGES_PER_SECOND;
+
+/**
+ * Scroll pixels per second of the journey: a wheel notch (about 100 px) is about 0.4 s of
+ * it, whatever the window's height. The scroll track is SCROLL_PX plus one screen.
+ */
+export const PX_PER_SECOND = 250;
+export const SCROLL_PX = Math.round(journeySeconds() * PX_PER_SECOND);
 
 export const CHAPTERS: Chapter[] = (() => {
   const e = ends();

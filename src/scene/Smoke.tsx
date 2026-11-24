@@ -315,11 +315,12 @@ export function Smoke() {
     if (s.carReady) {
       // emission follows the slip angle, with a floor while the car is sliding at all
       const slide = s.slip;
-      // held sideways at a standstill the wheels smoke for a moment, then the driver lifts:
-      // left running, 6-8 s puffs piled up round the car with nothing to spread them, and the
-      // street lamps lit the cloud into a beige wash over the whole frame
+      // crawling into a stop, or held sideways at a standstill, the wheels smoke for a moment
+      // and then the driver lifts: left running, 6-8 s puffs piled up round the car with
+      // nothing to spread them, and the street lamps lit the cloud into a beige wash over the
+      // whole frame
       pool.still = Math.abs(s.speed) > 2 ? 0 : pool.still + dt;
-      const lift = 1 - MathUtils.smoothstep(pool.still, 0.6, 2);
+      const lift = (1 - MathUtils.smoothstep(pool.still, 0.6, 2)) * MathUtils.lerp(0.2, 1, MathUtils.smoothstep(Math.abs(s.speed), 2, 9));
       const rate = cfg.rate * scale * lift * (slide > 0.04 ? Math.max(Math.pow(slide, 1.3), cfg.floor) : 0);
       const side = s.slip > 0.05 ? 1 : 0.25; // a launch throws smoke back, not sideways
       const inherit = MathUtils.clamp(s.speed, -15, 15) * 0.2;

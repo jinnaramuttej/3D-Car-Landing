@@ -5,7 +5,8 @@ import { engine } from './engineAudio';
 import { forwardOf, leftOf } from './motion';
 import { CHAPTERS, type ChapterLook, chapterIndexAt, type Env, IGNITION, type StopId } from './chapters';
 import { citySAt } from './cityDrive';
-import { DRIFT, zoneById, zoneProgress } from './pacing';
+import { DRIFT, journeySeconds, zoneById, zoneProgress } from './pacing';
+import { playhead, stepPlayhead } from './playhead';
 import { getRoute, sampleRoute } from './cityRoute';
 
 const { clamp, degToRad, lerp, smoothstep } = MathUtils;
@@ -48,13 +49,12 @@ function makeEnv(): EnvState {
 export const chapterState = {
   initialized: false,
   /**
-   * Where the journey is on screen (0..1). It chases the scroll (`useStore.progress`) like a
-   * car chasing a marker: the car never faster than CONFIG.drive.maxSpeed, the journey never
-   * faster than maxRate or accelerating harder than maxAccel, so a flick of the wheel or a
-   * mini-map click is a fast drive there, never a jump.
+   * Where the journey is on screen (0..1): the playhead (src/lib/playhead.ts), chasing the
+   * scroll (`useStore.progress`) at no more than 1.5x the journey's own pace (a jump glides at
+   * up to 4x), so a flick of the wheel plays the stops through instead of skipping them.
    */
   progress: 0,
-  /** d(progress)/dt of the above, per second. */
+  /** The playback rate: journey seconds per real second (1 = the journey's own pace), signed. */
   rate: 0,
   chapter: 0,
   chapterLocal: 0,
@@ -120,49 +120,22 @@ export function stopWeight(id: StopId) {
 }
 
 /**
- * The journey's driver: moves `progress` toward the scroll target `raw` with a speed and
- * acceleration limit (and brakes in time, so it never overshoots).
+ * Advances chapterState from the raw global progress (the scroll target). `playing`: the
+ * Play button is driving the scroll (the playhead's magnet leaves it be).
  */
-function drive(raw: number, dt: number) {
-  const st = chapterState;
-  const d = CONFIG.drive;
-  const diff = raw - st.progress;
-  if (Math.abs(diff) < 1e-6 && Math.abs(st.rate) < 1e-4) {
-    st.progress = raw;
-    st.rate = 0;
-    return;
-  }
-  const dist = Math.abs(diff);
-  // metres of route per unit of journey here (and one frame on): the car's speed limit as
-  // a journey rate
-  const h = 2e-4;
-  const dir = Math.sign(diff);
-  let dsdp = 0;
-  for (const ahead of [0, dt]) {
-    const p = st.progress + dir * Math.min(dist, Math.abs(st.rate) * ahead);
-    dsdp = Math.max(dsdp, Math.abs(citySAt(p + h) - citySAt(p - h)) / (2 * h));
-  }
-  const cap = Math.min(d.maxRate, d.maxSpeed / Math.max(dsdp, 1));
-  // as fast as allowed, slow enough to stop in time, and an exponential settle at the end
-  const want = Math.sign(diff) * Math.min(cap, Math.sqrt(2 * d.maxAccel * dist) * 0.92, dist / Math.max(1e-3, d.settle));
-  const dv = clamp(want - st.rate, -d.maxAccel * dt, d.maxAccel * dt);
-  // (dropping to the cap is not braking: it only keeps the car's speed where it is)
-  st.rate = clamp(st.rate + dv, -cap, cap);
-  const next = st.progress + st.rate * dt;
-  if ((raw - next) * diff < 0) {
-    st.progress = raw;
-    st.rate = 0;
-  } else st.progress = next;
-}
-
-/** Advances chapterState from the raw global progress (the scroll target). */
-export function stepChapters(raw: number, dt: number) {
+export function stepChapters(raw: number, dt: number, playing = false) {
   const st = chapterState;
   const snap = !st.initialized;
-  if (snap) {
-    st.progress = raw;
-    st.rate = 0;
-  } else drive(raw, dt);
+  // the playhead works in journey seconds; it picks up wherever anything else (the warm-up)
+  // has put the journey
+  const T = journeySeconds();
+  if (Math.abs(playhead.t - st.progress * T) > 1e-3) {
+    playhead.t = st.progress * T;
+    playhead.rate = 0;
+  }
+  stepPlayhead(raw * T, dt, snap, playing);
+  st.progress = clamp(playhead.t / T, 0, 1);
+  st.rate = playhead.rate;
 
   const p = st.progress;
   const ci = chapterIndexAt(p);

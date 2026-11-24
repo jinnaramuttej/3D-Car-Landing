@@ -7,6 +7,7 @@ import Lenis from 'lenis';
 import { progressAtTime, timeAtProgress } from './autoplay';
 import { CONFIG } from './config';
 import { CHAPTERS } from './chapters';
+import { glideTo } from './playhead';
 import { useStore } from './store';
 
 let lenisRef: Lenis | null = null;
@@ -37,9 +38,9 @@ export function stopPlay() {
 
 /**
  * Scrolls (through Lenis) to a global progress value. `immediate` moves the scroll there in
- * one frame (the mini-map); the scene still drives there (the journey driver never jumps).
- * Otherwise the scroll itself glides. If the debug slider owns progress, it hands control
- * back to the scroll first.
+ * one frame (the mini-map, the brand) and the playhead glides there (src/lib/playhead.ts: up
+ * to 4x, the titles and panels hidden until the destination). Otherwise the scroll itself
+ * glides. If the debug slider owns progress, it hands control back to the scroll first.
  */
 export function scrollToProgress(p: number, immediate = false, duration = 2.4) {
   if (!lenisRef || !trackEl) return;
@@ -48,6 +49,7 @@ export function scrollToProgress(p: number, immediate = false, duration = 2.4) {
   const max = trackEl.offsetHeight - window.innerHeight;
   const y = Math.max(0, Math.min(1, p)) * max;
   if (immediate) {
+    glideTo(timeAtProgress(Math.max(0, Math.min(1, p))));
     lenisRef.scrollTo(y, { immediate: true, force: true });
     return;
   }

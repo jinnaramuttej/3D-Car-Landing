@@ -13,14 +13,21 @@ export const CONFIG = {
   },
 
   /**
-   * The journey driver (src/lib/chapterRuntime.ts): what is on screen chases the scroll with
-   * a speed and acceleration limit, so any jump is a fast, continuous drive.
+   * The playhead (src/lib/playhead.ts): the journey on screen chases the scroll's target time
+   * at no more than `chase` times real time (a stop's phases slower still, for their dwell);
+   * a jump glides at up to `glide` times with the content hidden, down to `enter` as it
+   * reaches the destination. Rates are journey seconds per second.
    */
-  drive: {
-    maxSpeed: 110, // m/s: the car never drives faster than this to catch the scroll up
-    maxRate: 0.25, // journey (0..1) per second at most (where the car is parked or creeping)
-    maxAccel: 0.42, // journey per second per second
-    settle: 0.12, // seconds; the last bit of a move eases in like a damped spring
+  playhead: {
+    chase: 1.5, // the fastest the journey plays when the scroll is ahead (or behind)
+    accel: 3, // how fast the rate changes (per second)
+    glide: 4, // a jump (the mini-map)
+    glideAccel: 6,
+    enter: 1, // the rate a glide arrives at
+    enterSeconds: 2.5, // ...this far before the destination (or at its stop's slow zone)
+    settle: 0.2, // seconds; the last bit of a move eases in like a damped spring
+    magnet: 2.5, // journey seconds either side of a stop's title cue where a resting scroll is drawn onto it
+    magnetIdle: 0.35, // seconds the scroll rests before the magnet starts to draw
   },
 
   /** The camera director (src/scene/city/director.ts). */
@@ -261,7 +268,17 @@ type Range = readonly [min: number, max: number, step?: number];
 
 /** Slider ranges for the leva panel. Anything missing gets a plain number field. */
 export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } } = {
-  drive: { maxSpeed: [10, 400, 1], maxRate: [0.02, 2, 0.01], maxAccel: [0.02, 4, 0.01], settle: [0.01, 1, 0.01] },
+  playhead: {
+    chase: [0.5, 4, 0.05],
+    accel: [0.5, 12, 0.1],
+    glide: [1, 10, 0.1],
+    glideAccel: [1, 20, 0.1],
+    enter: [0.25, 2, 0.05],
+    enterSeconds: [0.5, 8, 0.1],
+    settle: [0.02, 1, 0.01],
+    magnet: [0, 6, 0.1],
+    magnetIdle: [0, 2, 0.05],
+  },
   director: { blendMin: [0.2, 4, 0.05], blendMax: [0.2, 4, 0.05] },
   feel: {
     bodyHz: [0.3, 5, 0.05],

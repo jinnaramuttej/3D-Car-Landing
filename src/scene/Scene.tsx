@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { Color, type DirectionalLight, FogExp2, type HemisphereLight, type Texture, Vector3 } from 'three';
 import { chapterById, type Env } from '@/lib/chapters';
 import { chapterState, stepChapters, sunDirection } from '@/lib/chapterRuntime';
+import { playhead } from '@/lib/playhead';
 import { stepCityDrive } from '@/lib/cityDrive';
 import { CONFIG } from '@/lib/config';
 import { carState } from '@/lib/motion';
@@ -56,6 +57,7 @@ export function Scene() {
   const sun = useRef<DirectionalLight>(null!);
   const hemi = useRef<HemisphereLight>(null!);
   const envs = useRef<{ night: Texture | null; day: Texture | null }>({ night: null, day: null });
+  const glideShown = useRef(false);
   const sunTarget = useMemo(() => new THREE.Object3D(), []);
 
   useLayoutEffect(() => {
@@ -102,10 +104,14 @@ export function Scene() {
   useFrame((state, rawDt) => {
     const dt = Math.min(rawDt, 1 / 20);
     const store = useStore.getState();
-    stepChapters(store.progress, dt);
+    stepChapters(store.progress, dt, store.auto === 'playing');
     stepCityDrive(chapterState.progress, dt);
-    // the DOM follows what is on screen, not the scroll
+    // the DOM follows what is on screen, not the scroll; a glide hides the titles and panels
     if (Math.abs(store.view - chapterState.progress) > 1e-6) store.setView(chapterState.progress);
+    if (playhead.hidden !== glideShown.current) {
+      glideShown.current = playhead.hidden;
+      document.documentElement.toggleAttribute('data-glide', playhead.hidden);
+    }
 
     const e = chapterState.env;
     background.set(CONFIG.look.background);

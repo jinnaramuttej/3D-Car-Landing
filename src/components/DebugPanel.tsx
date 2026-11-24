@@ -8,6 +8,7 @@ import { CONFIG, RANGES, type Config } from '@/lib/config';
 import { carState } from '@/lib/motion';
 import { chapterAnchor, CHAPTERS, IGNITION } from '@/lib/chapters';
 import { DRIFT, PARK_S, progressAtTime, progressAtZone, timeAtProgress, timeAtS, zoneAtS, ZONES, zoneProgress } from '@/lib/pacing';
+import { glideTo, playhead } from '@/lib/playhead';
 import { carContact, contactState } from '@/lib/cityDrive';
 import { cameraCollision } from '@/lib/collide';
 import { debugContact } from '@/scene/DebugContact';
@@ -98,6 +99,7 @@ export function DebugPanel() {
 
   function jump(p: number) {
     tween.current?.kill();
+    glideTo(timeAtProgress(p));
     useStore.getState().setManual(true);
     useStore.getState().setProgress(p);
     set({ [DRIVES]: true, progress: p });
@@ -119,7 +121,7 @@ export function DebugPanel() {
     });
   }
 
-  useControls('Drive', configSchema('drive'), { collapsed: true });
+  useControls('Playhead', configSchema('playhead'), { collapsed: true });
   useControls('Director', configSchema('director'), { collapsed: true });
   useControls('Drift', configSchema('drift'), { collapsed: true });
   useControls('Camera', configSchema('camera'), { collapsed: true });
@@ -171,7 +173,7 @@ export function DebugPanel() {
       hud.current.textContent =
         `${c.numeral} ${c.title.toUpperCase()} / ${cameraState.shotId}${blend}  s ${carState.s.toFixed(1)} m  t ${timeAtProgress(chapterState.progress).toFixed(1)} s  zone ${zone}  ${(carState.speed * 3.6).toFixed(0)} km/h` +
         `  wheels ${contactState.ok ? hits : 0}/4 twist ${twist.toFixed(1)} cm  box ${debugContact.boxHits ? `HIT ${debugContact.boxHits}` : 'clear'}  cam ${cameraCollision.hit ? `HIT -${cameraCollision.pulled.toFixed(1)} m` : 'clear'}` +
-        `  scroll ${useStore.getState().progress.toFixed(3)} screen ${chapterState.progress.toFixed(3)}`;
+        `  scroll ${useStore.getState().progress.toFixed(3)} screen ${chapterState.progress.toFixed(3)}  x${chapterState.rate.toFixed(2)}${playhead.glide ? (playhead.hidden ? ' GLIDE' : ' glide in') : ''}${playhead.pull > 0.05 ? ` magnet ${playhead.pull.toFixed(2)}` : ''}`;
     }, 100);
     // jump to a route metre: /?debug&s=510, or [ and ] for -/+10 m (with Shift: 50 m), or __gt3r.goS(510)
     const goS = (m: number) => jump(progressAtTime(timeAtS(Math.max(PARK_S, m))));

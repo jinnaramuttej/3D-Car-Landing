@@ -5,6 +5,7 @@ import gsap from 'gsap';
 import { chapters, credits, hints, SITE, UI } from '@/content';
 import { CHAPTERS, chapterById, type ChapterId, IGNITION } from '@/lib/chapters';
 import { DRIFT, progressAtTime, progressAtZone, timeAtS, ZONES } from '@/lib/pacing';
+import { FINALE_CARD, TITLE_CARD } from '@/lib/playhead';
 import { chapterState } from '@/lib/chapterRuntime';
 import { layoutState, overlap, type Rect } from '@/lib/layout';
 import { pointer } from '@/lib/pointer';
@@ -123,17 +124,16 @@ export function Overlay() {
     // a stop's title follows its slow zone: in at 0.1, out by 0.85 as the car launches
     // (the Stage's board shot fills the right of the frame from 0.35: its title makes way
     // for it first)
-    const TITLE_OUT: Partial<Record<ChapterId, number>> = { speakers: 0.26 };
     for (const z of ZONES) {
       const id = z.id as ChapterId;
       const zf = (f: number) => progressAtZone(z.id, f);
-      const out = TITLE_OUT[id] ?? 0.79;
-      tl.fromTo(card(id), { autoAlpha: 0, y: 18, filter: 'blur(10px)' }, { autoAlpha: 1, y: 0, filter: 'blur(0px)', duration: zf(0.16) - zf(0.1), ease: 'power2.out' }, zf(0.1));
+      const out = TITLE_CARD.outFor[z.id] ?? TITLE_CARD.out;
+      tl.fromTo(card(id), { autoAlpha: 0, y: 18, filter: 'blur(10px)' }, { autoAlpha: 1, y: 0, filter: 'blur(0px)', duration: zf(TITLE_CARD.in + 0.06) - zf(TITLE_CARD.in), ease: 'power2.out' }, zf(TITLE_CARD.in));
       tl.to(card(id), { autoAlpha: 0, y: -14, filter: 'blur(8px)', duration: zf(out + 0.06) - zf(out) }, zf(out));
     }
     // the finale's as the bridge opens up, gone before the CTA
-    cardIn('finale', 0.3, 0.04);
-    cardOut('finale', 0.46, 0.05);
+    cardIn('finale', FINALE_CARD.in, 0.04);
+    cardOut('finale', FINALE_CARD.out, 0.05);
     tl.set({}, {}, 1);
 
     const bar = q('.progress')[0] as HTMLElement | undefined;

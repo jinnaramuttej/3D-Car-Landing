@@ -21,7 +21,7 @@ const { clamp, lerp, smoothstep, smootherstep } = MathUtils;
  * round the car (or over it, where the street is too narrow to go round), while both rigs
  * keep tracking the car. It never changes rig while the car is near the peak of a slide.
  *
- *   opening  I-III: a slow push on the parked car and along its flank to the headlight as it
+ *   opening  I-III: a slow push on the parked car and along its left flank to the headlight as it
  *            wakes (keyed to the scroll), then a camera car riding ahead of it as it pulls
  *            away and slides through the plaza and down the long left-hander (keyed to route
  *            metres)
@@ -224,20 +224,21 @@ function getParkedKeys(): Key[] {
   return (parkedKeys ??= [
     // up the street past the parked car to the Catalyst billboard, rain in the lamps
     { at: chapterAt('stillness', 0), pos: [-3.3, 1.05, -9.4], look: [1.2, 4.4, 10], fov: 34 },
-    { at: chapterAt('stillness', 0.5), pos: [-2.95, 0.9, -6.6], look: [0.7, 2.4, 6], fov: 32 },
-    // in on the rear three-quarter and along the right flank...
-    { at: chapterAt('stillness', 0.94), pos: [-2.75, 0.74, -3.5], look: [-0.25, 0.62, 0.2], fov: 31 },
-    { at: chapterAt('ignition', 0.06), pos: [-2.95, 0.62, 0.7], look: [-0.7, 0.6, 1.7], fov: 30 },
-    // ...to the right headlight as the engine catches
-    { at: chapterAt('ignition', IGNITION.at + 0.05), pos: [-2.4, 0.64, 4.4], look: [-0.58, 0.64, 1.95], fov: 30 },
-    { at: chapterAt('ignition', IGNITION.driveAt), pos: [-2.2, 0.6, 7.8], look: [-0.3, 0.6, 1.6], fov: 31 },
+    { at: chapterAt('stillness', 0.5), pos: [-1.2, 0.95, -7.0], look: [0.6, 2.4, 6], fov: 32 },
+    // round behind it, in on the rear three-quarter and along the left flank (the open
+    // side of this street: a barrier lines the right)...
+    { at: chapterAt('stillness', 0.94), pos: [2.75, 0.74, -3.5], look: [0.25, 0.62, 0.2], fov: 31 },
+    { at: chapterAt('ignition', 0.06), pos: [2.95, 0.62, 0.7], look: [0.7, 0.6, 1.7], fov: 30 },
+    // ...to the left headlight as the engine catches
+    { at: chapterAt('ignition', IGNITION.at + 0.05), pos: [2.4, 0.64, 4.4], look: [0.58, 0.64, 1.95], fov: 30 },
+    { at: chapterAt('ignition', IGNITION.driveAt), pos: [2.2, 0.6, 7.8], look: [0.3, 0.6, 1.6], fov: 31 },
   ]);
 }
 
 /** II (from the pull-away) and III, keyed to route metres: a camera car riding ahead. */
 const RUN_KEYS: Key[] = [
-  { at: PARK_S, pos: [-2.2, 0.6, 7.8], look: [-0.3, 0.6, 1.6], fov: 31 },
-  { at: 128, pos: [-2.0, 0.52, 9.5], look: [0, 0.56, 1.4], fov: 31 },
+  { at: PARK_S, pos: [2.2, 0.6, 7.8], look: [0.3, 0.6, 1.6], fov: 31 },
+  { at: 128, pos: [2.0, 0.52, 9.5], look: [0, 0.56, 1.4], fov: 31 },
   { at: 146, pos: [-1.6, 0.5, 10.5], look: [0.2, 0.55, 1.2], fov: 30 },
   { at: 164, pos: [-2.8, 0.55, 10.5], look: [0.3, 0.6, 1.2], fov: 30 },
   // the plaza is wide open: swing out for the flick
@@ -623,6 +624,12 @@ export function directShot(out: CityShot) {
   const rig = st.current.rig;
   const driving = rig !== 'stop';
   out.pos.copy(o.pos);
+  // never under the road: rigs are set relative to the car, and the streets climb (15% by
+  // the parked car), so check the road at the camera's own place along the route
+  forwardOf(carState.pathHeading, _f);
+  const along = carState.s + _d.subVectors(out.pos, carState.pathPoint).dot(_f);
+  sampleRoute(along, _c);
+  if (out.pos.y < _c.y + 0.32) out.pos.y = _c.y + 0.32;
   out.look.copy(o.look);
   out.fov = driving ? clamp(o.fov + smoothstep(speed, 8, 60) * 4, CONFIG.camera.fovMin, CONFIG.camera.fovMax) : o.fov;
   out.focus.copy(o.focus);

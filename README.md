@@ -196,7 +196,18 @@ There is no music track: the brief allowed an optional one from a free source, a
 
 ## Performance
 
-**After the longer route** (2026-11-24, dev build, `/?debug&dpr=1.5`, 1897 x 1080, the debug overlay on, another session rendering on the same machine): CPU time per frame at rest at each stop, mean / 95th percentile: the Arena 10.7 / 14.3 ms, the Pit Lane 10.5 / 15.5, Catalyst 10.5 / 15.2, Workshops & TWMUN 14.6 / 23.6, the Stage 13.7 / 19.4, the Heartbeat 13.0 / 16.5, the bridge approach 11.6 / 14.8. Driving the whole journey at the playhead's limit, the chapters average 9.7-15.1 ms with 95th percentiles of 15-23 ms. Draw calls per frame (every pass: the scene, the reflection, the post chain) run 250-430 at the stops, with 100-180 of the city's 273 meshes hidden in the fog. `gl.finish()` turned out not to wait for the GPU here, so these and the older numbers below are CPU-side; the GPU's own time wasn't measured.
+**Production build, real time** (2026-11-24, `next start`, `/?dpr=1.5` at 1897 x 1080, no debug overlay, the Play button driving the journey, every `requestAnimationFrame` callback timed for CPU and wrapped in an `EXT_disjoint_timer_query_webgl2` query for GPU; the display refreshes at about 125 Hz): frame interval mean / 95th / 99th percentile, the share of frames over 16.7 ms, then CPU and GPU per frame, mean / 95th percentile.
+
+| Chapter | Frame interval (ms) | Over 16.7 ms | CPU (ms) | GPU (ms) |
+| --- | --- | --- | --- | --- |
+| 00 Intro (parked, the first slide) | 9.9 / 14.0 / 20.9 | 1.6% | 8.0 / 12.5 | 9.3 / 13.4 |
+| 01 The Arena | 10.3 / 14.0 / 20.9 | 1.8% | 8.3 / 12.5 | 9.5 / 13.8 |
+| 02 The Pit Lane | 10.2 / 14.0 / 20.9 | 1.9% | 8.0 / 12.1 | 9.5 / 12.8 |
+| 03 Catalyst | 10.3 / 14.0 / 20.9 | 2.8% | 8.2 / 12.7 | 9.6 / 13.3 |
+
+The rest of the journey (from 85 s: Workshops & TWMUN, the Stage, the Heartbeat, the finale) wasn't measured this way: the app's window lost focus at that point and the browser throttled the page to 2 frames a second. Stepping frames by hand back to back (no display pacing) roughly doubles both timers and is only good for comparing chapters; there the Workshops & TWMUN and Stage zones came out about twice as heavy as the Catalyst and Heartbeat zones. With a fence between hand-stepped frames the GPU time matches real time (9.2 ms median over the intro and the Arena).
+
+ `/?debug&dpr=1.5`, 1897 x 1080, the debug overlay on, another session rendering on the same machine): CPU time per frame at rest at each stop, mean / 95th percentile: the Arena 10.7 / 14.3 ms, the Pit Lane 10.5 / 15.5, Catalyst 10.5 / 15.2, Workshops & TWMUN 14.6 / 23.6, the Stage 13.7 / 19.4, the Heartbeat 13.0 / 16.5, the bridge approach 11.6 / 14.8. Driving the whole journey at the playhead's limit, the chapters average 9.7-15.1 ms with 95th percentiles of 15-23 ms. Draw calls per frame (every pass: the scene, the reflection, the post chain) run 250-430 at the stops, with 100-180 of the city's 273 meshes hidden in the fog. `gl.finish()` turned out not to wait for the GPU here, so these and the older numbers below are CPU-side; the GPU's own time wasn't measured.
 
 Measured in the dev build on this laptop's GPU at 1897 x 1080 (`/?debug&dpr=1.5`, auto quality off), the middle of each chapter, GPU-synced time per frame (`gl.finish()` after each frame, so a little above what the browser shows). The GPU's own heat moves these by up to 2x between runs, so read them as rough.
 

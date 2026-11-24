@@ -151,7 +151,7 @@ Every lens stays within 24-40 degrees (a wider ask moves the camera back), and n
 Nothing covers the car. The 3D frame publishes the car's and the billboard's screen rectangles every frame (`src/lib/layout.ts`), and the DOM places things round them (`Overlay.tsx`, `Stops.tsx`):
 
 - **One title at a time**, small, in whichever slot (top-left, top-right, upper-centre, lower-left) keeps it off the car, the billboard and the stop's panel. It fades at speed, and at a stop it waits until the camera has settled. Its words rise out of masks as it arrives, with a little depth parallax on the pointer.
-- **Stop panels** wait for the camera to settle and take the side that keeps the car clear; the competitions strip opens only at the stop. Panels over the canvas are solid and semi-transparent (no backdrop blur, which would re-read and blur the WebGL frame under every panel each frame).
+- **Stop panels** follow their slow zone (in at 0.1, the details from 0.3 to 0.7, gone by 0.85) and take the side that keeps the car clear; once the camera has settled on the stop the title keeps off them too, and the competitions strip opens only at the stop. Panels over the canvas are solid and semi-transparent (no backdrop blur, which would re-read and blur the WebGL frame under every panel each frame).
 - A thin **route HUD** in the corner (distance along the route, speed, a tick per stop).
 
 ## Smoke
@@ -196,20 +196,23 @@ There is no music track: the brief allowed an optional one from a free source, a
 
 ## Performance
 
-**Production build, real time** (2026-11-24, `next start`, `/?dpr=1.5` at 1897 x 1080, no debug overlay, the Play button driving the journey, every `requestAnimationFrame` callback timed for CPU and wrapped in an `EXT_disjoint_timer_query_webgl2` query for GPU; the display refreshes at about 125 Hz): frame interval mean / 95th / 99th percentile, the share of frames over 16.7 ms, then CPU and GPU per frame, mean / 95th percentile.
+**Production build, real time** (2026-11-24, after the fixes below, `next start`, `/?dpr=1.5` at 1897 x 1080, no debug overlay, the Play button driving the journey, every `requestAnimationFrame` callback timed for CPU and wrapped in an `EXT_disjoint_timer_query_webgl2` query for GPU; the display refreshes at 144 Hz, so a frame lands on 6.9, 13.9 or 20.8 ms, most of them on the first): frame interval mean / 95th / 99th percentile, the share of frames over 16.7 ms, then CPU and GPU per frame, mean / 95th percentile.
 
 | Chapter | Frame interval (ms) | Over 16.7 ms | CPU (ms) | GPU (ms) |
 | --- | --- | --- | --- | --- |
-| 00 Intro (parked, the first slide) | 9.9 / 14.0 / 20.9 | 1.6% | 8.0 / 12.5 | 9.3 / 13.4 |
-| 01 The Arena | 10.3 / 14.0 / 20.9 | 1.8% | 8.3 / 12.5 | 9.5 / 13.8 |
-| 02 The Pit Lane | 10.2 / 14.0 / 20.9 | 1.9% | 8.0 / 12.1 | 9.5 / 12.8 |
-| 03 Catalyst | 10.3 / 14.0 / 20.9 | 2.8% | 8.2 / 12.7 | 9.6 / 13.3 |
-| 04 Workshops & TWMUN (the U-turn on the way) | 11.1 / 14.1 / 21.0 | 4.2% | 9.1 / 13.7 | 10.2 / 14.5 |
-| 05 The Stage | 11.1 / 14.1 / 20.9 | 3.2% | 9.0 / 13.1 | 10.1 / 14.1 |
-| 06 The Heartbeat | 10.4 / 14.0 / 20.9 | 1.8% | 8.2 / 11.9 | 9.4 / 13.5 |
-| Fin Finale | 9.0 / 14.0 / 20.9 | 1.8% | 6.8 / 11.0 | 8.1 / 12.6 |
+| 00 Intro (parked, the first slide) | 9.4 / 14.0 / 20.8 | 1.2% | 7.4 / 10.2 | 9.1 / 10.8 |
+| 01 The Arena | 10.3 / 14.0 / 20.9 | 1.9% | 8.1 / 12.2 | 9.5 / 13.5 |
+| 02 The Pit Lane | 9.7 / 14.0 / 14.1 | 0.6% | 7.4 / 10.7 | 9.3 / 11.3 |
+| 03 Catalyst | 9.4 / 14.0 / 14.2 | 0.6% | 7.3 / 10.4 | 9.1 / 10.9 |
+| 04 Workshops & TWMUN (the U-turn on the way) | 10.0 / 14.0 / 20.6 | 1.0% | 8.0 / 11.3 | 9.5 / 12.7 |
+| 05 The Stage | 11.2 / 14.1 / 20.9 | 4.4% | 9.0 / 13.6 | 10.1 / 14.9 |
+| 06 The Heartbeat | 11.0 / 20.9 / 21.0 | 6.6% | 8.7 / 14.1 | 9.5 / 14.4 |
+| Fin Finale | 8.0 / 14.0 / 14.1 | 0.2% | 5.8 / 9.2 | 7.5 / 10.1 |
+| The whole journey | 9.6 / 14.0 / 20.9 | 1.7% | 7.5 / 11.5 | 9.0 / 12.5 |
 
-(Two runs: the intro to Catalyst, then Catalyst to the end after the window had lost focus part-way through the first; both with the page focused throughout.) The heaviest stretch is the Workshops & TWMUN slow zone: frame interval 11.6 / 20.8 / 27.8 ms and 6.2% of frames over 16.7 ms, with the CPU's 95th percentile at 14.5 ms; the run with the U-turn before it is 3.4%. Stepping frames by hand back to back (no display pacing) roughly doubles both timers; with a fence between hand-stepped frames the GPU time matches real time (9.2 ms median over the intro and the Arena).
+(One run, the page focused throughout. The Stage's last seconds and the run up to the Heartbeat took a 3 s burst of 12-13 ms CPU frames that a rerun of that stretch didn't repeat, something else on the machine: rerun, the second half of the Stage is 9.8 / 14.0 / 20.9 ms with 1.9% of frames over 16.7 ms and the Heartbeat 9.6 / 14.0 / 20.9 ms with 1.3%.) After the scripts, the browser's own style, layout and paint take 0.9 ms a frame (95th percentile 1.5 ms).
+
+The Workshops & TWMUN slow zone was the heaviest stretch: frame interval 11.6 / 20.8 / 27.8 ms, 6.2% of frames over 16.7 ms, the CPU's 95th percentile at 14.5 ms. Its stop looks across the open middle of the city, so 180 of the city's 273 meshes are inside the fog's reach there (87 at the Heartbeat): about 1.5 ms more CPU a frame for the extra draw calls, which left it at the edge of a frame. Three things tipped it over, each paid on every chapter: the street reflection saw two fewer lights than the main pass, so three worked out every city material's program again twice a reflection frame (about 1 ms); the Heartbeat's hidden clock rewrote its text every frame, which re-laid out every stop panel (1.7 ms a frame, the whole journey); and custom properties eased on the containers (`--gate` on `.stops`, which did nothing, and `--gate` and the parallax on `.cards`) restyled every panel and card each frame while a stop's title came in (2-3 ms for a second or two). With those fixed the zone is 10.4 / 14.0 / 20.8 ms, 1.2% of frames over 16.7 ms, CPU 8.4 / 11.4 ms. Stepping frames by hand back to back (no display pacing) roughly doubles both timers; with a fence between hand-stepped frames the GPU time matches real time (9.2 ms median over the intro and the Arena).
 
  `/?debug&dpr=1.5`, 1897 x 1080, the debug overlay on, another session rendering on the same machine): CPU time per frame at rest at each stop, mean / 95th percentile: the Arena 10.7 / 14.3 ms, the Pit Lane 10.5 / 15.5, Catalyst 10.5 / 15.2, Workshops & TWMUN 14.6 / 23.6, the Stage 13.7 / 19.4, the Heartbeat 13.0 / 16.5, the bridge approach 11.6 / 14.8. Driving the whole journey at the playhead's limit, the chapters average 9.7-15.1 ms with 95th percentiles of 15-23 ms. Draw calls per frame (every pass: the scene, the reflection, the post chain) run 250-430 at the stops, with 100-180 of the city's 273 meshes hidden in the fog. `gl.finish()` turned out not to wait for the GPU here, so these and the older numbers below are CPU-side; the GPU's own time wasn't measured.
 
@@ -245,10 +248,11 @@ Driving III to V (the drift, the wake, the arrival): median 34.5 ms before, 14.5
 What keeps it there:
 
 - **Assets.** The car without its hidden interior and simplified (`npm run car`), the city trimmed to what the journey can see (`npm run city`).
-- **Six real lights.** A pool of three lamp lights moves to the lamps nearest what the camera looks at; the rest are emissive heads, light shafts and pools on the road. The car's tail glow on the road is an additive pool, not a light. Lights are never added or removed per frame.
+- **Six real lights.** A pool of three lamp lights moves to the lamps nearest what the camera looks at; the rest are emissive heads, light shafts and pools on the road. The car's tail glow on the road is an additive pool, not a light. Lights are never added or removed per frame, and every pass that draws the scene sees the same ones (the headlights are on the city's layer too, for the street reflection).
 - **Reflection.** Half resolution and redrawn every other frame: the texture keeps the matrix of the view it was drawn from, so a frame-old reflection still lands in place.
 - **Post.** Bloom and depth of field at half resolution; the chain merged into four effect passes.
 - **Auto quality.** Once the loader is gone, drei's `PerformanceMonitor` drops the canvas to as low as 75% resolution if the frame rate sags under about 52 fps, and climbs back when there is room (a few steps at most; each re-sizes the render targets). `?dpr=` turns it off.
+- **The DOM only when something changed.** The per-frame loops (the layout solvers, the HUD, the Heartbeat timer, the play clock) write only what changed, and only while their element is on screen. A value that eases every frame sits on the element that reads it, or is registered as not inherited (`@property`): never on a container, where each change restyles every panel under it.
 - **No allocations in the frame loop** (the lamp sorts and array literals that made objects every frame are gone), no React re-renders from it (the DOM follows the store through subscriptions), `powerPreference: 'high-performance'`.
 - **Warm-up** behind the loader: every shader compiled for the composer's render target, every texture uploaded and a drive through every chapter, so nothing compiles or uploads mid-scroll.
 

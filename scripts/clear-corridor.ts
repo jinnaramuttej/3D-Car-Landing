@@ -25,7 +25,7 @@ import { compactPrimitive, meshopt, prune } from '@gltf-transform/functions';
 import { MeshoptEncoder } from 'meshoptimizer';
 import { Box3, Matrix4, Quaternion, Raycaster, Vector3 } from 'three';
 import { PATCH_COLS, PATCH_HALF, patchSpans } from '../src/lib/bridgePath';
-import { CITY_ORIGIN, getRoute, sampleRoute } from '../src/lib/cityRoute';
+import { CITY_ORIGIN, getRoute, sampleRoute, STOPS } from '../src/lib/cityRoute';
 import { ROUTE_POINTS } from '../src/lib/cityRoute.data';
 import { CORRIDOR_CUTS, CORRIDOR_PATCHES } from '../src/lib/corridor.data';
 import { CORRIDOR, corridorEnvelope, journeyPoses, pieces, routePoses, sweep, weldIds, wheelMisses } from './lib/corridor';
@@ -84,6 +84,45 @@ async function main() {
     for (let k = 0; k < 3; k++) top = Math.max(top, new Vector3().fromBufferAttribute(at, idx[h.tri * 3 + k]).applyMatrix4(m.matrixWorld).y);
     const p = view.find((x) => x.s === h.s)!;
     if (top > p.pos.y - 1) hits.push(h);
+  }
+  // each stop's board, as the camera faces it (the director's across shot: over the road,
+  // ~10 m short of the board, 3.5 m up): signs and their frames hanging in between go too
+  // (the Pit Lane's board was behind two restaurant signs). A building in the way can't go:
+  // that is reported, and the board wants another wall.
+  const ray = new Raycaster();
+  const solid = city.filter((m) => !m.road);
+  const blocked: string[] = [];
+  for (const id of Object.keys(STOPS) as (keyof typeof STOPS)[]) {
+    const spec = STOPS[id];
+    if (!spec.across) continue;
+    const rp = new Vector3();
+    const h = sampleRoute(spec.s, rp);
+    const fwd = new Vector3(Math.sin(h), 0, Math.cos(h));
+    const dir = new Vector3(Math.cos(h), 0, -Math.sin(h)).multiplyScalar(spec.side);
+    ray.set(rp.clone().setY(rp.y + spec.lift + spec.height / 2), dir);
+    ray.near = 0;
+    ray.far = 45;
+    const wall = ray.intersectObjects(solid.map((m) => m.mesh), false)[0];
+    if (!wall) continue;
+    const centre = wall.point.clone().addScaledVector(dir, -0.3);
+    const cp = new Vector3();
+    const hc = sampleRoute(spec.s - 10, cp);
+    const room = getRoute().room(spec.s - 10)[spec.side === 1 ? 1 : 0];
+    cp.addScaledVector(new Vector3(Math.cos(hc), 0, -Math.sin(hc)), -spec.side * Math.min(6, Math.max(1, room - 1.2))).setY(cp.y + 3.5);
+    for (const a of [-0.45, -0.2, 0, 0.2, 0.45])
+      for (const b of [-0.4, 0, 0.4]) {
+        const target = centre.clone().addScaledVector(fwd, a * spec.width).setY(centre.y + b * spec.height);
+        const d = target.clone().sub(cp);
+        const len = d.length();
+        ray.set(cp, d.normalize());
+        ray.far = len - 1.2;
+        for (const hit of ray.intersectObjects(solid.map((m) => m.mesh), false)) {
+          const mi = city.findIndex((c) => c.mesh === hit.object);
+          const kind = city[mi].material.split(':')[0];
+          if (kind === 'sign' || kind === 'metal' || city[mi].material.includes('removebg')) hits.push({ mesh: mi, tri: hit.faceIndex!, s: spec.s });
+          else blocked.push(`${id} board: ${city[mi].material} in the way`);
+        }
+      }
   }
   // a model this has already cleared: keep what the earlier run cut (and its strips and barriers)
   const again = !hits.length;
@@ -236,7 +275,7 @@ async function main() {
   CORRIDOR_PATCHES.push(...patches);
   const drops: number[][] = [];
   const roads = city.filter((m) => m.road).map((m) => m.mesh);
-  const ray = new Raycaster();
+  ray.near = 0;
   ray.far = 4;
   const cols = PATCH_COLS;
   for (const [a, b] of patchSpans()) {
@@ -338,6 +377,7 @@ export const CORRIDOR_BARRIERS: { s: [number, number]; side: 1 | -1; lat: [numbe
     console.log(
       `  s ${c.s[0]}-${c.s[1]} m  ${c.material}  ${c.what}  (${c.lat[0]} to ${c.lat[1]} m off the line, ${c.y[0]} to ${c.y[1]} m above the road)${c.street ? '  + road strip, barriers' : ''}`,
     );
+  for (const b of new Set(blocked)) console.log(`  NOTE ${b} (a building: not removed)`);
   for (const l of lowered) console.log(`  route line set on the road at ${l}`);
   for (const s of cracks) console.log(`  s ${s} m  no road under a wheel (a crack between road tiles)  + road strip`);
   void CITY_ORIGIN;

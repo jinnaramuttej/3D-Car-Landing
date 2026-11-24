@@ -260,10 +260,9 @@ export function stepCityDrive(p: number, dt: number) {
   damp('driftYaw', driftYawAt(st.s), d.yawSmooth);
   st.slip = clamp(Math.abs(st.driftYaw) / degToRad(Math.max(1, d.slipRefDeg)), 0, 1);
   const slideSign = Math.sign(st.driftYaw) || 1;
-  const cornerSign = Math.sign(curvature);
   damp('steer', geomSteer * (1 - st.slip) - slideSign * degToRad(d.counterSteerDeg) * st.slip, d.steerSmooth);
-  const turnLoad = clamp(Math.abs(curvature) * 25, 0, 1) * 0.35;
-  damp('roll', degToRad(d.rollDeg) * (slideSign * st.slip + cornerSign * turnLoad * (1 - st.slip)), d.rollSmooth);
+  // (the slide's roll; cornering roll comes from the body's springs, src/lib/feel.ts)
+  damp('roll', degToRad(d.rollDeg) * slideSign * st.slip, d.rollSmooth);
   damp('pitch', pitchOut.pitch, 0.15);
 
   // pose: the tail swings out round a point just ahead of the car's centre

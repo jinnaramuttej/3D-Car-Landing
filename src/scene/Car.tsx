@@ -4,8 +4,10 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { ContactShadows, useGLTF, useTexture } from '@react-three/drei';
 import {
+  AdditiveBlending,
   BackSide,
   Box3,
+  CanvasTexture,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -16,6 +18,8 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial as StandardMaterial,
   PlaneGeometry,
+  type Sprite,
+  SpriteMaterial,
   type MeshPhysicalMaterial,
   type MeshStandardMaterial,
   Object3D,
@@ -27,6 +31,7 @@ import {
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { chapterState } from '@/lib/chapterRuntime';
+import { feel, stepBody } from '@/lib/feel';
 import { interaction } from '@/lib/interaction';
 import { carState } from '@/lib/motion';
 import { useStore } from '@/lib/store';
@@ -345,6 +350,28 @@ function buildRig(source: Object3D, livery: Texture, mobile: boolean): Rig {
 
 const liveryUrl = () => (isMobile() ? LIVERY_URL_MOBILE : LIVERY_URL);
 
+/** Where the two tailpipes end (body space, measured off EXT_EXALTS), and the flash between them. */
+const PIPES_AT = [0.005, 0.34, -2.32] as const;
+
+/** A soft flame-coloured flash for the exhaust pops (drawn in code: hot core, orange edge). */
+function popMaterial() {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(255,240,215,1)');
+  g.addColorStop(0.25, 'rgba(255,150,60,0.85)');
+  g.addColorStop(0.6, 'rgba(210,60,20,0.25)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const map = new CanvasTexture(canvas);
+  // (always drawn, black when idle: additive, so nothing shows, and it is compiled with the
+  // rest of the scene behind the loader instead of the first time a pop fires)
+  return new SpriteMaterial({ map, color: 0x000000, blending: AdditiveBlending, depthWrite: false, transparent: true, fog: false });
+}
+
 export function Car() {
   const { scene } = useGLTF(MODEL_URL);
   const gl = useThree((s) => s.gl);
@@ -364,6 +391,8 @@ export function Car() {
   const beamR = useRef<SpotLight>(null!);
   const tailGlow = useRef<PointLight>(null!);
   const beamTargets = useMemo(() => [new Object3D(), new Object3D()] as const, []);
+  const pop = useRef<Sprite>(null!);
+  const popMat = useMemo(() => popMaterial(), []);
 
   useLayoutEffect(() => {
     carState.frontRadius = rig.frontRadius;
@@ -388,11 +417,19 @@ export function Car() {
     g.position.set(s.position.x, s.position.y - rig.groundOffset, s.position.z);
     g.rotation.set(-s.pitch, s.heading, 0, 'YXZ');
 
-    // Body only: roll + a little buzz while the rears are lit up, the engine idles or revs.
+    // Body only: on its springs (pitch, roll, heave: src/lib/feel.ts), the slide's roll, and
+    // a little buzz while the rears are lit up, the engine idles or revs
+    stepBody(dt);
     const idle = chapterState.engineOn ? 0.0015 : 0;
     const buzz = CONFIG.drift.vibration * s.slip + idle + CONFIG.interaction.revVibration * interaction.rev;
-    body.current.rotation.z = s.roll + Math.sin(t * 47) * buzz * 0.5;
-    body.current.position.y = (Math.sin(t * 61) * 0.6 + Math.sin(t * 23.7) * 0.4) * buzz;
+    body.current.rotation.x = feel.pitch;
+    body.current.rotation.z = s.roll + feel.roll + Math.sin(t * 47) * buzz * 0.5;
+    body.current.position.y = feel.heave + (Math.sin(t * 61) * 0.6 + Math.sin(t * 23.7) * 0.4) * buzz;
+
+    // exhaust pops (the powertrain's lifts and upshifts, as the audio hears them)
+    const flash = feel.pop * CONFIG.feel.popFlash;
+    popMat.color.setRGB(1, 0.62, 0.34).multiplyScalar(flash);
+    pop.current.scale.set(0.32 + 0.22 * feel.pop, 0.2 + 0.12 * feel.pop, 1);
 
     for (const k of rig.corners) {
       if (k.front) k.steer.rotation.y = s.steer;
@@ -464,7 +501,7 @@ export function Car() {
     const inBeam = MathUtils.smoothstep(ahead, 0.35, 0.85) * (1 - MathUtils.smoothstep(camDist, 12, 32));
     beamL.current.intensity = beamR.current.intensity = c.headBeam * hl * (1 - 0.8 * inBeam);
     beamL.current.angle = beamR.current.angle = c.headBeamAngle;
-    tailGlow.current.intensity = c.tailGlow * brake;
+    tailGlow.current.intensity = c.tailGlow * brake + feel.pop * CONFIG.feel.popFlash * 0.6;
 
     // Publish world-space contact patches for smoke + skid marks
     g.updateMatrixWorld();
@@ -504,6 +541,7 @@ export function Car() {
         <primitive object={beamTargets[0]} position={[1.4, 0, 24]} />
         <primitive object={beamTargets[1]} position={[-1.4, 0, 24]} />
         <pointLight ref={tailGlow} position={[0, 0.4, -3.1]} color="#ff1a1a" distance={7} decay={2} />
+        <sprite ref={pop} material={popMat} position={PIPES_AT} renderOrder={4} />
       </group>
       <primitive object={rig.wheels} />
       {/* Contact shadows ride with the car (re-rendered every frame) */}

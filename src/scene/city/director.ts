@@ -272,7 +272,7 @@ function openingRig(out: Pose) {
 /** IV: trailing well back on the road itself, through the smoke, closing up as it thins. */
 function wakeRig(out: Pose) {
   const u = smoothstep(carState.s, DRIFT.hold + 14, STOPS.arrival.s - 14);
-  const back = lerp(24, 9.5, u);
+  const back = lerp(17, 9.5, u);
   const at = carState.s - back;
   const h = sampleRoute(at, out.pos);
   leftOf(h, _l);

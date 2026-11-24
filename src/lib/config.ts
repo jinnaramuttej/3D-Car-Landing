@@ -91,24 +91,26 @@ export const CONFIG = {
   },
 
   smoke: {
-    maxParticles: 720, // (mount) halved on mobile
+    maxParticles: 1200, // (mount) halved on mobile
     rate: 30, // particles/s per rear wheel at full slip
     floor: 0.3, // while the car slides at all, never less than this share of the rate
-    lifeMin: 1.6,
-    lifeMax: 3.4,
+    lifeMin: 6, // the wake hangs in the street for 6-8 s
+    lifeMax: 8,
     sizeStart: 0.9,
-    sizeEnd: 5.6,
+    sizeEnd: 6.5,
     opacity: 0.16, // big, faint puffs: density comes from many of them overlapping
     soft: 1.4, // how softly a puff fades into whatever it meets (x 0.4-1 m by puff size)
     wind: 0.45, // how much of the rain's wind carries the smoke
     lampLit: 0.3, // how much the street lamps light the smoke
-    rise: 0.15, // stays low over the asphalt
+    rise: 0.32, // m/s^2 the wake rises once it has warmed (after a second or two)...
+    settle: 0.12, // ...and the slight settle that keeps it on the road before that
+    shear: 1, // how much more the wind carries it the higher it gets
     drag: 1.1,
     noise: 1.2,
     kick: 2.2, // sideways throw toward the outside of the turn
     color: '#6f7680',
     tailTint: 0.2, // how much the tail lights paint nearby smoke red
-    headLit: 1.6, // how strongly the headlight beams light the smoke and spray
+    headLit: 0.85, // how strongly the headlight beams light the smoke and spray
     sprayRate: 26, // wet-road spray per rear wheel at speed (scaled by rain.intensity)
     spraySize: 0.28,
     sprayOpacity: 0.55,
@@ -275,12 +277,14 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     soft: [0, 6, 0.05],
     wind: [0, 2, 0.01],
     lampLit: [0, 3, 0.01],
-    lifeMin: [0.5, 6, 0.1],
-    lifeMax: [0.5, 8, 0.1],
+    lifeMin: [0.5, 12, 0.1],
+    lifeMax: [0.5, 12, 0.1],
     sizeStart: [0.1, 4, 0.05],
     sizeEnd: [0.5, 12, 0.1],
     opacity: [0, 1, 0.01],
     rise: [-1, 2, 0.01],
+    settle: [0, 1, 0.01],
+    shear: [0, 3, 0.01],
     drag: [0, 5, 0.05],
     noise: [0, 5, 0.05],
     kick: [0, 8, 0.1],

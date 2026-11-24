@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   Color,
@@ -9,7 +9,6 @@ import {
   InstancedBufferAttribute,
   InstancedMesh,
   MathUtils,
-  type Mesh,
   OneFactor,
   OneMinusSrcAlphaFactor,
   type PerspectiveCamera,
@@ -38,6 +37,7 @@ attribute float aSize;
 attribute float aAlpha;
 attribute float aAngle;
 attribute float aShade;
+attribute float aGround;
 uniform vec3 uTailPos;
 uniform float uTailRadius;
 uniform vec3 uLampPos[${LAMPS}];
@@ -57,6 +57,7 @@ varying float vGroundY;
 varying float vHead;
 varying vec3 vLamp;
 varying float vSize;
+varying float vGround;
 
 float headCone(vec3 p, vec3 hp) {
   vec3 d = p - hp;
@@ -96,6 +97,7 @@ void main() {
   vec3 camRight = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
   vec3 camUp = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
   vGroundY = (aCenter + camRight * offset.x + camUp * offset.y).y;
+  vGround = aGround;
 
   gl_Position = projectionMatrix * mv;
 }
@@ -110,7 +112,6 @@ uniform float uNear;
 uniform float uFar;
 uniform float uSoft;
 uniform float uSoftOn;
-uniform float uGroundY;
 uniform vec3 uColor;
 uniform vec3 uTailColor;
 uniform float uTailTint;
@@ -125,19 +126,21 @@ varying float vGroundY;
 varying float vHead;
 varying vec3 vLamp;
 varying float vSize;
+varying float vGround;
 
 void main() {
   vec4 tex = texture2D(uMap, vUv);
   // Near the lens a puff fades out by its own size (a big one from further away), so
   // nothing close to the camera fills the frame; the shot can let it in closer still.
-  float nearFade = smoothstep(uNearFade.x, uNearFade.y, vDepth) * smoothstep(0.45 + 0.35 * vSize, 1.4 + 1.2 * vSize, vDepth);
-  // soft against the ground under the car...
-  float groundFade = smoothstep(uGroundY, uGroundY + 0.9, vGroundY);
+  // (inside the wake a big puff seen face-on is a flat sheet: those go well before the lens)
+  float nearFade = smoothstep(uNearFade.x, uNearFade.y, vDepth) * smoothstep(0.5 + 0.8 * vSize, 1.4 + 2.1 * vSize, vDepth);
+  // soft against the road it was laid on...
+  float groundFade = smoothstep(vGround, vGround + 0.9, vGroundY);
   // ...and against everything else: fade where the puff meets the scene's depth
   float soft = 1.0;
   if (uSoftOn > 0.5) {
     float sceneZ = -perspectiveDepthToViewZ(texture2D(uDepth, gl_FragCoord.xy / uRes).x, uNear, uFar);
-    soft = clamp((sceneZ - vDepth) / (uSoft * (0.25 + 0.15 * vSize)), 0.0, 1.0);
+    soft = clamp((sceneZ - vDepth) / (uSoft * (0.3 + 0.28 * vSize)), 0.0, 1.0);
   }
   float a = tex.a * vAlpha * uOpacity * nearFade * groundFade * soft;
   if (a < 0.002) discard;
@@ -165,7 +168,8 @@ function createPool(max: number) {
     seed: new Float32Array(max),
     shade: new Float32Array(max),
     alpha0: new Float32Array(max),
-    grav: new Float32Array(max), // m/s^2 pulling down (spray), on top of cfg.rise
+    grav: new Float32Array(max), // m/s^2 pulling down (spray), on top of the rise
+    base: new Float32Array(max), // height of the road where the puff was laid
     size: new Float32Array(max),
     alpha: new Float32Array(max),
     depth: new Float32Array(max),
@@ -199,6 +203,14 @@ const _far = new Vector3(0, -1e4, 0);
 const _cam = new Vector3();
 const _camDir = new Vector3();
 
+/**
+ * The tyre smoke and the wet-road spray, as soft billboards in their own pass
+ * (postfx/SoftSmokeEffect). Emission follows the slip (with a floor, so it never cuts out
+ * mid-slide). What the drift lays down stays behind as a wake for 6-8 s: it hugs the road
+ * first, then warms and rises, sheared by the rain's wind and lit by the street lamps and
+ * the headlights, so the camera can drive back through it as it thins. Near the lens every
+ * puff fades by its own size, so smoke never fills the frame.
+ */
 export function Smoke() {
   const camera = useThree((s) => s.camera);
   const mobile = useMemo(() => isMobile(), []);
@@ -212,12 +224,13 @@ export function Smoke() {
       a.setUsage(DynamicDrawUsage);
       return a;
     };
-    const attrs = { center: attr(3), size: attr(1), alpha: attr(1), angle: attr(1), shade: attr(1) };
+    const attrs = { center: attr(3), size: attr(1), alpha: attr(1), angle: attr(1), shade: attr(1), ground: attr(1) };
     geometry.setAttribute('aCenter', attrs.center);
     geometry.setAttribute('aSize', attrs.size);
     geometry.setAttribute('aAlpha', attrs.alpha);
     geometry.setAttribute('aAngle', attrs.angle);
     geometry.setAttribute('aShade', attrs.shade);
+    geometry.setAttribute('aGround', attrs.ground);
 
     const material = new ShaderMaterial({
       uniforms: {
@@ -238,7 +251,6 @@ export function Smoke() {
         uFar: { value: 2000 },
         uSoft: { value: CONFIG.smoke.soft },
         uSoftOn: { value: 0 },
-        uGroundY: { value: 0 },
         uHeadPos0: { value: new Vector3() },
         uHeadPos1: { value: new Vector3() },
         uHeadDir: { value: new Vector3(0, 0, 1) },
@@ -291,7 +303,6 @@ export function Smoke() {
     const cfg = CONFIG.smoke;
     const s = carState;
     const t = state.clock.elapsedTime;
-    const ground = s.position.y;
 
     camera.getWorldPosition(_cam);
     camera.getWorldDirection(_camDir);
@@ -316,10 +327,12 @@ export function Smoke() {
           pool.pos[o] = _tmp.x + rand(-0.15, 0.15);
           pool.pos[o + 1] = _tmp.y + rand(0.1, 0.22);
           pool.pos[o + 2] = _tmp.z + rand(-0.15, 0.15);
+          pool.base[i] = _tmp.y;
           const kick = cfg.kick * rand(0.4, 1) * side;
           const back = rand(0.8, 1.8);
           pool.vel[o] = s.forward.x * (inherit - back) + s.outward.x * kick + rand(-0.4, 0.4);
-          pool.vel[o + 1] = rand(0.3, 0.8);
+          // low and flat out of the tyre: it rolls along the road before it rises
+          pool.vel[o + 1] = rand(0.05, 0.3);
           pool.vel[o + 2] = s.forward.z * (inherit - back) + s.outward.z * kick + rand(-0.4, 0.4);
           pool.life[i] = rand(cfg.lifeMin, Math.max(cfg.lifeMin, cfg.lifeMax));
           pool.size0[i] = cfg.sizeStart * rand(0.7, 1.3);
@@ -344,6 +357,7 @@ export function Smoke() {
           pool.pos[o] = cur.x - s.forward.x * 0.35 + rand(-0.12, 0.12);
           pool.pos[o + 1] = cur.y + rand(0.06, 0.18);
           pool.pos[o + 2] = cur.z - s.forward.z * 0.35 + rand(-0.12, 0.12);
+          pool.base[i] = cur.y;
           const carry = s.speed * rand(0.15, 0.45); // water leaves the tyre slower than the car
           const sideways = rand(-0.6, 0.6);
           pool.vel[o] = s.forward.x * carry + s.outward.x * sideways + rand(-0.3, 0.3);
@@ -383,11 +397,18 @@ export function Smoke() {
       const nx = Math.sin(py * 0.9 + t * 0.7 + sd) + 0.6 * Math.sin(pz * 0.45 + t * 0.31 + sd * 1.7);
       const ny = Math.sin(px * 0.3 + pz * 0.3 + t * 0.5 + sd);
       const nz = Math.cos(px * 0.5 + t * 0.6 + sd * 0.6) + 0.6 * Math.cos(py * 0.8 + t * 0.4 + sd * 2.3);
+      // the wake: hugs the road for the first second or two (a slight settle), then warms
+      // and rises; the wind shears it, stronger the higher it gets
+      const age = pool.age[i];
+      const spray = pool.grav[i] > 0;
+      const up = spray ? 0 : MathUtils.lerp(-cfg.settle, cfg.rise, MathUtils.smoothstep(age, 1.2, 3.6));
+      const above = py - pool.base[i];
+      const shear = spray ? 0.2 : 0.25 + cfg.shear * MathUtils.clamp(above / 3, 0, 1.5);
       let vx = pool.vel[o] * drag + nx * cfg.noise * dt;
-      let vy = pool.vel[o + 1] * drag + (cfg.rise - pool.grav[i] + ny * 0.3 * cfg.noise) * dt;
+      let vy = pool.vel[o + 1] * drag + (up - pool.grav[i] + ny * 0.3 * cfg.noise) * dt;
       let vz = pool.vel[o + 2] * drag + nz * cfg.noise * dt;
-      vx += (windX - vx) * windPull * (pool.grav[i] > 0 ? 0.2 : 1);
-      vz += (windZ - vz) * windPull * (pool.grav[i] > 0 ? 0.2 : 1);
+      vx += (windX * shear - vx) * windPull;
+      vz += (windZ * shear - vz) * windPull;
 
       px += vx * dt;
       py += vy * dt;
@@ -396,7 +417,7 @@ export function Smoke() {
       const tl = pool.age[i] / life;
       const grow = 1 - (1 - tl) * (1 - tl);
       const sz = pool.size0[i] + (pool.size1[i] - pool.size0[i]) * grow;
-      py = Math.max(py, ground + sz * 0.25); // keep most of the billboard above the asphalt (the shader fades the rest)
+      py = Math.max(py, pool.base[i] + sz * 0.25); // keep most of the billboard above the asphalt (the shader fades the rest)
 
       pool.pos[o] = px;
       pool.pos[o + 1] = py;
@@ -406,8 +427,8 @@ export function Smoke() {
       pool.vel[o + 2] = vz;
       pool.angle[i] += pool.spin[i] * dt;
       pool.size[i] = sz;
-      pool.alpha[i] =
-        pool.alpha0[i] * MathUtils.smoothstep(tl, 0, 0.1) * (1 - MathUtils.smoothstep(tl, 0.35, 1));
+      // in fast, then a long, slow thinning as it spreads
+      pool.alpha[i] = pool.alpha0[i] * MathUtils.smoothstep(tl, 0, 0.05) * (1 - MathUtils.smoothstep(tl, 0.4, 1));
       pool.depth[i] = (px - _cam.x) * _camDir.x + (py - _cam.y) * _camDir.y + (pz - _cam.z) * _camDir.z;
       pool.order[alive++] = i;
     }
@@ -422,6 +443,7 @@ export function Smoke() {
     const al = attrs.alpha.array as Float32Array;
     const an = attrs.angle.array as Float32Array;
     const sh = attrs.shade.array as Float32Array;
+    const gr = attrs.ground.array as Float32Array;
     for (let j = 0; j < alive; j++) {
       const i = order[j];
       c[j * 3] = pool.pos[i * 3];
@@ -431,6 +453,7 @@ export function Smoke() {
       al[j] = pool.alpha[i];
       an[j] = pool.angle[i];
       sh[j] = pool.shade[i];
+      gr[j] = pool.base[i];
     }
     for (const a of Object.values(attrs)) {
       a.clearUpdateRanges();
@@ -453,7 +476,6 @@ export function Smoke() {
     u.uNear.value = cam.near;
     u.uFar.value = cam.far;
     u.uSoft.value = cfg.soft;
-    u.uGroundY.value = ground;
     // the nearest street lamps
     lampOrder.length = 0;
     for (const h of lampHeads) lampOrder.push({ p: h, d: h.distanceToSquared(s.position) });

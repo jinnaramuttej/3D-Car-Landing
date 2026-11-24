@@ -23,7 +23,7 @@ export const ROBOWARS = {
     { value: "10K+", label: "Audience" },
   ],
   zonals: ["Mexico", "Tunisia", "Bangladesh"],
-  note: "Registration deadline listed as 8 November. Check status on Techfest.org.",
+  note: "Registration listed to 8 November, check status.",
 };
 
 export const COMPETITIONS = [
@@ -67,7 +67,7 @@ export const VOICES = {
       ["Bill Nelson", "Former Administrator of NASA"],
       ["Rakesh Sharma", "First Indian in Space"],
       ["Gaganyaan Astronauts", "Crew of India's first human spaceflight mission"],
-      ["S. Somnath", "Former Chairman of ISRO"],
+      ["S. Somanath", "Former Chairman of ISRO"],
     ],
   },
 };
@@ -80,6 +80,36 @@ export const EXPO = {
     { name: "Astrobee", from: "NASA", blurb: "A free-flying robot that helps astronauts and runs experiments aboard the ISS." },
     { name: "Proto Hologram", from: "Holographic display", blurb: "Life-sized holograms that let speakers appear remotely in a physical space." },
   ],
+};
+
+/** This year's exhibition (the TechExpo stop shows it with the exhibits above). */
+export const TECHEXPO = {
+  name: "TechExpo",
+  pavilion: "Ignite Pavilion",
+  line: "International and Indian exhibits, side by side.",
+};
+
+export const CATALYST = {
+  name: "Catalyst",
+  items: [
+    { label: "Campus modules", value: "Due 30 Nov 2026" },
+    { label: "National Leadership Summit & Pitch", value: "16–18 Dec, IIT Bombay" },
+    { label: "National seed fund", value: "₹1,00,000" },
+  ],
+};
+
+export const ALSO = {
+  heading: "Also at Techfest",
+  items: [
+    { name: "Keynote lectures and speaker sessions" },
+    { name: "Hands-on workshops", href: "https://techfest.org/workshops" },
+    { name: "Closing performance", where: "Convocation Hall" },
+  ],
+};
+
+export const CES2027 = {
+  name: "CES 2027",
+  line: "Official innovation partner of the Motwani Jadeja India Pavilion",
 };
 
 export const HEARTBEAT = {
@@ -141,7 +171,8 @@ export const UI = {
   },
   competitions: { kicker: 'Competitions', all: 'All', finale: 'Finale', hint: 'Filter. The billboard re-sorts.' },
   speakers: { kicker: 'Past speakers', hint: 'The categories turn over on their own. Pick one to hold it.' },
-  expo: { kicker: 'Expo', hint: 'Scroll to move along the exhibits.', details: 'Details', close: 'Close' },
+  expo: { kicker: 'TechExpo', past: 'Brought to campus before', hint: 'Scroll to move along the exhibits.', details: 'Details', close: 'Close' },
+  extras: { catalyst: 'Catalyst', also: 'Also at Techfest', ces: 'Partner', more: 'More on techfest.org', workshops: 'Workshops' },
   dkms: { timer: 'About how long the swab takes', start: 'Start three minutes', restart: 'Start again', done: 'Done. That was the whole swab.' },
   twmun: { kicker: 'Model United Nations', hint: 'Hover a card to flip it.' },
 };

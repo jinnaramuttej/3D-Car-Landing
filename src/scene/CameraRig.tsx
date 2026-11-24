@@ -10,6 +10,7 @@ import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { interaction } from '@/lib/interaction';
 import { stepCamera } from '@/lib/feel';
+import { clearCamera } from '@/lib/collide';
 import { layoutState, type Rect } from '@/lib/layout';
 import { carState, forwardOf, leftOf } from '@/lib/motion';
 import { pointer, trackPointer } from '@/lib/pointer';
@@ -163,6 +164,9 @@ export function CameraRig() {
     const t = state.clock.elapsedTime;
     stepCamera(dt);
     directShot(shot);
+    // the camera's collision sphere: never inside a wall, a pole or a barrier (pulled toward
+    // what it looks at until it is clear)
+    clearCamera(shot.pos, shot.look);
     updateBars(rawDt, state.size.width, state.size.height);
     applyCityShot(cam, shot, t);
     const rev = applyExtras(cam, parallax, dt, t, shot.id.startsWith('stop') ? 1 : 0.6, mobile);

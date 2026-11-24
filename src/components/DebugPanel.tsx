@@ -7,7 +7,10 @@ import { advance } from '@react-three/fiber';
 import { CONFIG, RANGES, type Config } from '@/lib/config';
 import { carState } from '@/lib/motion';
 import { chapterAnchor, CHAPTERS, IGNITION } from '@/lib/chapters';
-import { DRIFT, progressAtTime, progressAtZone, timeAtS, ZONES } from '@/lib/pacing';
+import { DRIFT, PARK_S, progressAtTime, progressAtZone, timeAtProgress, timeAtS, zoneAtS, ZONES, zoneProgress } from '@/lib/pacing';
+import { carContact, contactState } from '@/lib/cityDrive';
+import { cameraCollision } from '@/lib/collide';
+import { debugContact } from '@/scene/DebugContact';
 import { chapterState } from '@/lib/chapterRuntime';
 import { interaction } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
@@ -155,14 +158,45 @@ export function DebugPanel() {
       schedule: () => getSchedule().map((c) => ({ ...c, drift: +driftAt(c.s).toFixed(2) })),
     };
 
-    // HUD: chapter, camera rig (and the blend into it), route metres, speed, scroll vs screen
+    // HUD: chapter, camera rig (and the blend into it), route metre, journey time, zone and
+    // its progress, speed, the wheels' contact, what is inside the car's box, the camera sphere
     const id = window.setInterval(() => {
       if (!hud.current) return;
       const c = CHAPTERS[chapterState.chapter];
       const blend = director.blend < 1 ? ` (blend ${(director.blend * 100).toFixed(0)}%)` : '';
-      hud.current.textContent = `${c.numeral} ${c.title.toUpperCase()} ${(chapterState.chapterLocal * 100).toFixed(0)}% / ${cameraState.shotId}${blend}  route ${carState.s.toFixed(0)} m  ${(carState.speed * 3.6).toFixed(0)} km/h  slip ${carState.slip.toFixed(2)}   scroll ${useStore.getState().progress.toFixed(3)} screen ${chapterState.progress.toFixed(3)}`;
+      const z = zoneAtS(carState.s, 0);
+      const zone = z ? `${z.id} p ${zoneProgress(z, carState.s).toFixed(2)}` : '-';
+      const hits = carContact.hit.filter(Boolean).length;
+      const twist = Math.max(...carContact.residual.map(Math.abs)) * 100;
+      hud.current.textContent =
+        `${c.numeral} ${c.title.toUpperCase()} / ${cameraState.shotId}${blend}  s ${carState.s.toFixed(1)} m  t ${timeAtProgress(chapterState.progress).toFixed(1)} s  zone ${zone}  ${(carState.speed * 3.6).toFixed(0)} km/h` +
+        `  wheels ${contactState.ok ? hits : 0}/4 twist ${twist.toFixed(1)} cm  box ${debugContact.boxHits ? `HIT ${debugContact.boxHits}` : 'clear'}  cam ${cameraCollision.hit ? `HIT -${cameraCollision.pulled.toFixed(1)} m` : 'clear'}` +
+        `  scroll ${useStore.getState().progress.toFixed(3)} screen ${chapterState.progress.toFixed(3)}`;
     }, 100);
+    // jump to a route metre: /?debug&s=510, or [ and ] for -/+10 m (with Shift: 50 m), or __gt3r.goS(510)
+    const goS = (m: number) => jump(progressAtTime(timeAtS(Math.max(PARK_S, m))));
+    (w.__gt3r as Record<string, unknown>).goS = goS;
+    const qs = Number(new URLSearchParams(window.location.search).get('s'));
+    let pending = qs > 0;
+    const unready = useStore.subscribe((st) => {
+      if (pending && st.load === 'ready') {
+        pending = false;
+        goS(qs);
+      }
+    });
+    if (pending && useStore.getState().load === 'ready') {
+      pending = false;
+      goS(qs);
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '[' && e.key !== ']' && e.key !== '{' && e.key !== '}') return;
+      const step = (e.shiftKey ? 50 : 10) * (e.key === '[' || e.key === '{' ? -1 : 1);
+      goS(carState.s + step);
+    };
+    window.addEventListener('keydown', onKey);
     return () => {
+      unready();
+      window.removeEventListener('keydown', onKey);
       window.clearInterval(id);
       tween.current?.kill();
       delete w.__gt3r;

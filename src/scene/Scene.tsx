@@ -18,6 +18,7 @@ import { Bridge } from './city/Bridge';
 import { City } from './city/City';
 import { EdgeSeal } from './city/EdgeSeal';
 import { RouteDebug } from './city/RouteDebug';
+import { DebugContact } from './DebugContact';
 import { Sea } from './city/Sea';
 import { Steam } from './city/Steam';
 import { StreetLights } from './city/StreetLights';
@@ -165,6 +166,7 @@ export function Scene() {
         <Steam />
         <RouteDebug />
       </Suspense>
+      <DebugContact />
       <CameraRig />
       <Sound />
       <Interaction />

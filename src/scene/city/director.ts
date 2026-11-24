@@ -1,7 +1,7 @@
 import { MathUtils, PerspectiveCamera, Vector3 } from 'three';
 import { CHAPTERS, IGNITION } from '@/lib/chapters';
 import { chapterState } from '@/lib/chapterRuntime';
-import { DRIFT, nearestStop, PARK_S } from '@/lib/cityDrive';
+import { DRIFT, DRIFT2, nearestStop, PARK_S } from '@/lib/cityDrive';
 import { type ZoneId, zoneAtS, zoneById, zoneProgress, zoneSpan, ZONES } from '@/lib/pacing';
 import { getRoute, routeCurvature, sampleRoute, STOPS } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
@@ -96,8 +96,13 @@ function buildSchedule(): Cue[] {
     const a = zoneSpan(ZONES[k])[1] + 1;
     const b = k + 1 < ZONES.length ? zoneSpan(ZONES[k + 1])[0] - 8 : route.bridgeStart - 10;
     out.push({ s: a, rig: RUN_RIGS[k % RUN_RIGS.length], side: k % 2 ? -1 : 1 });
-    if (b - a > 70) out.push({ s: a + (b - a) / 2, rig: 'chase', side: k % 2 ? 1 : -1 });
+    const mid = a + (b - a) / 2;
+    if (b - a > 70 && (mid < DRIFT2.from - 30 || mid > DRIFT2.to + 30)) out.push({ s: mid, rig: 'chase', side: k % 2 ? 1 : -1 });
   }
+  // the U-turn from above: a camera trailing on the ground ends up on the other leg of the
+  // teardrop, looking through the island at the junction's corner; the drone rides over it
+  out.push({ s: DRIFT2.from - 16, rig: 'drone', side: 1 });
+  out.push({ s: DRIFT2.to + 14, rig: 'chase', side: -1 });
   // over the water: the drone shows the bridge and the sea, then a pan past the first pylon
   const pyl = bridgeInfo.pylons[0] ?? route.bridgeStart + 240;
   out.push({ s: route.bridgeStart + 30, rig: 'drone', side: 1 });

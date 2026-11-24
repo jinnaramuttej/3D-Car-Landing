@@ -89,6 +89,12 @@ class EngineAudio {
     if (!muted && !this.ready && !this.building) void this.build(ctx);
   }
 
+  /** The cold open: the starter turns over once in the dark (only if the sound is on). */
+  coldStart() {
+    if (this.muted || !this.ctx || !this.buffers.starter) return;
+    this.oneShot(this.buffers.starter, 0.45, 1.05);
+  }
+
   /** The key turns: the starter plays and the model catches. */
   ignite() {
     igniteModel();

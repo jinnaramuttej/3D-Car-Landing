@@ -9,6 +9,7 @@ import { useStore } from '@/lib/store';
 import { useScrollTimeline } from '@/lib/useScrollTimeline';
 import { Scene } from '@/scene/Scene';
 import { Warmup } from '@/scene/Warmup';
+import { ColdOpen } from './ColdOpen';
 import { DebugPanel } from './DebugPanel';
 import { Extras } from './Extras';
 import { Loader } from './Loader';
@@ -94,6 +95,7 @@ export default function Experience() {
       <RouteHud />
       <div ref={trackRef} className="scroll-track" style={{ height: `${PAGES * 100}vh` }} />
 
+      <ColdOpen />
       <Loader />
       <Leva hidden={!debug} collapsed={false} titleBar={{ title: 'GT3 R tuning' }} />
       {debug && <DebugPanel />}

@@ -33,6 +33,8 @@ import { chapterState } from '@/lib/chapterRuntime';
 import { feel, stepBody } from '@/lib/feel';
 import { interaction } from '@/lib/interaction';
 import { createGlowTexture } from '@/lib/textures';
+import { COLD, coldHeadlights, coldOpen, coldTailLights, stepColdOpen } from '@/lib/coldOpen';
+import { engine } from '@/lib/engineAudio';
 import { carState } from '@/lib/motion';
 import { useStore } from '@/lib/store';
 import {
@@ -469,6 +471,19 @@ export function Car() {
       ui.headlights === 'off' ? 0 : ui.headlights === 'on' ? Math.max(1, chapterState.look.headlights) : chapterState.look.headlights * ign * flicker;
     lights.level = ign > 0 && ign < 1 && ui.headlights === 'auto' ? target : MathUtils.damp(lights.level, target, 18, dt);
     lights.tail = MathUtils.damp(lights.tail, Math.max(ign, ui.headlights === 'on' ? 1 : 0), 18, dt);
+    // the cold open (src/lib/coldOpen.ts): the engine wakes in the dark, the lights come up
+    // and then ease back to the parked car's
+    stepColdOpen(dt);
+    if (coldOpen.t >= COLD.wake && !coldOpen.woke) {
+      coldOpen.woke = true;
+      feel.pop = 1;
+      feel.trauma = Math.min(1, feel.trauma + 0.35);
+      engine.coldStart();
+    }
+    const coldHead = coldHeadlights();
+    if (coldHead >= 0 && ui.headlights === 'auto') lights.level = Math.max(lights.level, coldHead);
+    const coldTail = coldTailLights();
+    if (coldTail >= 0) lights.tail = Math.max(lights.tail, coldTail);
     const hl = lights.level;
     const brake = (1 + c.brakeBoost * s.brake) * lights.tail;
     for (const h of rig.head) h.mat.emissiveIntensity = c.headlightEmissive * h.factor * hl;

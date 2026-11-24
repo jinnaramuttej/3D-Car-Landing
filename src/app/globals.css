@@ -1616,6 +1616,23 @@ li:last-child .mm-track {
   background: #04050a;
   transition: opacity 1.2s ease, visibility 1.2s;
 }
+/* the cold open (ColdOpen.tsx): black under the fading loader while the engine wakes; the
+   chapter card, the hints and the controls come in once it lifts */
+.cold-open {
+  position: fixed;
+  inset: 0;
+  z-index: 59;
+  background: #000;
+  pointer-events: none;
+}
+.is-cold .cards,
+.is-cold .hints,
+.is-cold .navbar,
+.is-cold .minimap,
+.is-cold .route-hud {
+  opacity: 0 !important;
+}
+
 .loader.is-done {
   opacity: 0;
   visibility: hidden;

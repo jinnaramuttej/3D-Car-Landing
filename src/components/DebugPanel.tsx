@@ -12,6 +12,7 @@ import { interaction } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
 import { cameraState } from '@/scene/CameraRig';
 import { engine } from '@/lib/engineAudio';
+import { coldOpen } from '@/lib/coldOpen';
 import { feel } from '@/lib/feel';
 import { powertrain } from '@/lib/powertrain';
 import { reflectionUniforms } from '@/scene/city/cityReflection';
@@ -146,6 +147,7 @@ export function DebugPanel() {
       smokeLayer,
       powertrain,
       feel,
+      coldOpen,
       warmup,
       // where the director's scheduled rigs start, with the slide at each (none above ~0.3)
       schedule: () => getSchedule().map((c) => ({ ...c, drift: +driftAt(c.s).toFixed(2) })),

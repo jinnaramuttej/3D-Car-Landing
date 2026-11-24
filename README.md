@@ -204,8 +204,12 @@ There is no music track: the brief allowed an optional one from a free source, a
 | 01 The Arena | 10.3 / 14.0 / 20.9 | 1.8% | 8.3 / 12.5 | 9.5 / 13.8 |
 | 02 The Pit Lane | 10.2 / 14.0 / 20.9 | 1.9% | 8.0 / 12.1 | 9.5 / 12.8 |
 | 03 Catalyst | 10.3 / 14.0 / 20.9 | 2.8% | 8.2 / 12.7 | 9.6 / 13.3 |
+| 04 Workshops & TWMUN (the U-turn on the way) | 11.1 / 14.1 / 21.0 | 4.2% | 9.1 / 13.7 | 10.2 / 14.5 |
+| 05 The Stage | 11.1 / 14.1 / 20.9 | 3.2% | 9.0 / 13.1 | 10.1 / 14.1 |
+| 06 The Heartbeat | 10.4 / 14.0 / 20.9 | 1.8% | 8.2 / 11.9 | 9.4 / 13.5 |
+| Fin Finale | 9.0 / 14.0 / 20.9 | 1.8% | 6.8 / 11.0 | 8.1 / 12.6 |
 
-The rest of the journey (from 85 s: Workshops & TWMUN, the Stage, the Heartbeat, the finale) wasn't measured this way: the app's window lost focus at that point and the browser throttled the page to 2 frames a second. Stepping frames by hand back to back (no display pacing) roughly doubles both timers and is only good for comparing chapters; there the Workshops & TWMUN and Stage zones came out about twice as heavy as the Catalyst and Heartbeat zones. With a fence between hand-stepped frames the GPU time matches real time (9.2 ms median over the intro and the Arena).
+(Two runs: the intro to Catalyst, then Catalyst to the end after the window had lost focus part-way through the first; both with the page focused throughout.) The heaviest stretch is the Workshops & TWMUN slow zone: frame interval 11.6 / 20.8 / 27.8 ms and 6.2% of frames over 16.7 ms, with the CPU's 95th percentile at 14.5 ms; the run with the U-turn before it is 3.4%. Stepping frames by hand back to back (no display pacing) roughly doubles both timers; with a fence between hand-stepped frames the GPU time matches real time (9.2 ms median over the intro and the Arena).
 
  `/?debug&dpr=1.5`, 1897 x 1080, the debug overlay on, another session rendering on the same machine): CPU time per frame at rest at each stop, mean / 95th percentile: the Arena 10.7 / 14.3 ms, the Pit Lane 10.5 / 15.5, Catalyst 10.5 / 15.2, Workshops & TWMUN 14.6 / 23.6, the Stage 13.7 / 19.4, the Heartbeat 13.0 / 16.5, the bridge approach 11.6 / 14.8. Driving the whole journey at the playhead's limit, the chapters average 9.7-15.1 ms with 95th percentiles of 15-23 ms. Draw calls per frame (every pass: the scene, the reflection, the post chain) run 250-430 at the stops, with 100-180 of the city's 273 meshes hidden in the fog. `gl.finish()` turned out not to wait for the GPU here, so these and the older numbers below are CPU-side; the GPU's own time wasn't measured.
 

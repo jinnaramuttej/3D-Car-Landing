@@ -151,7 +151,7 @@ Every lens stays within 24-40 degrees (a wider ask moves the camera back), and n
 Nothing covers the car. The 3D frame publishes the car's and the billboard's screen rectangles every frame (`src/lib/layout.ts`), and the DOM places things round them (`Overlay.tsx`, `Stops.tsx`):
 
 - **One title at a time**, small, in whichever slot (top-left, top-right, upper-centre, lower-left) keeps it off the car, the billboard and the stop's panel. It fades at speed, and at a stop it waits until the camera has settled. Its words rise out of masks as it arrives, with a little depth parallax on the pointer.
-- **Stop panels** follow their slow zone (in at 0.1, the details from 0.3 to 0.7, gone by 0.85) and take the side that keeps the car clear; once the camera has settled on the stop the title keeps off them too, and the competitions strip opens only at the stop. Panels over the canvas are solid and semi-transparent (no backdrop blur, which would re-read and blur the WebGL frame under every panel each frame).
+- **Stop panels** follow their slow zone (in at 0.1, the details from 0.3 to 0.7, gone by 0.85), wait for the camera to settle on the stop (after a mini-map jump the camera is often still swinging round as the zone starts), and take the side that keeps the car clear; the title keeps off them, and the competitions strip opens only at the stop. Panels over the canvas are solid and semi-transparent (no backdrop blur, which would re-read and blur the WebGL frame under every panel each frame).
 - A thin **route HUD** in the corner (distance along the route, speed, a tick per stop).
 
 ## Smoke

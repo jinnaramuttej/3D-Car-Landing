@@ -169,6 +169,10 @@ export function Overlay() {
         <a href={credits.model.href} target="_blank" rel="noreferrer">
           {credits.model.text}
         </a>
+        {' · '}
+        <a href={credits.city.href} target="_blank" rel="noreferrer">
+          {credits.city.text}
+        </a>
       </p>
     </div>
   );

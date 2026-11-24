@@ -160,5 +160,9 @@ export const COMMITTEE_NAMES: Record<string, string> = {
 
 export const credits = {
   model: { text: 'Porsche 992 GT3 R model by MattDoesBlender, CC BY-NC-SA 4.0', href: 'https://sketchfab.com/3d-models/porsche-992-gt3-r-03ea07f7972648aa9350853b2a1a942a' },
+  city: {
+    text: '"city" by golukumar (mortalityrexotable), CC BY 4.0, modified (merged, scaled, compressed)',
+    href: 'https://sketchfab.com/3d-models/city-2e358ed084524a8f963c146a19637815',
+  },
   hdri: { text: 'Night HDRI "Shanghai Bund" from Poly Haven, CC0', href: 'https://polyhaven.com/a/shanghai_bund' },
 };

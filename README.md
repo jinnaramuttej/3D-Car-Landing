@@ -140,4 +140,5 @@ Note: the smoke is time-based. Jumping straight into a shot shows the car with l
 ## Credits
 
 - "Porsche 992 GT3 R" by MattDoesBlender on Sketchfab, licensed **CC BY-NC-SA 4.0** (attribution required, non-commercial, share-alike). The credit line is in the page footer.
-- Night HDRI: "Shanghai Bund" from Poly Haven (CC0), standing in for a Mumbai seafront.
+- "city" by golukumar (mortalityrexotable) on Sketchfab, licensed **CC BY 4.0**: https://sketchfab.com/3d-models/city-2e358ed084524a8f963c146a19637815. Modified: merged by material into tiles, scaled (a lane is 3.5 m), compressed (meshopt geometry, WebP textures), and five textures replaced with generated ones (an LED palm atlas, an LED tree card and three shop-sign panels in place of ad posters). Rebuilt by `scripts/optimize-city.mjs`. The credit line is in the page footer.
+- Night HDRI: "Shanghai Bund" from Poly Haven (CC0), used for reflections.

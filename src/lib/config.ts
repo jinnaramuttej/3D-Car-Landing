@@ -124,10 +124,11 @@ export const CONFIG = {
 
   /** Rain: streaks around the camera, splashes around the car, haze in the headlight beams. */
   rain: {
-    count: 9000, // (mount) streaks in the box around the camera
+    count: 6300, // (mount) streaks in the box around the camera
     splashCount: 700, // (mount)
     mobileScale: 0.3, // (mount) phones get this fraction of streaks and splashes
     intensity: 1, // 0 = dry
+    streakOpacity: 0.7, // how strongly each streak shows (the chapters set how hard it rains)
     fallSpeed: 9, // m/s
     windX: 2.4, // m/s, slants the streaks
     windZ: 0.9,
@@ -179,6 +180,7 @@ export const CONFIG = {
     reflection: 1, // wet-street reflection strength (desktop)
     reflectionScale: 0.5, // (mount-ish) reflection resolution, fraction of the canvas width
     lampLight: 260, // each of the real sodium lights that follow the camera
+    lampShafts: 0.14, // the cone of light under each lamp, in the rain
     billboardGlow: 2.2, // LED billboard brightness (blooms above ~1)
     billboardLight: 420, // the light the active billboard spills on the street
     heartbeatBpm: 56, // the DKMS billboard's slow pulse
@@ -196,7 +198,7 @@ export const CONFIG = {
     anamorphicThreshold: 2.2, // HDR level where the streaks start
     anamorphicLength: 1,
     anamorphicTint: '#7fb0ff',
-    grade: 1, // teal/orange LUT strength
+    grade: 0.55, // teal/orange LUT strength (restrained)
     grain: 0.35, // film grain, strongest in the midtones
     lensDrops: 0.75, // rain drops on the lens (scaled by rain.intensity)
     lensDropRefract: 0.035,
@@ -205,13 +207,13 @@ export const CONFIG = {
 
   look: {
     background: '#04050a',
-    bloomIntensity: 1.1,
+    bloomIntensity: 0.95,
     bloomThreshold: 0.9,
     bloomSmoothing: 0.25,
-    chromaticOffset: 0.0009,
+    chromaticOffset: 0.0006,
     chromaticShake: 0.0025, // extra aberration at shake peak
     vignetteOffset: 0.28,
-    vignetteDarkness: 0.78,
+    vignetteDarkness: 0.64,
     reflection: 25, // MeshReflectorMaterial mixStrength: how wet the asphalt looks
     reflectionBlur: 1, // mixBlur: how much rough patches smear the reflection
     lampEmissive: 6,
@@ -298,6 +300,7 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
   skid: { opacity: [0, 1, 0.01], width: [0.05, 0.8, 0.01], minSlip: [0, 1, 0.01] },
   rain: {
     intensity: [0, 2, 0.01],
+    streakOpacity: [0, 2, 0.01],
     fallSpeed: [1, 20, 0.1],
     windX: [-8, 8, 0.1],
     windZ: [-8, 8, 0.1],
@@ -330,6 +333,7 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     reflection: [0, 3, 0.01],
     reflectionScale: [0.2, 1, 0.05],
     lampLight: [0, 1500, 5],
+    lampShafts: [0, 0.5, 0.005],
     billboardGlow: [0, 8, 0.05],
     billboardLight: [0, 3000, 10],
     heartbeatBpm: [30, 120, 1],

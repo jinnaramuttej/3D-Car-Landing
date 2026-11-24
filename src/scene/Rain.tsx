@@ -436,7 +436,7 @@ export function Rain() {
     u.uLength.value = c.streakLength;
     u.uWidth.value = c.streakWidth;
     u.uPixel.value = (2 * Math.tan(MathUtils.degToRad(camera.fov) / 2)) / Math.max(1, size.height);
-    u.uIntensity.value = level;
+    u.uIntensity.value = level * CONFIG.rain.streakOpacity;
     u.uJitter.value = rev * 0.035;
     (u.uNearFade.value as Vector2).set(c.nearFade, c.nearFade * 4);
     streakMesh.current.visible = on;

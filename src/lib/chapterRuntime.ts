@@ -26,7 +26,6 @@ const NUM_KEYS = [
   'groundEnv',
   'seaEnv',
   'bloom',
-  'haze',
 ] as const;
 const COLOR_KEYS = ['fogColor', 'skyTop', 'skyHorizon', 'skyGlow', 'sun', 'hemiSky', 'hemiGround'] as const;
 

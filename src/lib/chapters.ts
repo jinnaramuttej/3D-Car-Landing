@@ -66,8 +66,6 @@ export type Env = {
   groundEnv: number;
   seaEnv: number;
   bloom: number;
-  /** Low haze in the streets, 0..1 (aerial perspective on top of the fog). */
-  haze: number;
 };
 
 /** Per-chapter effects (eased). */
@@ -127,15 +125,14 @@ const CITY: Env = {
   groundEnv: 0.05,
   seaEnv: 0.25,
   bloom: 1.05,
-  haze: 0.6,
 };
 
 /** I: a dark street, the engine off; a little more mist, a little less light. */
-const STILL: Env = { ...CITY, rain: 0.75, fog: 0.0125, exposure: 0.88, env: 0.45, bloom: 0.95, haze: 0.8 };
+const STILL: Env = { ...CITY, rain: 0.75, fog: 0.0125, exposure: 0.88, env: 0.45, bloom: 0.95 };
 /** III: the rain comes down harder for the drift. */
-const STORM: Env = { ...CITY, rain: 1, fog: 0.011, fogColor: '#16121a', bloom: 1.1, haze: 0.7 };
+const STORM: Env = { ...CITY, rain: 1, fog: 0.011, fogColor: '#16121a', bloom: 1.1 };
 /** IV: the rain eases, the smoke hangs. */
-const WAKE: Env = { ...CITY, rain: 0.6, fog: 0.0115, haze: 0.75 };
+const WAKE: Env = { ...CITY, rain: 0.6, fog: 0.0115 };
 
 /** Small shifts per stop, so each block of the city has its own air. */
 const ROBOWARS_AIR: Env = { ...CITY, fogColor: '#1c1009', skyGlow: '#7a3a12', bloom: 1.15 };
@@ -170,7 +167,6 @@ const DAWN: Env = {
   groundEnv: 0.22,
   seaEnv: 0.95,
   bloom: 0.55,
-  haze: 0.35,
 };
 
 /* ---------------------------------------------------------------- chapters */

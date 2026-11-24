@@ -46,6 +46,7 @@ export function City() {
   const mobile = useMemo(() => isMobile(), []);
   const mats = useRef<{ mat: import('three').MeshStandardMaterial; kind: CityKind }[]>([]);
   const envMap = useRef<Texture | null>(null);
+  const frames = useRef(0);
   useCityLayer(group);
 
   useLayoutEffect(() => {
@@ -95,7 +96,11 @@ export function City() {
     }
     const overSea = carState.s > getRoute().bridgeStart + 50;
     const planeY = overSea ? CITY_ORIGIN.y + SEA_LEVEL : carState.position.y - 0.02;
-    renderReflection(gl, scene, state.camera as PerspectiveCamera, planeY, c.reflectionScale, 420);
+    // (every other frame: the texture keeps the matrix of the view it was drawn from, so a
+    // frame-old reflection still lands in the right place, half the cost)
+    if (++frames.current % Math.max(1, Math.round(c.reflectionEvery)) === 0) {
+      renderReflection(gl, scene, state.camera as PerspectiveCamera, planeY, c.reflectionScale, c.reflectionFar);
+    }
   }, -0.5);
 
   return (

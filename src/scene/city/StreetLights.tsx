@@ -74,7 +74,7 @@ type Lamp = { base: Vector3; head: Vector3; yaw: number; road: number };
  */
 export function StreetLights() {
   const mobile = useMemo(() => isMobile(), []);
-  const count = mobile ? 2 : 6;
+  const count = mobile ? 2 : 3;
   const group = useRef<Group>(null!);
   useCityLayer(group);
   const poles = useRef<InstancedMesh>(null!);

@@ -23,7 +23,6 @@ import {
   type MeshPhysicalMaterial,
   type MeshStandardMaterial,
   Object3D,
-  type PointLight,
   type SpotLight,
   type Texture,
   Vector3,
@@ -33,6 +32,7 @@ import { isMobile } from '@/lib/device';
 import { chapterState } from '@/lib/chapterRuntime';
 import { feel, stepBody } from '@/lib/feel';
 import { interaction } from '@/lib/interaction';
+import { createGlowTexture } from '@/lib/textures';
 import { carState } from '@/lib/motion';
 import { useStore } from '@/lib/store';
 import {
@@ -389,7 +389,26 @@ export function Car() {
   const body = useRef<Group>(null!);
   const beamL = useRef<SpotLight>(null!);
   const beamR = useRef<SpotLight>(null!);
-  const tailGlow = useRef<PointLight>(null!);
+  // the red glow the tail lights throw on the road: a soft additive pool, not a light (the
+  // scene keeps six real lights: the two beams, three street lamps, the billboard spill)
+  const tailGlow = useMemo(
+    () =>
+      new MeshBasicMaterial({
+        map: createGlowTexture(),
+        color: '#ff1a1a',
+        transparent: true,
+        opacity: 0,
+        blending: AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    [],
+  );
+  const tailPool = useRef<Mesh>(null!);
+  useLayoutEffect(() => {
+    // (layer 1, with the street lamps' pools: out of the car's contact-shadow pass)
+    tailPool.current.layers.set(1);
+  }, []);
   const beamTargets = useMemo(() => [new Object3D(), new Object3D()] as const, []);
   const pop = useRef<Sprite>(null!);
   const popMat = useMemo(() => popMaterial(), []);
@@ -501,7 +520,7 @@ export function Car() {
     const inBeam = MathUtils.smoothstep(ahead, 0.35, 0.85) * (1 - MathUtils.smoothstep(camDist, 12, 32));
     beamL.current.intensity = beamR.current.intensity = c.headBeam * hl * (1 - 0.8 * inBeam);
     beamL.current.angle = beamR.current.angle = c.headBeamAngle;
-    tailGlow.current.intensity = c.tailGlow * brake + feel.pop * CONFIG.feel.popFlash * 0.6;
+    tailGlow.opacity = Math.min(1, c.tailGlow * 0.12 * brake + feel.pop * CONFIG.feel.popFlash * 0.02);
 
     // Publish world-space contact patches for smoke + skid marks
     g.updateMatrixWorld();
@@ -540,10 +559,12 @@ export function Car() {
         />
         <primitive object={beamTargets[0]} position={[1.4, 0, 24]} />
         <primitive object={beamTargets[1]} position={[-1.4, 0, 24]} />
-        <pointLight ref={tailGlow} position={[0, 0.4, -3.1]} color="#ff1a1a" distance={7} decay={2} />
         <sprite ref={pop} material={popMat} position={PIPES_AT} renderOrder={4} />
       </group>
       <primitive object={rig.wheels} />
+      <mesh ref={tailPool} material={tailGlow} position={[0, rig.groundOffset + 0.03, -3.3]} rotation-x={-Math.PI / 2} renderOrder={1}>
+        <planeGeometry args={[4.2, 4.6]} />
+      </mesh>
       {/* Contact shadows ride with the car (re-rendered every frame) */}
       <ContactShadows
         position={[0, rig.groundOffset + 0.01, 0]}

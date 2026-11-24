@@ -55,7 +55,7 @@ export const CONFIG = {
     brakeBoost: 1.6, // tail lights brighten by this factor at full slip or under braking
     headBeam: 110, // spot light intensity of each headlight
     headBeamAngle: 0.5,
-    tailGlow: 1.2, // red point light behind the car
+    tailGlow: 1.2, // the red glow the tail lights throw on the road behind the car
     paintEnv: 0.85, // envMapIntensity on the bodywork (absolute, not scaled by the chapter's env level)
     paintRoughness: 0.25,
     paintMetalness: 0.6,
@@ -205,6 +205,8 @@ export const CONFIG = {
     puddles: 1, // puddle coverage on the wet roads
     reflection: 1, // wet-street reflection strength (desktop)
     reflectionScale: 0.5, // (mount-ish) reflection resolution, fraction of the canvas width
+    reflectionEvery: 2, // redraw the reflection every n frames
+    reflectionFar: 420, // metres the reflection reaches
     lampLight: 260, // each of the real sodium lights that follow the camera
     lampShafts: 0.14, // the cone of light under each lamp, in the rain
     specCap: 3, // most a light's specular peak may add on the city (wet-road glare)
@@ -215,6 +217,7 @@ export const CONFIG = {
 
   /** Post chain (src/scene/Effects.tsx). Mobile skips DOF, motion blur, streaks and lens drops. */
   post: {
+    msaa: 4, // (mount) multisample anti-aliasing samples on desktop (0, 2, 4, 8)
     focusOnCar: true, // during the drift, keep the car in focus even when the shot looks past it
     motionBlur: 0.45, // share of each frame's motion that gets smeared (0.5 ~ 180 degree shutter)
     motionBlurMax: 0.025, // longest smear, in screen heights
@@ -379,6 +382,8 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     puddles: [0, 1.5, 0.01],
     reflection: [0, 3, 0.01],
     reflectionScale: [0.2, 1, 0.05],
+    reflectionEvery: [1, 4, 1],
+    reflectionFar: [60, 800, 10],
     lampLight: [0, 1500, 5],
     lampShafts: [0, 0.5, 0.005],
     specCap: [0.2, 40, 0.1],
@@ -399,6 +404,7 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     liveryTime: [0.05, 3, 0.05],
   },
   post: {
+    msaa: [0, 8, 2],
     motionBlur: [0, 1.5, 0.01],
     motionBlurMax: [0, 0.1, 0.001],
     streaks: [0, 2, 0.01],

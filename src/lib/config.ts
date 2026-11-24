@@ -142,7 +142,7 @@ export const CONFIG = {
     minSlip: 0.15,
   },
 
-  /** Rainy Mumbai seafront: sea wall on the road's left, city on the right. */
+  /** Rainy waterfront (chapters I-IV): sea wall on the road's left, city on the right. */
   coast: {
     seaWallOffset: 11.5, // (mount) metres from the centre line to the sea wall (sea side = left)
     seaLevel: -1.4, // (mount)
@@ -196,16 +196,14 @@ export const CONFIG = {
     liveryTime: 0.6, // seconds to change livery
   },
 
-  /** Chapters VI-XI (src/scene/districts). */
-  districts: {
-    transitionFog: 0.013, // fog density halfway through a move between districts (morning mist)
-    transitionFogColor: '#5f5c5a',
-    sparks: 140, // spark particles per click in the arena (halved on mobile)
-    robotSpin: 22, // rad/s on the robot's spinner
-    globeSpin: 0.08, // rad/s, the Hall of Voices globe
-    hologram: 1, // hologram brightness in the expo
-    heartbeatBpm: 56,
-    heartbeatLight: 1, // how much the warm light swells on each beat
+  /** Chapters V on: the drive through the city and over the bridge (src/scene/city). */
+  city: {
+    cloudFog: 0.085, // fog density at the thickest point of the climb into the city
+    cloudColor: '#4c4f58',
+    driftYawDeg: 30, // drift angle at full slide in the city corners
+    driftFrom: 7, // lateral acceleration (m/s^2, at a steady scroll) where a corner starts to slide
+    driftFull: 16, // ... and where it is fully sideways
+    showRoute: false, // draw the route, its waypoints and the stops (debug)
   },
 
   /** Post chain (src/scene/Effects.tsx). Mobile skips DOF, motion blur, streaks and lens drops. */
@@ -376,14 +374,11 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     beamOpacity: [0, 0.5, 0.005],
     beamLength: [2, 40, 0.5],
   },
-  districts: {
-    transitionFog: [0, 0.06, 0.001],
-    sparks: [0, 400, 1],
-    robotSpin: [0, 60, 0.5],
-    globeSpin: [0, 1, 0.01],
-    hologram: [0, 3, 0.01],
-    heartbeatBpm: [30, 120, 1],
-    heartbeatLight: [0, 3, 0.01],
+  city: {
+    cloudFog: [0, 0.2, 0.001],
+    driftYawDeg: [0, 50, 0.5],
+    driftFrom: [0, 40, 0.5],
+    driftFull: [1, 60, 0.5],
   },
   interaction: {
     revRise: [0.01, 1, 0.01],

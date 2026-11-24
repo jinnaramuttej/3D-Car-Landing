@@ -164,7 +164,7 @@ vec3 splashCenter(out float phase, out float alive) {
   float sh = sin(uCarHeading);
   vec2 l = vec2(d.x * ch - d.z * sh, d.x * sh + d.z * ch);
   alive = 1.0 - step(abs(l.x), 1.12) * step(abs(l.y), 2.45);
-  return vec3(c.x, 0.0, c.z);
+  return vec3(c.x, uCenter.y, c.z);
 }
 `;
 

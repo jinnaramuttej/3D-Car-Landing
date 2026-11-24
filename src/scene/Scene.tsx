@@ -1,27 +1,23 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Environment, Lightformer } from '@react-three/drei';
 import * as THREE from 'three';
 import { Color, type DirectionalLight, FogExp2, type HemisphereLight, type Texture, Vector3 } from 'three';
-import { chapterById } from '@/lib/chapters';
+import { chapterById, type Env } from '@/lib/chapters';
 import { chapterState, stepChapters, sunDirection } from '@/lib/chapterRuntime';
+import { stepCityDrive } from '@/lib/cityDrive';
 import { CONFIG } from '@/lib/config';
 import { carState, stepDrive } from '@/lib/motion';
 import { useStore } from '@/lib/store';
 import { Car } from './Car';
 import { CameraRig } from './CameraRig';
 import { ChapterProps } from './ChapterProps';
+import { City } from './city/City';
+import { RouteDebug } from './city/RouteDebug';
 import { Cityscape } from './Cityscape';
-import { createDayEnvironment, createHallEnvironment } from './dayEnvironment';
-import { Arena } from './districts/Arena';
-import { Chamber } from './districts/Chamber';
-import { Expo } from './districts/Expo';
-import { Heartbeat } from './districts/Heartbeat';
-import { PitLane } from './districts/PitLane';
-import { DistrictLights } from './districts/shared';
-import { Voices } from './districts/Voices';
+import { createDayEnvironment } from './dayEnvironment';
 import { Effects } from './Effects';
 import { Interaction } from './Interaction';
 import { Rain } from './Rain';
@@ -29,7 +25,7 @@ import { SkidMarks } from './SkidMarks';
 import { Smoke } from './Smoke';
 import { Track } from './Track';
 
-/** Night waterfront street (Shanghai Bund, Poly Haven, CC0): the closest free stand-in for a Mumbai seafront. */
+/** Night waterfront street (Shanghai Bund, Poly Haven, CC0), for reflections. */
 export const NIGHT_HDRI = '/hdri/shanghai_bund_1k.hdr';
 
 const _sun = new Vector3();
@@ -40,7 +36,7 @@ const _sun = new Vector3();
  *   -3  Scene      global progress -> chapterState (stepChapters), then the car's
  *                  kinematics (stepDrive), then the chapter's light, fog and env map
  *   -2  Car        applies carState, publishes wheel contacts and headlight beams
- *   -1  Smoke, Rain, SkidMarks, ChapterProps, the district sets, CameraRig, Interaction
+ *   -1  Smoke, Rain, SkidMarks, ChapterProps, the city, CameraRig, Interaction
  */
 export function Scene() {
   const camera = useThree((s) => s.camera);
@@ -50,7 +46,7 @@ export function Scene() {
   const fog = useMemo(() => new FogExp2('#0c1016', 0.009), []);
   const sun = useRef<DirectionalLight>(null!);
   const hemi = useRef<HemisphereLight>(null!);
-  const envs = useRef<{ night: Texture | null; day: Texture | null; hall: Texture | null }>({ night: null, day: null, hall: null });
+  const envs = useRef<{ night: Texture | null; day: Texture | null }>({ night: null, day: null });
   const sunTarget = useMemo(() => new THREE.Object3D(), []);
 
   useLayoutEffect(() => {
@@ -63,17 +59,14 @@ export function Scene() {
   }, [sunTarget]);
 
   useEffect(() => {
-    // daylight environment for chapters IV-V, generated once
-    const morning = chapterById('arrival').env;
-    const day = createDayEnvironment(gl, morning, sunDirection(morning.sunAzimuth, morning.sunElevation, new Vector3()));
-    const hall = createHallEnvironment(gl);
+    // the dawn over the sea (finale), generated once
+    const fin = chapterById('finale');
+    const dawn = { ...fin.env, ...fin.envEnd } as Env;
+    const day = createDayEnvironment(gl, dawn, sunDirection(dawn.sunAzimuth, dawn.sunElevation, new Vector3(), 'city'));
     envs.current.day = day;
-    envs.current.hall = hall;
     return () => {
       day.dispose();
-      hall.dispose();
       envs.current.day = null;
-      envs.current.hall = null;
     };
   }, [gl]);
 
@@ -96,19 +89,20 @@ export function Scene() {
     const dt = Math.min(rawDt, 1 / 20);
     const raw = useStore.getState().progress;
     stepChapters(raw, dt, state.camera.position);
-    if (chapterState.jumped) carState.initialized = false; // land exactly where the jump goes
-    stepDrive(chapterState.driftRaw, dt, chapterState.extraS, chapterState.burnout);
+    // land exactly where a jump (or the other stage) puts the car
+    if (chapterState.jumped || chapterState.stageChanged) carState.initialized = false;
+    if (chapterState.stage === 'city') stepCityDrive(chapterState.progress, dt, chapterState.jumped);
+    else stepDrive(chapterState.driftRaw, dt, chapterState.extraS);
 
     const e = chapterState.env;
     background.set(CONFIG.look.background);
     fog.color.copy(e.fogColor);
     fog.density = e.fog;
 
-    // night HDRI (drei sets it) until chapter IV, then the generated daylight sky; inside
-    // the district halls a dark room (switched halfway through the move, under the fog)
+    // night HDRI (drei sets it), the generated dawn sky once the sun is up on the bridge
     const E = envs.current;
-    if (!E.night && scene.environment && scene.environment !== E.day && scene.environment !== E.hall) E.night = scene.environment;
-    const want = e.enclosed > 0.5 && E.hall ? E.hall : e.day > 0.5 && E.day ? E.day : E.night;
+    if (!E.night && scene.environment && scene.environment !== E.day) E.night = scene.environment;
+    const want = e.day > 0.5 && E.day ? E.day : E.night;
     if (want && scene.environment !== want) scene.environment = want;
     scene.environmentIntensity = e.env;
 
@@ -150,14 +144,11 @@ export function Scene() {
       <Smoke />
       <Rain />
       <ChapterProps />
-      {/* chapters VI-XI: sets out over the water (src/scene/districts) */}
-      <Arena />
-      <PitLane />
-      <Voices />
-      <Expo />
-      <Heartbeat />
-      <Chamber />
-      <DistrictLights />
+      {/* chapters V on: the city, the sea and the bridge (src/scene/city) */}
+      <Suspense fallback={null}>
+        <City />
+        <RouteDebug />
+      </Suspense>
       <CameraRig />
       <Interaction />
       <Effects />

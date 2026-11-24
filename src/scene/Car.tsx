@@ -312,8 +312,9 @@ export function Car() {
     const dt = Math.min(rawDt, 1 / 20);
     const ui = useStore.getState();
 
-    g.position.set(s.position.x, -rig.groundOffset, s.position.z);
-    g.rotation.y = s.heading;
+    // road height and slope come from the route in the city (0 and flat on the waterfront)
+    g.position.set(s.position.x, s.position.y - rig.groundOffset, s.position.z);
+    g.rotation.set(-s.pitch, s.heading, 0, 'YXZ');
 
     // Body only: roll + a little buzz while the rears are lit up, the engine idles or revs.
     const idle = chapterState.engineOn ? 0.0015 : 0;
@@ -332,7 +333,7 @@ export function Car() {
       }
     }
 
-    // Headlights: the beat's level (finale flare etc.) times the ignition, unless the
+    // Headlights: the beat's level times the ignition, unless the
     // visitor forced them on or off. A cold start flickers before it settles.
     const ign = chapterState.ignition;
     const flicker = ign > 0 && ign < 1 ? 0.55 + 0.45 * Math.sign(Math.sin(t * 61) + Math.sin(t * 23.3) + 0.6) : 1;

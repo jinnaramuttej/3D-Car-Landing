@@ -9,10 +9,11 @@ import { SHOTS } from '@/lib/script';
 import { useScrollTimeline } from '@/lib/useScrollTimeline';
 import { Scene } from '@/scene/Scene';
 import { DebugPanel } from './DebugPanel';
-import { Districts } from './Districts';
+
 import { MiniMap } from './MiniMap';
 import { Navbar } from './Navbar';
 import { Overlay } from './Overlay';
+import { Stops } from './Stops';
 
 /**
  * Fixed full-screen canvas, a tall scroll container above it (PAGES x 100vh, see
@@ -44,7 +45,7 @@ export default function Experience() {
       </div>
 
       <Overlay />
-      <Districts />
+      <Stops />
       <Navbar />
       <MiniMap />
       <div ref={trackRef} className="scroll-track" style={{ height: `${PAGES * 100}vh` }} />

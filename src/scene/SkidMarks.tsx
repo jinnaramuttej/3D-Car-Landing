@@ -153,9 +153,12 @@ export function SkidMarks() {
       }
       const px = (dz / len) * hw;
       const pz = (-dx / len) * hw;
+      // (heights follow the road: the city climbs)
+      const y0 = r.center.y + Y;
+      const y1 = c.y + Y;
       if (!r.edges) {
-        r.left.set(r.center.x + px, Y, r.center.z + pz);
-        r.right.set(r.center.x - px, Y, r.center.z - pz);
+        r.left.set(r.center.x + px, y0, r.center.z + pz);
+        r.right.set(r.center.x - px, y0, r.center.z - pz);
       }
       const q = state.cursor;
       state.cursor = (q + 1) % quads;
@@ -164,12 +167,12 @@ export function SkidMarks() {
       const v0 = r.v / 1.2;
       const v1 = (r.v + len) / 1.2;
       const p = q * 12;
-      pos.set([r.left.x, Y, r.left.z, r.right.x, Y, r.right.z, c.x + px, Y, c.z + pz, c.x - px, Y, c.z - pz], p);
+      pos.set([r.left.x, r.left.y, r.left.z, r.right.x, r.right.y, r.right.z, c.x + px, y1, c.z + pz, c.x - px, y1, c.z - pz], p);
       uv.set([0, v0, 1, v0, 0, v1, 1, v1], q * 8);
       alpha.set([r.alpha, r.alpha, a, a], q * 4);
 
-      r.left.set(c.x + px, Y, c.z + pz);
-      r.right.set(c.x - px, Y, c.z - pz);
+      r.left.set(c.x + px, y1, c.z + pz);
+      r.right.set(c.x - px, y1, c.z - pz);
       r.center.copy(c);
       r.alpha = a;
       r.v += len;

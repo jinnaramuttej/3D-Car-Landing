@@ -9,6 +9,7 @@ import {
   BufferGeometry,
   Color,
   DoubleSide,
+  type Group,
   type InstancedMesh,
   Matrix4,
   type Mesh,
@@ -122,7 +123,7 @@ function useTrackKey() {
 }
 
 /**
- * Mumbai seafront at night in the rain: wet asphalt (blurred reflections, puddles),
+ * The waterfront at night in the rain (chapters I-IV): wet asphalt (blurred reflections, puddles),
  * Indian road markings, a sea wall with the sea beyond, and sodium street lamps
  * along the promenade (Queen's Necklace style) with orange pools on the wet road.
  */
@@ -186,6 +187,7 @@ export function Track() {
   const reflector = useRef<ReflectorMaterial>(null!);
   const sea = useRef<Mesh>(null!);
   const seaMat = useRef<MeshStandardMaterial>(null!);
+  const root = useRef<Group>(null!);
 
   useLayoutEffect(() => {
     const o = new Object3D();
@@ -215,6 +217,9 @@ export function Track() {
   }, [lamps]);
 
   useFrame(({ scene }, dt) => {
+    // the waterfront is only drawn on its own stage (and through the cloud to the city)
+    root.current.visible = chapterState.stage === 'coast' || chapterState.cloud > 0.2;
+    if (!root.current.visible) return;
     const l = CONFIG.look;
     const c = CONFIG.coast;
     headMat.current.emissive.set(c.sodium);
@@ -253,7 +258,7 @@ export function Track() {
   const seaNormal = useMemo(() => new Vector2(0.35, 0.35), []);
 
   return (
-    <group>
+    <group ref={root}>
       {/* wet asphalt: land polygon stops at the sea wall */}
       <mesh geometry={land} rotation-x={-Math.PI / 2}>
         <MeshReflectorMaterial

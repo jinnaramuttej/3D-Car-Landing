@@ -11,19 +11,18 @@ import {
   CHAPTERS,
   chapterById,
   chapterIndexAt,
-  type DistrictId,
   DRIFT,
   driftLocal,
   type Env,
   type FrameKind,
-  FINALE,
-  getDistrictFrame,
   getParkedFrame,
   getStartFrame,
   IGNITION,
-  isDistrict,
+  stageSwitchAt,
+  type StopId,
   type Waypoint,
 } from './chapters';
+import { getRoute, sampleRoute } from './cityRoute';
 
 const { clamp, degToRad, lerp, smoothstep } = MathUtils;
 
@@ -32,7 +31,7 @@ const NUM_KEYS = [
   'fog',
   'exposure',
   'clouds',
-  'enclosed',
+  'mist',
   'sunIntensity',
   'sunAzimuth',
   'sunElevation',
@@ -75,25 +74,28 @@ export const chapterState = {
   beatLocal: 0,
   /** True inside chapter III (the shot script owns the camera). */
   drift: false,
+  /** The waterfront (I-IV) or the city (V on). Switches inside the cloud at the end of IV. */
+  stage: 'coast' as 'coast' | 'city',
+  /** One frame: the stage just switched (the car and the camera land on the other one). */
+  stageChanged: false,
   /** Damped environment (night -> dawn -> morning). */
   env: makeEnv(),
   /** Damped per-beat effects. */
   look: { headlights: 0, accent: 0, smoke: 0 } as BeatLook,
-  /** What stepDrive gets: the drift's raw progress, metres added along the road, wheelspin. */
+  /** What stepDrive gets: the drift's raw progress and metres added along the road. */
   driftRaw: DRIFT.launchFrom,
   extraS: -DRIFT.approach,
-  burnout: 0,
   /** 0 = engine off and dark .. 1 = lights fully up (chapter II ignition). */
   ignition: 0,
   engineOn: false,
-  /** 0..1 bell across a chapter-to-chapter move (peaks halfway): extra fog, lights dip. */
+  /** 0..1 bell across a chapter-to-chapter move (peaks halfway). */
   transition: 0,
+  /** 0..1 bell across the climb through the cloud into the city (IV to V). */
+  cloud: 0,
   /** One frame: the camera should cut (and the frame cross-dissolve). */
   cut: false,
   /** One frame: progress jumped (mini-map): everything snaps. */
   jumped: false,
-  revArmed: true,
-  launchArmed: true,
   igniteArmed: true,
 };
 
@@ -108,7 +110,8 @@ function targetEnv(ci: number, local: number, out: EnvState) {
   const c = CHAPTERS[ci];
   const next = CHAPTERS[ci + 1];
   const w = next ? smoothstep(local, 1 - c.blend, 1) : 0;
-  const u = smoothstep(local, 0.04, 0.92);
+  const span = c.envSpan ?? [0.04, 0.92];
+  const u = smoothstep(local, span[0], span[1]);
   chapterState.transition = Math.sin(Math.PI * w);
   const end = (k: keyof Env) => (c.envEnd?.[k] ?? c.env[k]) as never;
   for (const k of NUM_KEYS) {
@@ -120,17 +123,18 @@ function targetEnv(ci: number, local: number, out: EnvState) {
     if (next) _ca.lerp(_cb.set(next.env[k]), w);
     out[k].copy(_ca);
   }
-  // A move between districts lifts out of the hall into morning mist over the water and
-  // back down into the next one: the fog and light cross-fade through that in-between.
-  if (next && (c.district || next.district)) {
-    const t = chapterState.transition;
-    const d = CONFIG.districts;
-    out.enclosed = lerp(out.enclosed, 0.2, t * 0.9);
-    out.fog = lerp(out.fog, d.transitionFog, t);
-    out.fogColor.lerp(_cb.set(d.transitionFogColor), t * 0.85);
-    out.hemi = lerp(out.hemi, 0.9, t);
-    out.sunIntensity = lerp(out.sunIntensity, 1.2, t * 0.8);
-    out.exposure *= 1 - 0.1 * t;
+  // The climb from the waterfront into the city goes through cloud: at the thickest
+  // point the frame is nothing but grey (the stage switches there).
+  chapterState.cloud = 0;
+  if (next && c.cloud) {
+    const t = Math.pow(chapterState.transition, 0.6);
+    const d = CONFIG.city;
+    chapterState.cloud = chapterState.transition;
+    out.mist = lerp(out.mist, 1, t);
+    out.fog = lerp(out.fog, d.cloudFog, t);
+    out.fogColor.lerp(_cb.set(d.cloudColor), t);
+    out.rain *= 1 - 0.4 * t;
+    out.exposure *= 1 - 0.08 * t;
   }
   return out;
 }
@@ -144,10 +148,6 @@ function targetLook(bi: number, local: number, out: BeatLook) {
     const v = lerp(b.look[k], b.lookEnd?.[k] ?? b.look[k], local);
     out[k] = w > 0 ? lerp(v, next.look[k], w) : v;
   }
-  if (b.id === 'finale') {
-    const x = (local - FINALE.flareAt) / FINALE.flareWidth;
-    out.headlights += FINALE.flarePeak * Math.exp(-x * x);
-  }
   return out;
 }
 
@@ -155,21 +155,16 @@ const _f = new Vector3();
 const _d = new Vector3();
 const JUMP = 0.04;
 
-/** Chapter index of each district. */
-const DISTRICT_CHAPTER = Object.fromEntries(CHAPTERS.map((c, i) => [c.district ?? '', i])) as Record<DistrictId, number>;
+/** Chapter index of each stop. */
+const STOP_CHAPTER = Object.fromEntries(CHAPTERS.map((c, i) => [c.stop ?? '', i])) as Record<StopId, number>;
 
-/** Is this district's set worth drawing (its chapter or a neighbour, i.e. during a move)? */
-export function districtVisible(id: DistrictId) {
-  return Math.abs(chapterState.chapter - DISTRICT_CHAPTER[id]) <= 1;
-}
-
-/** 0..1: how much this district is the one on screen (fades across the move). */
-export function districtWeight(id: DistrictId) {
-  const i = DISTRICT_CHAPTER[id];
-  const c = chapterState.chapter;
-  if (c === i) return 1 - (CHAPTERS[i + 1] ? smoothstep(chapterState.chapterLocal, 1 - CHAPTERS[i].blend * 0.5, 1) : 0);
-  if (c === i - 1) return smoothstep(chapterState.chapterLocal, 1 - CHAPTERS[c].blend * 0.5, 1);
-  return 0;
+/** 0..1: how much this stop is the one on screen (up through its hold, down as the car leaves). */
+export function stopWeight(id: StopId) {
+  if (chapterState.stage !== 'city') return 0;
+  const i = STOP_CHAPTER[id];
+  if (chapterState.chapter !== i) return 0;
+  const l = chapterState.chapterLocal;
+  return smoothstep(l, 0.08, 0.24) * (1 - smoothstep(l, 0.74, 0.9));
 }
 
 /** Advances chapterState from the raw global progress. `cameraPos` = last frame's camera. */
@@ -185,6 +180,10 @@ export function stepChapters(raw: number, dt: number, cameraPos: Vector3) {
   const ch = CHAPTERS[ci];
   st.chapter = ci;
   st.chapterLocal = clamp((p - ch.start) / (ch.end - ch.start), 0, 1);
+
+  const stage = p >= stageSwitchAt() ? 'city' : 'coast';
+  st.stageChanged = st.initialized && stage !== st.stage;
+  st.stage = stage;
 
   const prevBeat = st.beat;
   const bi = beatIndexAt(p);
@@ -238,7 +237,8 @@ export function stepChapters(raw: number, dt: number, cameraPos: Vector3) {
   }
   if (snap && st.engineOn) st.igniteArmed = false;
 
-  // Car staging: waiting (I), pulling away (II), the drift (III), parked (IV, V)
+  // Car staging on the waterfront: waiting (I), pulling away (II), the drift (III),
+  // parked (IV). The city drive (V on) is stepCityDrive (src/lib/cityDrive.ts).
   const launch = beatById('launch');
   const turn = chapterById('turn');
   if (raw < launch.start) {
@@ -250,42 +250,21 @@ export function stepChapters(raw: number, dt: number, cameraPos: Vector3) {
     st.driftRaw = driftLocal(raw);
   }
   const uLaunch = clamp((p - launch.start) / (launch.end - launch.start), 0, 1);
-  const approach = p < turn.start ? -DRIFT.approach * (1 - uLaunch * uLaunch) : 0;
-
-  // Finale: launch distance, wheelspin smoke, engine sounds
-  const fin = beatById('finale');
-  if (p < fin.start - 0.003) {
-    st.revArmed = true;
-    st.launchArmed = true;
-  }
-  let launchS = 0;
-  st.burnout = 0;
-  if (bi >= 0 && BEATS[bi].id === 'finale') {
-    const local = st.beatLocal;
-    const t = clamp((local - FINALE.launchFrom) / (FINALE.launchTo - FINALE.launchFrom), 0, 1);
-    launchS = Math.pow(t, 2.4) * FINALE.launchDistance;
-    const bx = (local - FINALE.burnoutAt) / FINALE.burnoutWidth;
-    st.burnout = FINALE.burnoutPeak * Math.exp(-bx * bx);
-    if (local >= FINALE.revAt && st.revArmed && !snap) {
-      st.revArmed = false;
-      engine.rev();
-    }
-    if (local >= FINALE.launchFrom && st.launchArmed && !snap) {
-      st.launchArmed = false;
-      engine.launch();
-    }
-    if (snap) st.revArmed = st.launchArmed = false;
-  }
-  st.extraS = approach + launchS;
+  st.extraS = p < turn.start ? -DRIFT.approach * (1 - uLaunch * uLaunch) : 0;
 
   st.initialized = true;
 }
 
 const _sf = new Vector3();
 const _sl = new Vector3();
-/** Sun direction (unit, toward the sun): azimuth from straight down the road at the parked car. */
-export function sunDirection(azimuthDeg: number, elevationDeg: number, out: Vector3) {
-  const f = getParkedFrame();
+const _rp = new Vector3();
+/**
+ * Sun direction (unit, toward the sun). Azimuth is measured from straight down the road at
+ * the parked car on the waterfront, and from straight down the bridge in the city.
+ */
+export function sunDirection(azimuthDeg: number, elevationDeg: number, out: Vector3, stage = chapterState.stage) {
+  const heading = stage === 'city' ? sampleRoute(getRoute().bridgeStart + 200, _rp) : getParkedFrame().heading;
+  const f = { heading };
   forwardOf(f.heading, _sf);
   leftOf(f.heading, _sl);
   const az = degToRad(azimuthDeg);
@@ -309,8 +288,7 @@ const followFrame: Frame = { origin: new Vector3(), heading: 0 };
 export function frameFor(kind: FrameKind): Frame {
   if (kind === 'start') return getStartFrame();
   if (kind === 'parked') return getParkedFrame();
-  if (isDistrict(kind)) return getDistrictFrame(kind);
-  // 'follow' matches the drift's 'path' frame, so the launch hands over without a seam
+  // 'follow' (and 'city', which the director owns) matches the drift's 'path' frame, so the launch hands over without a seam
   followFrame.origin.copy(carState.position);
   followFrame.heading = carState.pathHeading;
   return followFrame;
@@ -400,9 +378,8 @@ export function beatCameraTarget(mobile: boolean, out: BeatTarget) {
   samplePath(pathOf(bi, mobile), local, _cur, b.move);
   let dof = b.dof ?? 0;
   let focusRange = b.focusRange ?? 3;
-  // ease into the next beat's first waypoint; across frames (a district hop) it's a
-  // straight move through the fog, carried into this beat's frame
-  if (next && next.enter !== 'dissolve' && !(b.id === 'launch')) {
+  // ease into the next beat's first waypoint (the city beats have none: the director)
+  if (next && next.enter !== 'dissolve' && b.id !== 'launch' && next.frame !== 'city' && b.camera.length) {
     const w = smoothstep(local, 1 - (b.blend ?? 0.18), 1);
     if (w > 0) {
       samplePath(pathOf(bi + 1, mobile), 0, _next);

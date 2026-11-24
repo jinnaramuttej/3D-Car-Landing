@@ -102,7 +102,7 @@ export const TWMUN = {
 
 /* ------------------------------------------------- copy the scene adds */
 
-/** The one accent colour (CSS, rim lights, the pit lane signage). */
+/** The one accent colour (CSS, rim lights, the billboards). */
 export const theme = {
   accent: '#ff2a1a',
 };
@@ -111,17 +111,17 @@ export const CONCEPT = 'Unofficial concept';
 
 /** One line per chapter. */
 export const chapters: Record<ChapterId, { line: string }> = {
-  stillness: { line: 'Midnight on the sea face. Nothing moves but the rain.' },
-  ignition: { line: 'One turn of the key, and the city holds its breath.' },
+  stillness: { line: 'Midnight on the waterfront. Nothing moves but the rain.' },
+  ignition: { line: 'One turn of the key, and the night holds its breath.' },
   turn: { line: 'Thirty editions in, we still take the corner sideways.' },
-  clearing: { line: 'The rain lifts. The festival comes into view.' },
-  arrival: { line: 'Three days at Powai. Bring what you built.' },
-  arena: { line: 'Steel walls, orange light, and machines built to hit back.' },
-  pitlane: { line: 'Seven competitions. Pick a bay.' },
-  voices: { line: 'Presidents, founders, champions and laureates have spoken here.' },
+  clearing: { line: 'The smoke settles. Above the cloud, a city is waiting.' },
+  arrival: { line: 'Down through the cloud. The lights are on.' },
+  robowars: { line: 'Steel, sparks and machines built to hit back.' },
+  competitions: { line: 'Seven competitions. Pick a lane.' },
+  speakers: { line: 'Presidents, founders, champions and laureates have spoken here.' },
   expo: { line: 'Machines from labs and launchpads, up close.' },
-  heartbeat: { line: 'Three minutes and a cheek swab. That is the whole ask.' },
-  chamber: { line: 'Eight committees. One question: what is true?' },
+  dkms: { line: 'Three minutes and a cheek swab. That is the whole ask.' },
+  twmun: { line: 'Eight committees. One question: what is true?' },
   finale: { line: 'The road is open.' },
 };
 
@@ -132,18 +132,18 @@ export const UI = {
   cta: 'Explore Techfest 2026',
   checkStatus: 'Check status',
   arrival: { kicker: 'V · Arrival' },
-  arena: {
+  robowars: {
     kicker: 'Robowars',
     classLabel: 'Weight class',
     prizeLabel: 'Prize pool',
     zonalsLabel: 'International zonals',
-    hint: 'Pick a class. Click the floor for sparks.',
+    hint: 'Pick a class. The billboard follows.',
   },
-  pitlane: { kicker: 'Pit lane', all: 'All', finale: 'Finale' },
-  voices: { kicker: 'Past speakers', hint: 'Hover a marker to see who. Click to pin.' },
-  expo: { kicker: 'Expo', hint: 'Click a pedestal for the details.', close: 'Close' },
-  heartbeat: { timer: 'About how long the swab takes', start: 'Start three minutes', restart: 'Start again', done: 'Done. That was the whole swab.' },
-  chamber: { kicker: 'Model United Nations', hint: 'Hover a card to flip it.' },
+  competitions: { kicker: 'Competitions', all: 'All', finale: 'Finale', hint: 'Filter. The billboard re-sorts.' },
+  speakers: { kicker: 'Past speakers', hint: 'The categories turn over on their own. Pick one to hold it.' },
+  expo: { kicker: 'Expo', hint: 'Scroll to move along the exhibits.', details: 'Details', close: 'Close' },
+  dkms: { timer: 'About how long the swab takes', start: 'Start three minutes', restart: 'Start again', done: 'Done. That was the whole swab.' },
+  twmun: { kicker: 'Model United Nations', hint: 'Hover a card to flip it.' },
 };
 
 /** Card backs for the MUN committees. */

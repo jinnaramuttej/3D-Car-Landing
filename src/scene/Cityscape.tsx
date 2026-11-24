@@ -121,7 +121,7 @@ function Sky({ cityDir }: { cityDir: Vector2 }) {
     u.uSunGlow.value = MathUtils.smoothstep(e.sunIntensity, 0.4, 1.6);
     u.uClouds.value = e.clouds;
     (u.uFogColor.value as Color).copy(e.fogColor);
-    u.uEnclosed.value = e.enclosed;
+    u.uEnclosed.value = e.mist;
     u.uTime.value = state.clock.elapsedTime;
     mesh.current.position.copy(state.camera.position);
   });
@@ -211,7 +211,7 @@ function LightSpritesInner({ sprites, intensity }: { sprites: Sprite[]; intensit
   }, [sprites]);
   useFrame((state) => {
     material.uniforms.uTime.value = state.clock.elapsedTime;
-    material.uniforms.uIntensity.value = intensity() * chapterState.env.city * (1 - chapterState.env.enclosed);
+    material.uniforms.uIntensity.value = intensity() * chapterState.env.city * (1 - chapterState.env.mist);
     material.uniforms.uHaze.value = CONFIG.coast.haze * 0.6;
   });
   return <instancedMesh ref={mesh} args={[geometry, material, sprites.length]} frustumCulled={false} />;
@@ -385,7 +385,7 @@ function Buildings({ layout }: { layout: CityLayout }) {
   useFrame(() => {
     const e = chapterState.env;
     uniforms.glow.value = CONFIG.coast.windowGlow * e.city;
-    uniforms.haze.value = CONFIG.coast.haze + e.enclosed * 0.06; // gone inside a district hall
+    uniforms.haze.value = CONFIG.coast.haze + e.mist * 0.06; // gone inside the cloud
     uniforms.hazeColor.value.copy(e.fogColor);
     material.color.copy(e.buildings);
   });
@@ -466,7 +466,7 @@ function Bridge({ b }: { b: BridgeLayout }) {
   useFrame(() => {
     // hazy grey against the morning sky, a near-black cut-out at night
     const e = chapterState.env;
-    solids.silhouette.color.copy(e.buildings).lerp(e.fogColor, 0.55 + 0.45 * e.enclosed);
+    solids.silhouette.color.copy(e.buildings).lerp(e.fogColor, 0.55 + 0.45 * e.mist);
   });
 
   return (
@@ -561,10 +561,10 @@ export function Cityscape() {
     return { cityDir, layout, bridge, shore, bridgeLights };
   }, [track, mobile]);
 
-  // inside a district hall the world outside is fog anyway: skip drawing it
+  // inside the cloud the world outside is fog anyway, and in the city it is far behind: skip it
   const outside = useRef<Group>(null!);
   useFrame(() => {
-    outside.current.visible = chapterState.env.enclosed < 0.985;
+    outside.current.visible = chapterState.env.mist < 0.985 && chapterState.stage === 'coast';
   });
 
   return (

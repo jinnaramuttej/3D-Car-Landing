@@ -4,9 +4,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
 import { COMMITTEE_NAMES, COMPETITIONS, EXPO, HEARTBEAT, ROBOWARS, SITE, TWMUN, UI, VOICES } from '@/content';
-import { beatById, type BeatId, FINALE } from '@/lib/chapters';
-import { chapterState, districtWeight } from '@/lib/chapterRuntime';
-import { districtFx, initials, useDistricts, VOICE_CATEGORIES } from '@/lib/districtState';
+import { chapterById, FINALE, type StopId } from '@/lib/chapters';
+import { chapterState, stopWeight } from '@/lib/chapterRuntime';
+import { COMPETITION_TAGS, expoIndexAt, heartbeatPulse, initials, SPEAKER_CATEGORIES, useStops } from '@/lib/stops';
 import { useStore } from '@/lib/store';
 
 gsap.registerPlugin(Flip);
@@ -14,14 +14,14 @@ gsap.registerPlugin(Flip);
 const MOBILE_Q = '(max-width: 767px), (pointer: coarse)';
 const DESKTOP_Q = '(min-width: 768px) and (pointer: fine)';
 
-/** Global progress at a fraction of a beat, and a duration in beat fractions. */
-const at = (id: BeatId, f: number) => {
-  const b = beatById(id);
-  return b.start + f * (b.end - b.start);
+/** Global progress at a fraction of a stop's chapter, and a duration in chapter fractions. */
+const at = (id: StopId, f: number) => {
+  const c = chapterById(id);
+  return c.start + f * (c.end - c.start);
 };
-const len = (id: BeatId, f: number) => {
-  const b = beatById(id);
-  return f * (b.end - b.start);
+const len = (id: StopId, f: number) => {
+  const c = chapterById(id);
+  return f * (c.end - c.start);
 };
 
 type Q = (sel: string) => Element[];
@@ -34,24 +34,26 @@ function parseStat(v: string) {
   return { prefix: m[1], value: parseFloat(num), suffix: m[3], decimals: num.includes('.') ? 1 : 0 };
 }
 
-/** One paused timeline on the global 0..1 scale: every panel is pinned and scrubbable. */
+/**
+ * One paused timeline on the global 0..1 scale: each panel is on screen while the car
+ * holds at its stop (the middle of the chapter, see src/lib/cityDrive.ts) and scrubs both ways.
+ */
 function buildTimeline(q: Q, mobile: boolean) {
   const tl = gsap.timeline({ paused: true, defaults: { ease: 'none' } });
-  const show = (id: BeatId, inAt: number, outAt = 2) => {
+  const show = (id: StopId, inAt = 0.2, outAt = 0.74) => {
     const layer = q(`.d-${id}`);
-    tl.fromTo(layer, { autoAlpha: 0 }, { autoAlpha: 1, duration: len(id, 0.06) }, at(id, inAt));
-    if (outAt <= 1) tl.to(layer, { autoAlpha: 0, duration: len(id, 0.07) }, at(id, outAt));
+    tl.fromTo(layer, { autoAlpha: 0 }, { autoAlpha: 1, duration: len(id, 0.05) }, at(id, inAt));
+    if (outAt <= 1) tl.to(layer, { autoAlpha: 0, duration: len(id, 0.06) }, at(id, outAt));
   };
-  const rise = (sel: string, id: BeatId, f: number, d = 0.1, y = 22) =>
+  const rise = (sel: string, id: StopId, f: number, d = 0.1, y = 22) =>
     tl.fromTo(q(sel), { autoAlpha: 0, y }, { autoAlpha: 1, y: 0, duration: len(id, d), ease: 'power2.out', stagger: len(id, 0.025) }, at(id, f));
 
-  // V arrival: the facts beside the orbit
-  show('arrive', 0.16, 0.66);
-  rise('.d-arrive .fact', 'arrive', 0.18, 0.1, 14);
+  show('arrival');
+  rise('.d-arrival .fact', 'arrival', 0.22, 0.1, 14);
 
-  // VI arena: prize, classes, stats counting up, zonals
-  show('arena', 0.16, 0.7);
-  rise('.d-arena .panel > *', 'arena', 0.18, 0.1, 16);
+  // Robowars: prize, classes, stats counting up, zonals
+  show('robowars');
+  rise('.d-robowars .panel > *', 'robowars', 0.22, 0.1, 16);
   q('.arena-stat').forEach((el, i) => {
     const s = parseStat(ROBOWARS.stats[i].value);
     const out = el.querySelector('.stat-value');
@@ -61,44 +63,41 @@ function buildTimeline(q: Q, mobile: boolean) {
       { v: 0 },
       {
         v: s.value,
-        duration: len('arena', 0.3),
+        duration: len('robowars', 0.26),
         ease: 'power2.out',
         onUpdate: () => {
           if (out) out.textContent = `${s.prefix}${box.v.toFixed(s.decimals)}${s.suffix}`;
         },
       },
-      at('arena', 0.22 + i * 0.04),
+      at('robowars', 0.26 + i * 0.04),
     );
   });
 
-  // VII pit lane: pinned, the bays slide (vertically on phones)
-  show('pitlane', 0.14, 0.76);
-  rise('.d-pitlane .block-head > *', 'pitlane', 0.16, 0.08);
-  tl.fromTo(q('.bays'), { '--p': 0 }, { '--p': 1, duration: len('pitlane', mobile ? 0.5 : 0.52) }, at('pitlane', 0.2));
+  // Competitions: the cards slide past (vertically on phones) while the car holds
+  show('competitions', 0.18, 0.78);
+  rise('.d-competitions .block-head > *', 'competitions', 0.2, 0.08);
+  tl.fromTo(q('.bays'), { '--p': 0 }, { '--p': 1, duration: len('competitions', mobile ? 0.5 : 0.52) }, at('competitions', 0.24));
 
-  // VIII voices
-  show('voices', 0.16, 0.7);
-  rise('.d-voices .block-head > *', 'voices', 0.18, 0.1);
+  show('speakers');
+  rise('.d-speakers .block-head > *', 'speakers', 0.22, 0.1);
 
-  // IX expo
-  show('expo', 0.06, 0.78);
-  rise('.d-expo .block-head > *', 'expo', 0.08, 0.06);
+  show('expo', 0.18, 0.78);
+  rise('.d-expo .block-head > *', 'expo', 0.2, 0.06);
 
-  // X heartbeat: slow fades only
-  show('heartbeat', 0.18, 0.7);
-  tl.fromTo(q('.d-heartbeat .hb > *'), { autoAlpha: 0 }, { autoAlpha: 1, duration: len('heartbeat', 0.12), stagger: len('heartbeat', 0.05) }, at('heartbeat', 0.2));
+  // DKMS: slow fades only
+  show('dkms', 0.2, 0.76);
+  tl.fromTo(q('.d-dkms .hb > *'), { autoAlpha: 0 }, { autoAlpha: 1, duration: len('dkms', 0.12), stagger: len('dkms', 0.05) }, at('dkms', 0.22));
 
-  // XI chamber
-  show('chamber', 0.16, 0.66);
-  rise('.d-chamber .block-head > *', 'chamber', 0.18, 0.08);
-  rise('.committee', 'chamber', 0.22, 0.1, 18);
+  show('twmun');
+  rise('.d-twmun .block-head > *', 'twmun', 0.22, 0.08);
+  rise('.committee', 'twmun', 0.26, 0.1, 18);
 
-  // finale: one CTA as the car leaves
-  show('finale', 0.02);
+  // finale: one CTA as the sun clears the horizon
+  show('finale', 0.02, 2);
   tl.fromTo(
     q('.finale-cta > *'),
     { autoAlpha: 0, filter: 'blur(14px)', y: 18 },
-    { autoAlpha: 1, filter: 'blur(0px)', y: 0, duration: len('finale', 0.12), stagger: len('finale', 0.04), ease: 'power2.out' },
+    { autoAlpha: 1, filter: 'blur(0px)', y: 0, duration: len('finale', 0.1), stagger: len('finale', 0.035), ease: 'power2.out' },
     at('finale', FINALE.ctaAt),
   );
 
@@ -108,20 +107,20 @@ function buildTimeline(q: Q, mobile: boolean) {
 
 /* ------------------------------------------------------------------- panels */
 
-function ArenaPanel() {
-  const kg = useDistricts((s) => s.arenaClass);
+function RobowarsPanel() {
+  const kg = useStops((s) => s.robowarsClass);
   return (
-    <section className="d-block d-arena" aria-label={UI.arena.kicker}>
+    <section className="d-block d-robowars" aria-label={UI.robowars.kicker}>
       <div className="panel glass">
-        <p className="kicker">{UI.arena.kicker}</p>
+        <p className="kicker">{UI.robowars.kicker}</p>
         <p className="prize">
-          <span>{UI.arena.prizeLabel}</span>
+          <span>{UI.robowars.prizeLabel}</span>
           <strong>{ROBOWARS.prizePool}</strong>
         </p>
-        <div className="classes" role="radiogroup" aria-label={UI.arena.classLabel}>
-          <span className="classes-label">{UI.arena.classLabel}</span>
+        <div className="classes" role="radiogroup" aria-label={UI.robowars.classLabel}>
+          <span className="classes-label">{UI.robowars.classLabel}</span>
           {ROBOWARS.classes.map((c) => (
-            <button key={c} type="button" role="radio" aria-checked={kg === c} className={`chip${kg === c ? ' is-on' : ''}`} onClick={() => useDistricts.getState().setArenaClass(c)}>
+            <button key={c} type="button" role="radio" aria-checked={kg === c} className={`chip${kg === c ? ' is-on' : ''}`} onClick={() => useStops.getState().setRobowarsClass(c)}>
               {c} kg
             </button>
           ))}
@@ -135,13 +134,13 @@ function ArenaPanel() {
           ))}
         </ul>
         <p className="zonals">
-          <span>{UI.arena.zonalsLabel}</span>
+          <span>{UI.robowars.zonalsLabel}</span>
           {ROBOWARS.zonals.map((z) => (
             <em key={z}>{z}</em>
           ))}
         </p>
         <p className="note">{ROBOWARS.note}</p>
-        <p className="hint desktop-only">{UI.arena.hint}</p>
+        <p className="hint desktop-only">{UI.robowars.hint}</p>
         <a className="text-link" href={SITE.home} target="_blank" rel="noopener noreferrer">
           {UI.checkStatus} <span aria-hidden>↗</span>
         </a>
@@ -150,17 +149,15 @@ function ArenaPanel() {
   );
 }
 
-const TAGS = ['All', ...Array.from(new Set(COMPETITIONS.map((c) => c.tag)))];
-
-function PitLanePanel({ measure }: { measure: () => void }) {
-  const [filter, setFilter] = useState('All');
+function CompetitionsPanel({ measure }: { measure: () => void }) {
+  const filter = useStops((s) => s.competitionFilter);
   const flip = useRef<Flip.FlipState | null>(null);
   const list = useRef<HTMLOListElement>(null);
 
   const pick = (f: string) => {
     if (f === filter) return;
     if (list.current) flip.current = Flip.getState(list.current.querySelectorAll('.bay'));
-    setFilter(f);
+    useStops.getState().setCompetitionFilter(f);
   };
 
   // animate the cards from where they were to where the filter puts them
@@ -180,16 +177,17 @@ function PitLanePanel({ measure }: { measure: () => void }) {
   }, [filter, measure]);
 
   return (
-    <section className="d-block d-pitlane" aria-label={UI.pitlane.kicker}>
+    <section className="d-block d-competitions" aria-label={UI.competitions.kicker}>
       <div className="block-head">
-        <p className="kicker">{UI.pitlane.kicker}</p>
+        <p className="kicker">{UI.competitions.kicker}</p>
         <div className="chips" role="group" aria-label="Filter competitions">
-          {TAGS.map((t) => (
+          {COMPETITION_TAGS.map((t) => (
             <button key={t} type="button" className={`chip${filter === t ? ' is-on' : ''}`} aria-pressed={filter === t} onClick={() => pick(t)}>
-              {t === 'All' ? UI.pitlane.all : t}
+              {t === 'All' ? UI.competitions.all : t}
             </button>
           ))}
         </div>
+        <p className="hint desktop-only">{UI.competitions.hint}</p>
       </div>
       <div className="bays-window">
         <ol className="bays" ref={list}>
@@ -199,7 +197,7 @@ function PitLanePanel({ measure }: { measure: () => void }) {
             return (
               <li key={c.name} className="bay" style={on ? undefined : { display: 'none' }} data-flip-id={c.name}>
                 <div className="bay-door" aria-hidden>
-                  <span>BAY {String(i + 1).padStart(2, '0')}</span>
+                  <span>LANE {String(i + 1).padStart(2, '0')}</span>
                 </div>
                 <div className="bay-body">
                   <span className="bay-tag">{c.tag}</span>
@@ -210,7 +208,7 @@ function PitLanePanel({ measure }: { measure: () => void }) {
                     {x.prize && <strong>{x.prize}</strong>}
                     {x.finale && (
                       <span>
-                        {UI.pitlane.finale}: {x.finale}
+                        {UI.competitions.finale}: {x.finale}
                       </span>
                     )}
                   </p>
@@ -227,48 +225,45 @@ function PitLanePanel({ measure }: { measure: () => void }) {
   );
 }
 
-function VoicesPanel() {
-  const category = useDistricts((s) => s.voiceCategory);
-  const hover = useDistricts((s) => s.hoverVoice);
-  const pinned = useDistricts((s) => s.pinnedVoice);
+/** Seconds per category while the speakers' billboard rotates on its own. */
+const ROTATE = 4.5;
+
+function SpeakersPanel() {
+  const category = useStops((s) => s.speakerCategory);
+  const pinned = useStops((s) => s.speakerPinned);
   const people = VOICES.categories[category];
-  const active = pinned ?? hover;
-  const card = useRef<HTMLDivElement>(null);
 
+  // the categories turn over on their own while the stop is on screen, until one is picked
   useEffect(() => {
-    let raf = 0;
-    const tick = () => {
-      const el = card.current;
-      if (el) {
-        const v = districtFx.voiceCard;
-        // sit right of the marker, or left of it near the right edge (clear of the mini-map)
-        const w = el.offsetWidth + 36;
-        const x = v.x + w > window.innerWidth - 70 ? v.x - w : v.x;
-        el.style.transform = `translate(${x.toFixed(1)}px, ${v.y.toFixed(1)}px)`;
-        el.classList.toggle('is-on', v.visible && active !== null);
+    if (pinned) return;
+    let last = performance.now();
+    const id = window.setInterval(() => {
+      if (stopWeight('speakers') < 0.5) {
+        last = performance.now();
+        return;
       }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [active]);
+      if (performance.now() - last < ROTATE * 1000) return;
+      last = performance.now();
+      const st = useStops.getState();
+      const i = SPEAKER_CATEGORIES.indexOf(st.speakerCategory);
+      st.setSpeakerCategory(SPEAKER_CATEGORIES[(i + 1) % SPEAKER_CATEGORIES.length]);
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [pinned]);
 
-  const person = active !== null ? people[active] : null;
   return (
-    <section className="d-block d-voices" aria-label={VOICES.heading}>
+    <section className="d-block d-speakers" aria-label={VOICES.heading}>
       <div className="block-head">
-        <p className="kicker">{UI.voices.kicker}</p>
+        <p className="kicker">{UI.speakers.kicker}</p>
         <h2 className="heading">{VOICES.heading}</h2>
         <div className="chips" role="tablist" aria-label="Speaker categories">
-          {VOICE_CATEGORIES.map((c) => (
-            <button key={c} type="button" role="tab" aria-selected={category === c} className={`chip${category === c ? ' is-on' : ''}`} onClick={() => useDistricts.getState().setVoiceCategory(c)}>
+          {SPEAKER_CATEGORIES.map((c) => (
+            <button key={c} type="button" role="tab" aria-selected={category === c} className={`chip${category === c ? ' is-on' : ''}`} onClick={() => useStops.getState().setSpeakerCategory(c, true)}>
               {c}
             </button>
           ))}
         </div>
-        <p className="hint desktop-only">{UI.voices.hint}</p>
-        {/* phones: a plain list instead of the globe */}
-        <ul className="voice-list mobile-only">
+        <ul className="voice-list" aria-live="polite">
           {people.map(([name, title]) => (
             <li key={name}>
               <span className="monogram" aria-hidden>
@@ -281,34 +276,20 @@ function VoicesPanel() {
             </li>
           ))}
         </ul>
-      </div>
-      <div ref={card} className="voice-card" aria-live="polite">
-        {person && (
-          <>
-            <span className="monogram" aria-hidden>
-              {initials(person[0])}
-            </span>
-            <span>
-              <strong>{person[0]}</strong>
-              <em>{person[1]}</em>
-            </span>
-          </>
-        )}
+        <p className="hint desktop-only">{UI.speakers.hint}</p>
       </div>
     </section>
   );
 }
 
 function ExpoPanel() {
-  const open = useDistricts((s) => s.expoOpen);
+  const open = useStops((s) => s.expoOpen);
   const [focus, setFocus] = useState(0);
   useEffect(() => {
     let raf = 0;
     let last = -1;
     const tick = () => {
-      const b = beatById('expo');
-      const local = chapterState.progress < b.start ? 0 : Math.min(1, (chapterState.progress - b.start) / (b.end - b.start));
-      const i = Math.max(0, Math.min(3, Math.round(local * 3)));
+      const i = expoIndexAt(chapterState.progress, EXPO.exhibits.length);
       if (i !== last) {
         last = i;
         setFocus(i);
@@ -320,7 +301,7 @@ function ExpoPanel() {
   }, []);
   const ex = EXPO.exhibits[focus];
   const detail = open !== null ? EXPO.exhibits[open] : null;
-  const set = useDistricts.getState;
+  const set = useStops.getState;
   return (
     <section className="d-block d-expo" aria-label={EXPO.heading}>
       <div className="block-head">
@@ -328,11 +309,13 @@ function ExpoPanel() {
         <h2 className="heading">{EXPO.heading}</h2>
       </div>
       <div className="exhibit-now">
-        <span className="exhibit-index">{String(focus + 1).padStart(2, '0')} / 04</span>
+        <span className="exhibit-index">
+          {String(focus + 1).padStart(2, '0')} / {String(EXPO.exhibits.length).padStart(2, '0')}
+        </span>
         <strong>{ex.name}</strong>
         <em>{ex.from}</em>
         <button type="button" className="chip" onClick={() => set().setExpoOpen(set().expoOpen === focus ? null : focus)}>
-          Details
+          {UI.expo.details}
         </button>
         <p className="hint desktop-only">{UI.expo.hint}</p>
       </div>
@@ -354,7 +337,7 @@ function ExpoPanel() {
 
 const SWAB = 180; // seconds
 
-function HeartbeatPanel() {
+function DkmsPanel() {
   const [started, setStarted] = useState<number | null>(null);
   const [done, setDone] = useState(false);
   const ring = useRef<SVGCircleElement>(null);
@@ -365,14 +348,14 @@ function HeartbeatPanel() {
   useEffect(() => {
     let raf = 0;
     const tick = () => {
-      if (started === null && districtWeight('heartbeat') > 0.85) setStarted(performance.now());
+      if (started === null && stopWeight('dkms') > 0.85) setStarted(performance.now());
       const t = started === null ? 0 : Math.min(SWAB, (performance.now() - started) / 1000);
       if (ring.current) ring.current.style.strokeDasharray = `${((t / SWAB) * 100).toFixed(2)} 100`;
       if (clock.current) {
         const left = Math.ceil(SWAB - t);
         clock.current.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
       }
-      if (wrap.current) wrap.current.style.setProperty('--beat', districtFx.heartbeat.toFixed(3));
+      if (wrap.current) wrap.current.style.setProperty('--beat', heartbeatPulse(performance.now() / 1000).toFixed(3));
       if (started !== null && t >= SWAB && !done) setDone(true);
       raf = requestAnimationFrame(tick);
     };
@@ -381,7 +364,7 @@ function HeartbeatPanel() {
   }, [started, done]);
 
   return (
-    <section className="d-block d-heartbeat" aria-label={HEARTBEAT.campaign}>
+    <section className="d-block d-dkms" aria-label={HEARTBEAT.campaign}>
       <div className="hb">
         <p className="kicker">{HEARTBEAT.campaign}</p>
         <h2 className="hb-headline">{HEARTBEAT.headline}</h2>
@@ -393,7 +376,7 @@ function HeartbeatPanel() {
           </svg>
           <div className="hb-clock">
             <span ref={clock}>3:00</span>
-            <em>{done ? UI.heartbeat.done : UI.heartbeat.timer}</em>
+            <em>{done ? UI.dkms.done : UI.dkms.timer}</em>
           </div>
         </div>
         <button
@@ -404,7 +387,7 @@ function HeartbeatPanel() {
             setStarted(performance.now());
           }}
         >
-          {started === null ? UI.heartbeat.start : UI.heartbeat.restart}
+          {started === null ? UI.dkms.start : UI.dkms.restart}
         </button>
         <ul className="hb-stats">
           {HEARTBEAT.stats.map((s) => (
@@ -419,15 +402,15 @@ function HeartbeatPanel() {
   );
 }
 
-function ChamberPanel() {
+function TwmunPanel() {
   const [flipped, setFlipped] = useState<string | null>(null);
   return (
-    <section className="d-block d-chamber" aria-label={TWMUN.name}>
+    <section className="d-block d-twmun" aria-label={TWMUN.name}>
       <div className="block-head">
-        <p className="kicker">{UI.chamber.kicker}</p>
+        <p className="kicker">{UI.twmun.kicker}</p>
         <h2 className="heading">{TWMUN.name}</h2>
         <p className="tagline">{TWMUN.tagline}</p>
-        <p className="hint desktop-only">{UI.chamber.hint}</p>
+        <p className="hint desktop-only">{UI.twmun.hint}</p>
       </div>
       <ul className="committees">
         {TWMUN.committees.map((c) => {
@@ -448,15 +431,14 @@ function ChamberPanel() {
 }
 
 /**
- * Chapters V-XI and the finale in the DOM. One paused GSAP timeline on the global
- * progress scale shows each panel during its district; the panels' own controls (weight
- * classes, filters, tabs, details, timer, flip cards) talk to the 3D through
- * src/lib/districtState.ts.
+ * Chapters V-XI and the finale in the DOM: one panel per stop on the city route, on screen
+ * while the car holds at that stop's billboard. The panels' controls (weight class, filter,
+ * speaker category, exhibit details) share state with the billboards (src/lib/stops.ts).
  */
-export function Districts() {
+export function Stops() {
   const root = useRef<HTMLDivElement>(null);
 
-  // pit lane: distance the bays travel (px), re-measured on resize and on every filter
+  // competitions: distance the cards travel (px), re-measured on resize and on every filter
   const measure = useMemo(
     () => () => {
       const track = root.current?.querySelector<HTMLElement>('.bays');
@@ -493,8 +475,8 @@ export function Districts() {
   }, [measure]);
 
   return (
-    <div ref={root} className="districts">
-      <section className="d-block d-arrive" aria-label={UI.arrival.kicker}>
+    <div ref={root} className="stops">
+      <section className="d-block d-arrival" aria-label={UI.arrival.kicker}>
         <dl className="facts glass">
           {[
             ['Edition', SITE.edition],
@@ -508,12 +490,12 @@ export function Districts() {
           ))}
         </dl>
       </section>
-      <ArenaPanel />
-      <PitLanePanel measure={measure} />
-      <VoicesPanel />
+      <RobowarsPanel />
+      <CompetitionsPanel measure={measure} />
+      <SpeakersPanel />
       <ExpoPanel />
-      <HeartbeatPanel />
-      <ChamberPanel />
+      <DkmsPanel />
+      <TwmunPanel />
       <section className="d-block d-finale" aria-label={UI.cta}>
         <div className="finale-cta">
           <div className="scrim" aria-hidden />

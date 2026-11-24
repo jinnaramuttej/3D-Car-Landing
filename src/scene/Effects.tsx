@@ -91,7 +91,7 @@ export function Effects() {
       push: new Vector2(),
       radial: 0,
       clock: 0,
-      mode: 'beat' as 'drift' | 'beat',
+      mode: 'beat' as 'drift' | 'beat' | 'city',
     }),
     [],
   );
@@ -109,7 +109,7 @@ export function Effects() {
     if (dof.current) {
       _focus.copy(cameraState.focus);
       if (chapterState.drift && carState.carReady && p.focusOnCar) {
-        _d.copy(carState.position).setY(0.6);
+        _d.copy(carState.position).setY(carState.position.y + 0.6);
         if (_focus.distanceTo(_d) > 2.6) _focus.copy(_d);
       }
       dof.current.target = _focus;
@@ -140,7 +140,8 @@ export function Effects() {
     fx.dissolve.duration = p.dissolve;
     const modeChanged = motion.mode !== cameraState.mode;
     const jumped = motion.has && _pos.distanceTo(motion.prev) > p.cutDistance;
-    if (motion.has && (chapterState.cut || (jumped && modeChanged))) fx.dissolve.trigger();
+    // (the stage switch happens inside the cloud: grey on grey, nothing to dissolve)
+    if (motion.has && !chapterState.stageChanged && (chapterState.cut || (jumped && modeChanged))) fx.dissolve.trigger();
     motion.mode = cameraState.mode;
 
     const mb = fx.motionBlur;

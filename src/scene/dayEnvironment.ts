@@ -13,9 +13,9 @@ import {
 import type { Env } from '@/lib/chapters';
 
 /**
- * A daylight environment map for chapters IV and V, generated once from a gradient sky
- * with a low sun (the night HDRI can't be relit into a morning). Scene swaps
- * scene.environment over to it under the smoke at the start of chapter IV.
+ * A dawn environment map for the finale on the bridge, generated once from a gradient sky
+ * with a low sun (the night HDRI can't be relit into a sunrise). Scene swaps
+ * scene.environment over to it as the sun comes up.
  */
 export function createDayEnvironment(gl: WebGLRenderer, env: Env, sunDir: Vector3): Texture {
   return bake(gl, {
@@ -25,21 +25,6 @@ export function createDayEnvironment(gl: WebGLRenderer, env: Env, sunDir: Vector
     ground: new Color('#3d3a36'),
     sun: new Color(env.sun).multiplyScalar(40),
     sunDir,
-  });
-}
-
-/**
- * Inside the district halls: a dark room with a soft light overhead, so steel and
- * polished floors don't reflect an outdoor sky. Swapped in mid-move, under the fog.
- */
-export function createHallEnvironment(gl: WebGLRenderer): Texture {
-  return bake(gl, {
-    top: new Color('#3a3e48'),
-    horizon: new Color('#101115'),
-    glow: new Color('#000000'),
-    ground: new Color('#060607'),
-    sun: new Color('#000000'),
-    sunDir: new Vector3(0, 1, 0),
   });
 }
 

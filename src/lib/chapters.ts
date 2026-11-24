@@ -5,44 +5,44 @@ import type { Vec3 } from './script';
 /**
  * CHAPTERS
  * ========
- * The page is one scroll and one global `progress` (0..1), split into five chapters:
+ * The page is one scroll and one global `progress` (0..1), split into chapters:
  *
- *   I    Stillness   night, heavy rain, the car parked with the engine off
- *   II   Ignition    lights and engine come on, the car pulls away into the first bend
- *   III  The Turn    the drift scene (src/lib/script.ts), untouched, at its original pace
- *   IV   Clearing    the smoke settles, the rain thins, dawn breaks, the title forms
- *   V    Arrival     warm morning beside the parked car
- *   VI   Arena       Robowars: dark steel, orange rim light, a robot you can resize
- *   VII  Pit Lane    the competitions as garage bays
- *   VIII Voices      past speakers on a globe
- *   IX   Expo        four holographic pedestals
- *   X    Heartbeat   the stem cell donor drive: slow, warm, quiet
- *   XI   Chamber     the MUN in a purple hall
- *        Finale      back at the car; it leaves into the sunrise
+ *   I    Stillness     night, heavy rain, the car parked on the waterfront, engine off
+ *   II   Ignition      lights and engine come on, the car pulls away into the first bend
+ *   III  The Turn      the drift scene (src/lib/script.ts), untouched, at its original pace
+ *   IV   Clearing      the smoke settles, the title forms, the camera rises into the cloud
+ *   V    Arrival       down out of the cloud into a city at night, in the rain
+ *   VI   Robowars      \
+ *   VII  Competitions  |
+ *   VIII Speakers      |  stops along the drive through the city: each one an LED
+ *   IX   Expo          |  billboard on a facade, framed by the camera, with its panel
+ *   X    DKMS          |
+ *   XI   TWMUN         /
+ *        Finale        out over the sea on the bridge as dawn breaks; the CTA
  *
- * Chapters VI-XI are DISTRICTS: sets on platforms out over the sea, a hop of roughly
- * 100 m apart. Moving between them is always a camera move with a fog/light cross-fade
- * (the fog thickens mid-move), never a cut.
+ * Chapters I-IV happen on the waterfront road (src/lib/motion.ts), V onwards on the
+ * city route (src/lib/cityRoute.ts). The two are far apart in the world: at the end of
+ * IV the camera climbs into cloud while the fog thickens to nothing but grey, the scene
+ * switches stage at the thickest point, and the camera comes down out of the cloud over
+ * the city. No cut, just weather.
  *
  * Each chapter has a scroll length in viewport heights (`pages`), an environment at its
  * start (`env`) and optionally at its end (`envEnd`). The runtime eases from one chapter's
  * environment into the next over the last `blend` of the chapter, so rain, fog, light
  * colour and exposure never jump.
  *
- * Every chapter except III is made of camera BEATS: waypoints in a frame (x = left,
- * y = up, z = forward, metres). Frames:
+ * Chapters I, II and IV are made of camera BEATS: waypoints in a frame (x = left,
+ * y = up, z = forward, metres):
  *   start    where the car waits before the drift (chapters I and II)
  *   follow   rides with the car along the road, facing down it (the launch in II)
- *   parked   where the drift leaves the car (IV, V and the finale)
- *   <district id>  the district's own platform (VI-XI)
- * A beat eases into the next beat's first waypoint over its last `blend`, across frames
- * too, so the camera always travels. (A mini-map jump still cross-dissolves.)
+ *   parked   where the drift leaves the car (IV)
+ *   city     the city chapters: the camera director owns these (src/lib/director.ts)
  */
 
-export type DistrictId = 'arena' | 'pitlane' | 'voices' | 'expo' | 'heartbeat' | 'chamber';
-export type ChapterId = 'stillness' | 'ignition' | 'turn' | 'clearing' | 'arrival' | DistrictId | 'finale';
-export type BeatId = 'still' | 'ignite' | 'launch' | 'clearing' | 'arrive' | DistrictId | 'finale';
-export type FrameKind = 'start' | 'follow' | 'parked' | DistrictId;
+export type StopId = 'arrival' | 'robowars' | 'competitions' | 'speakers' | 'expo' | 'dkms' | 'twmun' | 'finale';
+export type ChapterId = 'stillness' | 'ignition' | 'turn' | 'clearing' | StopId;
+export type BeatId = 'still' | 'ignite' | 'launch' | 'clearing' | StopId;
+export type FrameKind = 'start' | 'follow' | 'parked' | 'city';
 
 /** Everything about the world that changes from night to morning. Colours are hex. */
 export type Env = {
@@ -58,8 +58,8 @@ export type Env = {
   skyGlow: string;
   /** Cloud cover in the sky shader, 0 clear .. 1 rain clouds. */
   clouds: number;
-  /** 0 outdoors .. 1 inside a district hall: the sky, the far city and the bridge go to fog. */
-  enclosed: number;
+  /** 0 clear .. 1 inside the cloud: the sky and everything far goes to the fog colour. */
+  mist: number;
   sun: string;
   sunIntensity: number;
   /** Degrees, 0 = straight down the road from the parked car, negative = over the city. */
@@ -143,8 +143,12 @@ export type Chapter = {
   envEnd?: Partial<Env>;
   /** Fraction of the chapter spent easing into the next chapter's environment. */
   blend: number;
-  /** Districts (VI-XI): the set this chapter lives in. */
-  district?: DistrictId;
+  /** Chapters V onwards: a stop on the city route. */
+  stop?: StopId;
+  /** The move into the next chapter goes through cloud (the fog closes in completely). */
+  cloud?: boolean;
+  /** Where envEnd is reached, as [from, to] inside the chapter (default [0.04, 0.92]). */
+  envSpan?: [number, number];
   start: number;
   end: number;
 };
@@ -160,7 +164,7 @@ const NIGHT: Env = {
   skyHorizon: '#131922',
   skyGlow: '#4a2f1d',
   clouds: 1,
-  enclosed: 0,
+  mist: 0,
   sun: '#9fc2d6',
   sunIntensity: 0.25,
   sunAzimuth: 140,
@@ -182,116 +186,72 @@ const NIGHT: Env = {
 
 const STILL: Env = { ...NIGHT, fog: 0.012, exposure: 0.82, env: 0.55, bloom: 0.85 };
 
-const DAWN: Partial<Env> = {
-  rain: 0,
-  fog: 0.0065,
-  fogColor: '#6d5a62',
-  exposure: 1.05,
-  skyTop: '#2b3658',
-  skyHorizon: '#d4886a',
-  skyGlow: '#ffae78',
-  clouds: 0.45,
-  sun: '#ff9c66',
-  sunIntensity: 1.6,
-  sunAzimuth: -38,
-  sunElevation: 4,
-  hemiSky: '#8a93b8',
-  hemiGround: '#3a2a24',
-  hemi: 0.6,
-  env: 0.75,
-  day: 1,
-  lamps: 0.25,
-  city: 0.3,
-  buildings: '#3b3c43',
-  ground: '#1a1a1e',
-  wet: 0.9,
-  groundEnv: 0.22,
-  seaEnv: 0.6,
-  bloom: 0.8,
+/** The waterfront after the drift: still night, the rain easing off. */
+const CLEARING: Env = { ...NIGHT, rain: 0.7, fog: 0.011, env: 0.6, groundEnv: 0.08, bloom: 0.9 };
+
+/**
+ * The city at night in the rain: sodium and neon under low cloud. The city's own lights
+ * do most of the work (src/scene/city), so the sky and the moon stay dim.
+ */
+const CITY: Env = {
+  ...NIGHT,
+  rain: 0.9,
+  fog: 0.0105,
+  fogColor: '#141018',
+  exposure: 1.02,
+  skyTop: '#05060b',
+  skyHorizon: '#1d1720',
+  skyGlow: '#5a3320',
+  clouds: 1,
+  sunIntensity: 0.18,
+  hemiSky: '#4a4c60',
+  hemiGround: '#1a1008',
+  hemi: 0.32,
+  env: 0.55,
+  lamps: 1,
+  city: 1,
+  ground: '#0b0c10',
+  wet: 1,
+  groundEnv: 0.05,
+  seaEnv: 0.25,
+  bloom: 1.05,
 };
 
-const MORNING: Env = {
-  ...NIGHT,
-  ...DAWN,
-  fog: 0.005,
-  fogColor: '#cbb69c',
-  exposure: 1.18,
-  skyTop: '#5c86b8',
-  skyHorizon: '#f1c69a',
-  skyGlow: '#ffd59c',
-  clouds: 0.3,
-  sun: '#ffd29a',
-  sunIntensity: 3,
-  sunAzimuth: -34,
-  sunElevation: 12,
-  hemiSky: '#c4d7ec',
-  hemiGround: '#6a5642',
-  hemi: 1.5,
-  env: 1.05,
-  lamps: 0,
-  city: 0.04,
-  buildings: '#8d8a83',
-  ground: '#2c2b2a',
-  wet: 0.65,
-  groundEnv: 0.3,
-  seaEnv: 0.9,
-  bloom: 0.55,
-} as Env;
+/** Small shifts per stop, so each block of the city has its own air. */
+const ROBOWARS_AIR: Env = { ...CITY, fogColor: '#1c1009', skyGlow: '#7a3a12', bloom: 1.15 };
+const SPEAKERS_AIR: Env = { ...CITY, fogColor: '#0c1020', skyGlow: '#2a3a6a' };
+const EXPO_AIR: Env = { ...CITY, fogColor: '#081416', skyGlow: '#1a5a60', bloom: 1.15 };
+const DKMS_AIR: Env = { ...CITY, rain: 0.45, fog: 0.012, fogColor: '#1e0f0c', skyGlow: '#6a3020', exposure: 0.96, bloom: 0.95 };
+const TWMUN_AIR: Env = { ...CITY, fogColor: '#130c1e', skyGlow: '#4a2a6a' };
 
-/** Inside a district hall: no sky, no sun, no rain; its own fog and a little sky light. */
-const hall = (fog: number, fogColor: string, hemiSky: string, hemiGround: string, extra: Partial<Env> = {}): Env => ({
-  ...MORNING,
+/** Out over the sea on the bridge as the sun comes up. */
+const DAWN: Env = {
+  ...CITY,
   rain: 0,
-  enclosed: 1,
-  fog,
-  fogColor,
-  clouds: 0,
-  sunIntensity: 0,
-  hemiSky,
-  hemiGround,
-  hemi: 0.3,
-  env: 0.6, // of the dark hall env map (see dayEnvironment.ts)
-  lamps: 0,
-  city: 0,
-  wet: 0,
-  groundEnv: 0,
-  exposure: 1.05,
-  bloom: 1.1,
-  ...extra,
-});
-
-const ARENA = hall(0.03, '#0d0a09', '#4a4f58', '#1a0f08', { hemi: 0.22, env: 0.9, bloom: 1.2 });
-const PITLANE = hall(0.022, '#16181c', '#9aa4b0', '#2a2620', { hemi: 0.5, env: 0.7, bloom: 0.9 });
-const VOICES_HALL = hall(0.028, '#060914', '#3b4c7a', '#0a0c14', { hemi: 0.2, bloom: 1.25 });
-const EXPO_HALL = hall(0.026, '#04090c', '#3a6a7a', '#05080a', { hemi: 0.2, bloom: 1.3 });
-const HEARTBEAT_HALL = hall(0.03, '#1e0c09', '#7a4636', '#140806', { hemi: 0.32, exposure: 1 });
-const CHAMBER_HALL = hall(0.026, '#120a1c', '#6a4a9a', '#0e0814', { hemi: 0.3, bloom: 1.15 });
-
-/** The finale: back outside, the sun just up, straight down the road. */
-const SUNRISE: Env = {
-  ...MORNING,
-  enclosed: 0,
-  fog: 0.0028,
-  fogColor: '#b98a6c',
-  exposure: 0.9,
-  skyTop: '#2f4874',
-  skyHorizon: '#e89a6a',
-  skyGlow: '#ff8a4a',
-  clouds: 0.35,
-  sun: '#ffb070',
-  sunIntensity: 2.1,
-  sunAzimuth: 0,
-  sunElevation: 3,
-  hemiSky: '#9fb4d6',
-  hemiGround: '#6a4a38',
-  hemi: 1.1,
-  env: 0.9,
-  buildings: '#7a7068',
-  ground: '#2a2624',
-  wet: 0.75,
-  groundEnv: 0.28,
-  seaEnv: 0.9,
-  bloom: 0.45,
+  fog: 0.0032,
+  fogColor: '#9a7a78',
+  exposure: 0.95,
+  skyTop: '#2c3d66',
+  skyHorizon: '#e5946c',
+  skyGlow: '#ff9a5a',
+  clouds: 0.4,
+  sun: '#ffb27a',
+  sunIntensity: 2.2,
+  sunAzimuth: -28,
+  sunElevation: 4,
+  hemiSky: '#9aa8cc',
+  hemiGround: '#5a4038',
+  hemi: 1,
+  env: 0.85,
+  day: 1,
+  lamps: 0.35,
+  city: 0.35,
+  buildings: '#4a4648',
+  ground: '#1c1c20',
+  wet: 0.8,
+  groundEnv: 0.22,
+  seaEnv: 0.95,
+  bloom: 0.55,
 };
 
 /* ---------------------------------------------------------------- chapters */
@@ -300,24 +260,16 @@ const chapterList: Omit<Chapter, 'start' | 'end'>[] = [
   { id: 'stillness', numeral: 'I', title: 'Stillness', pages: 1.4, env: STILL, blend: 0.4 },
   { id: 'ignition', numeral: 'II', title: 'Ignition', pages: 1.6, env: NIGHT, blend: 0.1 },
   { id: 'turn', numeral: 'III', title: 'The Turn', pages: 4.2, env: NIGHT, blend: 0.02 },
-  // the env map flips to daylight right at the start, under the smoke cover
-  {
-    id: 'clearing',
-    numeral: 'IV',
-    title: 'Clearing',
-    pages: 2,
-    env: { ...NIGHT, rain: 0.85, day: 1, env: 0.35, groundEnv: 0.12 },
-    envEnd: DAWN,
-    blend: 0.25,
-  },
-  { id: 'arrival', numeral: 'V', title: 'Arrival', pages: 1.8, env: MORNING, blend: 0.3 },
-  { id: 'arena', numeral: 'VI', title: 'Arena', pages: 2.4, env: ARENA, blend: 0.3, district: 'arena' },
-  { id: 'pitlane', numeral: 'VII', title: 'Pit Lane', pages: 2.8, env: PITLANE, blend: 0.25, district: 'pitlane' },
-  { id: 'voices', numeral: 'VIII', title: 'Hall of Voices', pages: 2.4, env: VOICES_HALL, blend: 0.3, district: 'voices' },
-  { id: 'expo', numeral: 'IX', title: 'Expo', pages: 3, env: EXPO_HALL, blend: 0.25, district: 'expo' },
-  { id: 'heartbeat', numeral: 'X', title: 'Heartbeat', pages: 2.2, env: HEARTBEAT_HALL, blend: 0.3, district: 'heartbeat' },
-  { id: 'chamber', numeral: 'XI', title: 'Chamber', pages: 2.2, env: CHAMBER_HALL, blend: 0.35, district: 'chamber' },
-  { id: 'finale', numeral: 'Fin', title: 'Finale', pages: 2, env: SUNRISE, blend: 0 },
+  { id: 'clearing', numeral: 'IV', title: 'Clearing', pages: 2.4, env: CLEARING, blend: 0.3, cloud: true },
+  { id: 'arrival', numeral: 'V', title: 'Arrival', pages: 2, env: CITY, blend: 0.25, stop: 'arrival' },
+  { id: 'robowars', numeral: 'VI', title: 'Robowars', pages: 2.4, env: ROBOWARS_AIR, blend: 0.25, stop: 'robowars' },
+  { id: 'competitions', numeral: 'VII', title: 'Competitions', pages: 2.6, env: CITY, blend: 0.25, stop: 'competitions' },
+  { id: 'speakers', numeral: 'VIII', title: 'Speakers', pages: 2.4, env: SPEAKERS_AIR, blend: 0.25, stop: 'speakers' },
+  { id: 'expo', numeral: 'IX', title: 'Expo', pages: 2.4, env: EXPO_AIR, blend: 0.25, stop: 'expo' },
+  { id: 'dkms', numeral: 'X', title: 'DKMS', pages: 2.4, env: DKMS_AIR, blend: 0.3, stop: 'dkms' },
+  { id: 'twmun', numeral: 'XI', title: 'TWMUN', pages: 2.2, env: TWMUN_AIR, blend: 0.3, stop: 'twmun' },
+  // dawn comes up over the sea while the car crosses; the CTA lands at FINALE.ctaAt
+  { id: 'finale', numeral: 'Fin', title: 'Finale', pages: 3, env: CITY, envEnd: DAWN, envSpan: [0.2, 0.7], blend: 0, stop: 'finale' },
 ];
 
 const beatList: Omit<Beat, 'start' | 'end'>[] = [
@@ -369,148 +321,35 @@ const beatList: Omit<Beat, 'start' | 'end'>[] = [
     focusRange: 3,
   },
   {
-    // The drift leaves the car in its own smoke; it thins as dawn comes up.
+    // The drift leaves the car in its own smoke; the title forms as it clears, then the
+    // camera rises into the cloud (the fog closes in: the move to the city, see top).
     id: 'clearing',
     chapter: 'clearing',
-    pages: 2,
+    pages: 2.4,
     frame: 'parked',
     camera: [
-      { position: [6.55, 1.1, 10.66], lookAt: [0.2, 2.25, 0], fov: 32 },
-      { position: [5.5, 1.0, 9.0], lookAt: [0.1, 2.15, 0], fov: 30 },
+      { t: 0, position: [6.55, 1.1, 10.66], lookAt: [0.2, 2.25, 0], fov: 32 },
+      { t: 0.55, position: [5.5, 1.0, 9.0], lookAt: [0.1, 2.15, 0], fov: 30 },
+      { t: 1, position: [4, 36, 14], lookAt: [0, 34, 70], fov: 36 },
     ],
+    move: 'line',
     look: { headlights: 1, accent: 0.3, smoke: 1 },
     lookEnd: { smoke: 0, accent: 0.6 },
-    anchor: 0.62,
+    anchor: 0.5,
   },
-  {
-    // Slow orbit from the front-left to the rear-left; leaves toward the arena.
-    id: 'arrive',
-    chapter: 'arrival',
-    pages: 1.8,
-    frame: 'parked',
-    camera: [
-      { position: [6.85, 1.5, 5.58], lookAt: [0, 0.7, 0], fov: 32, screenShift: 1.9 },
-      { position: [8.38, 1.8, -1.52], lookAt: [0, 0.7, 0], fov: 32, screenShift: 1.9 },
-    ],
-    mobileCamera: { position: [7.32, 1.9, 4.18], lookAt: [0, 0.6, 0], fov: 36 },
-    blend: 0.3,
-    look: { headlights: 0.8, accent: 0.6, smoke: 0 },
-    anchor: 0.2,
-  },
-  {
-    // Round the octagon; the robot sits centre-right of frame.
-    id: 'arena',
-    chapter: 'arena',
-    pages: 2.4,
-    frame: 'arena',
-    camera: [
-      { position: [0, 3.4, 13.5], lookAt: [0, 0.7, 0], fov: 32, screenShift: 1.4 },
-      { position: [6.5, 2.8, 10.5], lookAt: [0, 0.7, 0], fov: 30, screenShift: 1.4 },
-    ],
-    mobileCamera: { position: [0, 4.4, 15], lookAt: [0, 0.6, 0], fov: 38 },
-    blend: 0.3,
-    look: { headlights: 0, accent: 0, smoke: 0 },
-    dof: 1.2,
-    focusRange: 4,
-    anchor: 0.25,
-  },
-  {
-    // Down the row of garages while the bays slide past.
-    id: 'pitlane',
-    chapter: 'pitlane',
-    pages: 2.8,
-    frame: 'pitlane',
-    camera: [
-      { position: [12, 1.7, 8], lookAt: [8, 1.3, -3], fov: 32 },
-      { position: [-12, 1.7, 8], lookAt: [-16, 1.3, -3], fov: 32 },
-    ],
-    move: 'line',
-    mobileCamera: { position: [0, 2.4, 14], lookAt: [0, 1.4, -3], fov: 40 },
-    blend: 0.25,
-    look: { headlights: 0, accent: 0, smoke: 0 },
-    anchor: 0.1,
-  },
-  {
-    // The globe right of frame, the speakers' panel on the left.
-    id: 'voices',
-    chapter: 'voices',
-    pages: 2.4,
-    frame: 'voices',
-    camera: [
-      { position: [0, 3.2, 12], lookAt: [0, 3, 0], fov: 32, screenShift: 1.8 },
-      { position: [1.8, 3.3, 11], lookAt: [0, 3, 0], fov: 30, screenShift: 1.8 },
-    ],
-    mobileCamera: { position: [0, 3.2, 12], lookAt: [0, 3, 0], fov: 38 },
-    blend: 0.3,
-    look: { headlights: 0, accent: 0, smoke: 0 },
-    anchor: 0.25,
-  },
-  {
-    // A dolly along the four pedestals, a beat at each.
-    id: 'expo',
-    chapter: 'expo',
-    pages: 3,
-    frame: 'expo',
-    camera: [
-      { t: 0, position: [-9, 2.2, 7.6], lookAt: [-9, 1.95, 0], fov: 32 },
-      { t: 0.33, position: [-3, 2.2, 7.6], lookAt: [-3, 1.95, 0], fov: 32 },
-      { t: 0.66, position: [3, 2.2, 7.6], lookAt: [3, 1.95, 0], fov: 32 },
-      { t: 1, position: [9, 2.2, 7.6], lookAt: [9, 1.95, 0], fov: 32 },
-    ],
-    move: 'line',
-    mobileCamera: { position: [0, 2.6, 15], lookAt: [0, 1.6, 0], fov: 40 },
-    blend: 0.25,
-    look: { headlights: 0, accent: 0, smoke: 0 },
-    dof: 1.4,
-    focusRange: 2.5,
-    anchor: 0.08,
-  },
-  {
-    // A slow push toward the pulse. Nothing else moves.
-    id: 'heartbeat',
-    chapter: 'heartbeat',
-    pages: 2.2,
-    frame: 'heartbeat',
-    camera: [
-      { position: [0, 1.5, 9], lookAt: [0, 1.5, 0], fov: 32, screenShift: -1.6 },
-      { position: [0, 1.5, 7.2], lookAt: [0, 1.5, 0], fov: 30, screenShift: -1.6 },
-    ],
-    mobileCamera: { position: [0, 1.8, 10], lookAt: [0, 1.5, 0], fov: 38 },
-    blend: 0.3,
-    look: { headlights: 0, accent: 0, smoke: 0 },
-    anchor: 0.25,
-  },
-  {
-    // The chamber from the back benches, drifting toward the dais.
-    id: 'chamber',
-    chapter: 'chamber',
-    pages: 2.2,
-    frame: 'chamber',
-    camera: [
-      { position: [0, 2.6, 12], lookAt: [0, 1.4, -4], fov: 34 },
-      { position: [4.5, 2.3, 8], lookAt: [0, 1.4, -4], fov: 32 },
-    ],
-    mobileCamera: { position: [0, 3, 14], lookAt: [0, 1.4, -4], fov: 40 },
-    blend: 0.35,
-    look: { headlights: 0, accent: 0, smoke: 0 },
-    anchor: 0.25,
-  },
-  {
-    // Back at the car: rev, flare, and it leaves into the sunrise.
-    id: 'finale',
-    chapter: 'finale',
-    pages: 2,
-    frame: 'parked',
-    camera: [
-      { t: 0, position: [4.52, 0.8, 8.26], lookAt: [0, 0.65, 0.4], fov: 34 },
-      { t: 0.18, position: [3.72, 0.72, 7.0], lookAt: [0, 0.65, 0.4], fov: 32 },
-      { t: 0.28, position: [-1.06, 0.62, -12.85], lookAt: [0, 0.8, 22], fov: 36 },
-      { t: 1, position: [-0.83, 0.95, -17.86], lookAt: [0, 0.8, 40], fov: 34 },
-    ],
-    mobileCamera: { position: [-1.08, 1.0, -22.82], lookAt: [0, 0.8, 30], fov: 38 },
-    look: { headlights: 1, accent: 0, smoke: 0 },
-    anchor: 0.82,
-  },
+  // V onwards: the camera director drives the camera (src/lib/director.ts); a beat here
+  // only carries the headlights and where the mini-map lands (the stop itself).
+  ...(['arrival', 'robowars', 'competitions', 'speakers', 'expo', 'dkms', 'twmun', 'finale'] as const).map(
+    (id): Omit<Beat, 'start' | 'end'> => ({
+      id,
+      chapter: id,
+      pages: 1,
+      frame: 'city',
+      camera: [],
+      look: { headlights: 1, accent: 0, smoke: 0 },
+      anchor: id === 'finale' ? 0.62 : 0.4,
+    }),
+  ),
 ];
 
 /* ------------------------------------------------------------------ layout */
@@ -591,42 +430,24 @@ export function fromDriftLocal(local: number) {
 
 /* ------------------------------------------------------------- finale etc */
 
-/** Timings inside the finale beat (0..1). */
+/** Timings inside the finale (0..1 of the chapter). */
 export const FINALE = {
-  revAt: 0.03,
-  flareAt: 0.13,
-  flareWidth: 0.06,
-  flarePeak: 3.2,
-  launchFrom: 0.28,
-  launchTo: 0.86,
-  launchDistance: 175,
-  burnoutAt: 0.31,
-  burnoutWidth: 0.03,
-  burnoutPeak: 0.35,
+  /** The CTA comes up as the sun clears the horizon. */
   ctaAt: 0.6,
 };
 
 /** Chapter II: when the engine catches and the lights come up (0..1 of the ignite beat). */
 export const IGNITION = { at: 0.32, lightsIn: 0.22 };
 
-/**
- * Where the district platforms sit, in the parked car's frame (x = left toward the sea,
- * z = down the road), and how each set is turned. A loop out over the water and back:
- * car -> arena -> pit lane -> voices -> expo -> heartbeat -> chamber -> car.
- */
-export const DISTRICTS: Record<DistrictId, { x: number; z: number; yawDeg: number; radius: number }> = {
-  arena: { x: 62, z: 70, yawDeg: 0, radius: 16 },
-  pitlane: { x: 82, z: 178, yawDeg: 0, radius: 24 },
-  voices: { x: 178, z: 218, yawDeg: 0, radius: 16 },
-  expo: { x: 205, z: 110, yawDeg: 0, radius: 20 },
-  heartbeat: { x: 172, z: 12, yawDeg: 0, radius: 14 },
-  chamber: { x: 104, z: 24, yawDeg: 0, radius: 18 },
-};
+/** Global progress where the stage switches from the waterfront to the city (inside the cloud). */
+export function stageSwitchAt() {
+  const c = chapterById('clearing');
+  return c.end - (c.blend / 2) * (c.end - c.start);
+}
 
 /* ------------------------------------------------------------------ frames */
 
 const startFrame: Frame & { key: string } = { origin: new Vector3(), heading: 0, key: '' };
-const districtFrames = new Map<DistrictId, Frame & { key: string }>();
 const parkedFrame: Frame & { key: string } = { origin: new Vector3(), heading: 0, key: '' };
 
 /** Where the car waits before the drift (chapters I and II). */
@@ -639,7 +460,7 @@ export function getStartFrame(): Frame {
   return startFrame;
 }
 
-/** Where the drift leaves the car (chapters IV and V). */
+/** Where the drift leaves the car (chapter IV). */
 export function getParkedFrame(): Frame {
   const track = getTrack();
   if (parkedFrame.key !== track.key) {
@@ -649,24 +470,4 @@ export function getParkedFrame(): Frame {
   return parkedFrame;
 }
 
-/** A district's set: origin and heading in the world. */
-export function getDistrictFrame(id: DistrictId): Frame {
-  const track = getTrack();
-  let f = districtFrames.get(id);
-  if (!f) {
-    f = { origin: new Vector3(), heading: 0, key: '' };
-    districtFrames.set(id, f);
-  }
-  if (f.key !== track.key) {
-    const p = getParkedFrame();
-    const d = DISTRICTS[id];
-    const fwd = new Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
-    const left = new Vector3(Math.cos(p.heading), 0, -Math.sin(p.heading));
-    f.origin.copy(p.origin).addScaledVector(left, d.x).addScaledVector(fwd, d.z).setY(0);
-    f.heading = p.heading + (d.yawDeg * Math.PI) / 180;
-    f.key = track.key;
-  }
-  return f;
-}
-
-export const isDistrict = (k: string): k is DistrictId => k in DISTRICTS;
+export const isStop = (k: string): k is StopId => CHAPTERS.some((c) => c.stop === k);

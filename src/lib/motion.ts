@@ -155,6 +155,8 @@ export const carState = {
   heading: 0,
   driftYaw: 0,
   roll: 0,
+  /** Nose up on a climb (radians); 0 on the flat waterfront road. */
+  pitch: 0,
   steer: 0,
   /** 0..1, |driftYaw| / slipRefDeg. Drives smoke, skids, shake, brake lights. */
   slip: 0,
@@ -164,6 +166,8 @@ export const carState = {
   burnout: 0,
   /** Signed ground speed along the path, m/s (damped). */
   speed: 0,
+  /** Damped change of speed, m/s^2 (the camera shakes and the brake lights flare on it). */
+  accel: 0,
   frontSpin: 0,
   rearSpin: 0,
   frontSpinRate: 0,
@@ -265,7 +269,10 @@ export function stepDrive(rawProgress: number, dt: number, extraS = 0, burnout =
   // so the rear tyres keep spinning (and smoking) if the user pauses mid-drift.
   const ds = s.initialized ? s.s - prevS : 0;
   const safeDt = Math.max(dt, 1e-4);
+  const prevSpeed = s.speed;
   easing.damp(s, 'speed', ds / safeDt, 0.15, dt);
+  easing.damp(s, 'accel', (s.speed - prevSpeed) / safeDt, 0.25, dt);
+  s.pitch = 0;
   s.frontSpinRate = s.speed / s.frontRadius;
   const spin = Math.max(s.slip, s.burnout);
   s.rearSpinRate = s.speed / s.rearRadius + spin * d.rearSpinBoost;

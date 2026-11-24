@@ -7,9 +7,7 @@ import { advance } from '@react-three/fiber';
 import { CONFIG, RANGES, type Config } from '@/lib/config';
 import { carState } from '@/lib/motion';
 import { SHOTS } from '@/lib/script';
-import { BEATS, CHAPTERS, DISTRICTS, DRIFT, fromDriftLocal, getDistrictFrame } from '@/lib/chapters';
-import { insidePolygon, landPolygon } from '@/lib/coast';
-import { getTrack } from '@/lib/motion';
+import { BEATS, CHAPTERS, DRIFT, fromDriftLocal } from '@/lib/chapters';
 import { chapterState } from '@/lib/chapterRuntime';
 import { interaction } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
@@ -124,6 +122,7 @@ export function DebugPanel() {
   useControls('Interaction', configSchema('interaction'), { collapsed: true });
   useControls('Post', configSchema('post'), { collapsed: true });
   useControls('Rain', configSchema('rain'), { collapsed: true });
+  useControls('City', configSchema('city'), { collapsed: true });
   useControls('Coast', configSchema('coast'), { collapsed: true });
   useControls('Track', configSchema('track'), { collapsed: true });
   useControls('Scroll', configSchema('scroll'), { collapsed: true });
@@ -140,20 +139,6 @@ export function DebugPanel() {
       chapterState,
       interaction,
       advance,
-      // is each district platform out over the water? (debug only)
-      checkDistricts: () => {
-        const land = landPolygon(getTrack());
-        return Object.entries(DISTRICTS).map(([id, d]) => {
-          const o = getDistrictFrame(id as keyof typeof DISTRICTS).origin;
-          let onLand = 0;
-          for (let a = 0; a < 16; a++) {
-            const x = o.x + Math.cos((a / 16) * Math.PI * 2) * d.radius;
-            const z = o.z + Math.sin((a / 16) * Math.PI * 2) * d.radius;
-            if (insidePolygon(land, x, z)) onLand++;
-          }
-          return { id, onLand, centreOnLand: insidePolygon(land, o.x, o.z) };
-        });
-      },
     };
 
     // HUD: which drift shot or section is on screen right now
@@ -161,7 +146,9 @@ export function DebugPanel() {
       if (!hud.current) return;
       const g = useStore.getState().progress.toFixed(3);
       const c = CHAPTERS[chapterState.chapter];
-      if (!chapterState.drift) {
+      if (chapterState.stage === 'city') {
+        hud.current.textContent = `${c.numeral} ${c.title.toUpperCase()} / ${cameraState.shotId}  route ${carState.s.toFixed(0)} m  ${(carState.speed * 3.6).toFixed(0)} km/h   global ${g}`;
+      } else if (!chapterState.drift) {
         const b = BEATS[Math.max(0, chapterState.beat)];
         hud.current.textContent = `${c.numeral} ${c.title.toUpperCase()} / ${b.id}  ${(chapterState.beatLocal * 100).toFixed(0)}%   global ${g}`;
       } else {

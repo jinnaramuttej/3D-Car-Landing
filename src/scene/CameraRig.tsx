@@ -20,6 +20,7 @@ import { interaction } from '@/lib/interaction';
 import { carState, forwardOf, getAnchorFrame, leftOf, shakeAmount, type Frame } from '@/lib/motion';
 import { pointer, trackPointer } from '@/lib/pointer';
 import { type Ease, SHOTS, type Shot, shotIndexAt } from '@/lib/script';
+import { applyCityShot, type CityShot, cityRig, cityShot } from './city/cityCamera';
 
 const { clamp, degToRad, lerp, smootherstep } = MathUtils;
 
@@ -30,8 +31,8 @@ const DEFAULT_NEAR_FADE: readonly [number, number] = [0.35, 2];
  * frame by CameraRig: Effects reads focus/dof/shake/mode, Smoke reads nearFade.
  */
 export const cameraState = {
-  /** 'drift' = the shot script (chapter III), 'beat' = chapter camera beats. */
-  mode: 'beat' as 'drift' | 'beat',
+  /** 'drift' = the shot script (chapter III), 'beat' = chapter camera beats, 'city' = V on. */
+  mode: 'beat' as 'drift' | 'beat' | 'city',
   shot: 0,
   shotId: SHOTS[0].id,
   shake: 0,
@@ -308,6 +309,14 @@ export function CameraRig() {
     [],
   );
 
+  const city = useMemo(
+    () => ({
+      rig: cityRig(),
+      shot: { pos: new Vector3(), look: new Vector3(), fov: 34, focus: new Vector3(), dof: 0, focusRange: 4, id: '' } as CityShot,
+    }),
+    [],
+  );
+
   useEffect(() => trackPointer(), []);
 
   useFrame((state, rawDt) => {
@@ -315,6 +324,23 @@ export function CameraRig() {
     const c = CONFIG.camera;
     const dt = Math.min(rawDt, 1 / 20);
     const t = state.clock.elapsedTime;
+
+    if (chapterState.stage === 'city') {
+      rig.init = false;
+      const shot = cityShot(city.shot);
+      applyCityShot(cam, city.rig, shot, dt);
+      cameraState.mode = 'city';
+      cameraState.shot = -1;
+      cameraState.shotId = shot.id;
+      cameraState.focus.copy(shot.focus);
+      cameraState.dof = shot.dof * c.dofScale;
+      cameraState.focusRange = shot.focusRange;
+      cameraState.nearFade[0] = DEFAULT_NEAR_FADE[0];
+      cameraState.nearFade[1] = DEFAULT_NEAR_FADE[1];
+      cameraState.shake = applyExtras(cam, pose.parallax, dt, t, 0.6, mobile);
+      return;
+    }
+    city.rig.init = false;
 
     if (!chapterState.drift) {
       runBeatCamera(cam, dt, rig, mobile, pose.cur, pose.prev);

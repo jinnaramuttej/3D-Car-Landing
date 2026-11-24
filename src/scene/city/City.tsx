@@ -3,7 +3,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
-import { type Group, MathUtils, type Mesh, type Object3D, type PerspectiveCamera, type Texture } from 'three';
+import { Euler, type Group, MathUtils, type Mesh, type Object3D, type PerspectiveCamera, type Texture, Vector3 } from 'three';
+import { feel } from '@/lib/feel';
 import { chapterState } from '@/lib/chapterRuntime';
 import { CITY_ORIGIN, getRoute, SEA_LEVEL } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
@@ -49,6 +50,9 @@ export function City() {
   const mats = useRef<{ mat: import('three').MeshStandardMaterial; kind: CityKind }[]>([]);
   const envMap = useRef<Texture | null>(null);
   const frames = useRef(0);
+  const mirrorPoint = useRef(new Vector3());
+  const mirrorUp = useRef(new Vector3(0, 1, 0));
+  const mirrorEuler = useRef(new Euler());
   useCityLayer(group);
 
   useLayoutEffect(() => {
@@ -117,12 +121,21 @@ export function City() {
       reflectionUniforms.uReflOn.value = 0;
       return;
     }
+    // the mirror: the road under the car, tilted with it (on its springs, so it doesn't shiver
+    // with every triangle under the wheels); the sea once over the water
     const overSea = carState.s > getRoute().bridgeStart + 50;
-    const planeY = overSea ? CITY_ORIGIN.y + SEA_LEVEL : carState.position.y - 0.02;
+    if (overSea) {
+      mirrorPoint.current.set(carState.position.x, CITY_ORIGIN.y + SEA_LEVEL, carState.position.z);
+      mirrorUp.current.set(0, 1, 0);
+    } else {
+      mirrorEuler.current.set(-feel.gp, carState.heading, feel.gr, 'YXZ');
+      mirrorUp.current.set(0, 1, 0).applyEuler(mirrorEuler.current);
+      mirrorPoint.current.set(carState.position.x, feel.gy, carState.position.z).addScaledVector(mirrorUp.current, -0.02);
+    }
     // (every other frame: the texture keeps the matrix of the view it was drawn from, so a
     // frame-old reflection still lands in the right place, half the cost)
     if (++frames.current % Math.max(1, Math.round(c.reflectionEvery)) === 0) {
-      renderReflection(gl, scene, state.camera as PerspectiveCamera, planeY, c.reflectionScale, c.reflectionFar);
+      renderReflection(gl, scene, state.camera as PerspectiveCamera, mirrorPoint.current, mirrorUp.current, c.reflectionScale, c.reflectionFar);
     }
   }, -0.5);
 

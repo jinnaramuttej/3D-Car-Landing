@@ -81,6 +81,8 @@ uniform float uLedGlow;
 uniform float uReflStrength;
 uniform float uReflOn;
 uniform float uReflPlaneY;
+uniform vec3 uReflPoint;
+uniform vec3 uReflNormal;
 uniform sampler2D uReflMap;
 uniform mat4 uReflMatrix;
 varying vec3 vCityPos;
@@ -160,7 +162,7 @@ const fragMain = /* glsl */ `
     // water: the reflection, bent by the waves, strong at grazing angles
     vec3 V = normalize(cameraPosition - vCityPos);
     float fres = 0.02 + 0.98 * pow(1.0 - max(V.y, 0.0), 5.0);
-    float nearPlane = 1.0 - smoothstep(0.35, 1.4, abs(vCityPos.y - uReflPlaneY));
+    float nearPlane = 1.0 - smoothstep(0.35, 1.4, abs(dot(vCityPos - uReflPoint, uReflNormal)));
     vec4 rc = uReflMatrix * vec4(vCityPos, 1.0);
     vec2 ruv = rc.xy / rc.w + normal.xy * 0.045;
     vec3 r = texture2D(uReflMap, ruv).rgb;
@@ -191,7 +193,7 @@ const fragMain = /* glsl */ `
     roughnessFactor = mix(roughnessFactor, mix(0.32, 0.12, puddle), wet);
 
     // the street reflected in the wet surface (only near the mirror's plane)
-    float nearPlane = 1.0 - smoothstep(0.35, 1.4, abs(vCityPos.y - uReflPlaneY));
+    float nearPlane = 1.0 - smoothstep(0.35, 1.4, abs(dot(vCityPos - uReflPoint, uReflNormal)));
     float k = uReflOn * wet * nearPlane * mix(0.25, 1.0, puddle) * uReflStrength;
     if (k > 0.001) {
       vec4 rc = uReflMatrix * vec4(vCityPos, 1.0);

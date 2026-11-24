@@ -10,6 +10,9 @@ import { isMobile } from '@/lib/device';
 import { carState, leftOf } from '@/lib/motion';
 import { nearestK } from '@/lib/nearest';
 import { createGlowTexture } from '@/lib/textures';
+import { hasRoad, roadHeight } from '@/lib/ground';
+
+const _up = new Vector3();
 import { useCityLayer } from './City';
 
 /**
@@ -153,9 +156,44 @@ export function StreetLights() {
   }, [lamps]);
 
   const _focus = useMemo(() => new Vector3(), []);
+  const conformed = useRef(false);
+
+  /**
+   * Each lamp's pool of light lies on the road under it: fitted (height and tilt) to the road
+   * sampled round its centre once the city's road is in. Laid flat at the route's height, a
+   * pool on the ramp or a cambered street hovered over half of it.
+   */
+  const conformPools = () => {
+    const o = new Object3D();
+    const n = new Vector3();
+    const a = new Vector3();
+    const b = new Vector3();
+    lamps.forEach((lamp, i) => {
+      const x = lamp.head.x;
+      const z = lamp.head.z;
+      const h0 = roadHeight(x, z, lamp.road);
+      if (h0 === null) return;
+      const hx = roadHeight(x + 3, z, lamp.road) ?? h0;
+      const hz = roadHeight(x, z + 3, lamp.road) ?? h0;
+      a.set(3, hx - h0, 0);
+      b.set(0, hz - h0, 3);
+      n.crossVectors(b, a).normalize();
+      if (n.y < 0.8) n.set(0, 1, 0);
+      o.position.set(x, h0 + 0.04, z);
+      o.quaternion.setFromUnitVectors(_up.set(0, 0, 1), n);
+      o.updateMatrix();
+      pools.current.setMatrixAt(i, o.matrix);
+    });
+    pools.current.instanceMatrix.needsUpdate = true;
+    pools.current.computeBoundingSphere();
+  };
   const near = useMemo(() => ({ idx: new Int32Array(count), d: new Float64Array(count) }), [count]);
 
   useFrame((state) => {
+    if (!conformed.current && hasRoad()) {
+      conformed.current = true;
+      conformPools();
+    }
     const e = chapterState.env;
     headMat.current.emissiveIntensity = CONFIG.city.sodiumEmissive * e.lamps;
     // the shafts show in the rain and the haze, and go with the lamps at dawn
@@ -196,7 +234,7 @@ export function StreetLights() {
         <cylinderGeometry args={[0.32, 3.3, 8.1, 20, 1, true]} />
       </instancedMesh>
       <instancedMesh ref={pools} args={[undefined, undefined, MAX]} renderOrder={1}>
-        <planeGeometry args={[17, 17]} />
+        <planeGeometry args={[12, 12]} />
         <meshBasicMaterial map={glow} color={sodium} transparent opacity={0.07} blending={AdditiveBlending} depthWrite={false} toneMapped={false} />
       </instancedMesh>
       {Array.from({ length: count }, (_, k) => (

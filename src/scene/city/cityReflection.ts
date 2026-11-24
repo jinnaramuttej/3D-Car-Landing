@@ -29,6 +29,9 @@ export const reflectionUniforms = {
   uReflMap: { value: null as unknown as import('three').Texture },
   uReflMatrix: { value: new Matrix4() },
   uReflPlaneY: { value: 0 },
+  /** The mirror plane: a point on it and its normal (it follows the road under the car, tilted with it). */
+  uReflPoint: { value: new Vector3() },
+  uReflNormal: { value: new Vector3(0, 1, 0) },
   /** 0 = off (mobile, or while rendering the reflection itself). */
   uReflOn: { value: 0 },
 };
@@ -54,8 +57,13 @@ const view = new Vector3();
 
 let rt: WebGLRenderTarget | null = null;
 
-/** Renders the mirrored view into the shared texture. `scale` = fraction of the canvas width. */
-export function renderReflection(gl: WebGLRenderer, scene: Scene, camera: PerspectiveCamera, planeY: number, scale: number, far: number) {
+/**
+ * Renders the mirrored view into the shared texture. `scale` = fraction of the canvas width.
+ * The mirror is the plane through `point` with `up` as its normal: the road under the car,
+ * tilted with it (on a climb a level mirror reflects the street from the wrong height, and
+ * the reflections seem to hover over it), or the sea.
+ */
+export function renderReflection(gl: WebGLRenderer, scene: Scene, camera: PerspectiveCamera, point: Vector3, up: Vector3, scale: number, far: number) {
   const w = Math.max(64, Math.round(gl.domElement.width * scale));
   const h = Math.max(64, Math.round(gl.domElement.height * scale));
   if (!rt) {
@@ -63,13 +71,16 @@ export function renderReflection(gl: WebGLRenderer, scene: Scene, camera: Perspe
     rt.texture.generateMipmaps = false;
   } else if (rt.width !== w || rt.height !== h) rt.setSize(w, h);
 
+  normal.copy(up).normalize();
   camera.getWorldPosition(camPos);
-  if (camPos.y < planeY + 0.05) {
+  const above = view.subVectors(camPos, point).dot(normal);
+  if (above < 0.05) {
     // under the mirror (never on screen, but keep it sane)
     reflectionUniforms.uReflOn.value = 0;
     return;
   }
-  onPlane.set(camPos.x, planeY, camPos.z);
+  // the camera's foot on the mirror
+  onPlane.copy(camPos).addScaledVector(normal, -above);
 
   // mirrored position and target
   view.subVectors(onPlane, camPos).reflect(normal).negate().add(onPlane);
@@ -119,7 +130,9 @@ export function renderReflection(gl: WebGLRenderer, scene: Scene, camera: Perspe
   gl.xr.enabled = prevXr;
 
   reflectionUniforms.uReflMap.value = rt.texture;
-  reflectionUniforms.uReflPlaneY.value = planeY;
+  reflectionUniforms.uReflPlaneY.value = point.y;
+  reflectionUniforms.uReflPoint.value.copy(point);
+  reflectionUniforms.uReflNormal.value.copy(normal);
   reflectionUniforms.uReflOn.value = 1;
 }
 

@@ -21,6 +21,7 @@ import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { MeshoptDecoder } from 'meshoptimizer';
 import sharp from 'sharp';
+import { BufferAttribute, BufferGeometry, CatmullRomCurve3, DoubleSide, Group, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 
 const SRC = process.argv[2] ?? path.join(process.cwd(), 'public', 'models', 'city.glb');
 const PREVIEW = process.argv[3];
@@ -56,6 +57,8 @@ const doc = await io.read(SRC);
 
 /* 1. raster ------------------------------------------------------------------ */
 const tris = [];
+/** Every road and pavement triangle (world), for exact heights by raycast. */
+const drive = [];
 let minX = Infinity;
 let maxX = -Infinity;
 let minZ = Infinity;
@@ -72,7 +75,23 @@ for (const node of doc.getRoot().listNodes()) {
     a[2] = m[2] * x + m[6] * y + m[10] * z + m[14];
   };
   for (const p of mesh.listPrimitives()) {
-    if (!p.getMaterial()?.getName().startsWith('road:')) continue;
+    const kind = p.getMaterial()?.getName().split(':')[0];
+    if (kind === 'road' || kind === 'ground') {
+      const pos = p.getAttribute('POSITION');
+      const idx = p.getIndices();
+      const arr = new Float32Array(pos.getCount() * 3);
+      const e = [];
+      for (let i = 0; i < pos.getCount(); i++) {
+        pos.getElement(i, e);
+        world(e);
+        arr.set(e, i * 3);
+      }
+      const g = new BufferGeometry();
+      g.setAttribute('position', new BufferAttribute(arr, 3));
+      if (idx) g.setIndex(Array.from(idx.getArray()));
+      drive.push(g);
+    }
+    if (kind !== 'road') continue;
     const pos = p.getAttribute('POSITION');
     const idx = p.getIndices();
     const n = idx ? idx.getCount() : pos.getCount();
@@ -355,7 +374,7 @@ const smooth = (arr, r) =>
   });
 pts = smooth(smooth(smooth(pts, 14), 14), 14);
 // resample every SPACING metres along the path
-const SPACING = 6;
+const SPACING = 3;
 const res = [pts[0]];
 let acc = 0;
 for (let i = 1; i < pts.length; i++) {
@@ -388,15 +407,21 @@ const sampleH = (x, z, prev) => {
 };
 let prev = null;
 const hs = res.map(([x, z]) => (prev = sampleH(x, z, prev)));
-const hsm = hs.map((_, i) => {
-  let s = 0;
-  let n = 0;
-  for (let j = Math.max(0, i - 2); j <= Math.min(hs.length - 1, i + 2); j++) {
-    s += hs[j];
-    n++;
-  }
-  return s / n;
-});
+// exact heights: raycast the real road (and pavement) under each point, guided by the
+// raster's estimate so a flyover above never wins
+const driveRoot = new Group();
+const driveMat = new MeshBasicMaterial({ side: DoubleSide });
+for (const g of drive) driveRoot.add(new Mesh(g, driveMat));
+driveRoot.updateMatrixWorld(true);
+const ray = new Raycaster();
+const DOWN = new Vector3(0, -1, 0);
+const surfaceAt = (x, z, guess) => {
+  ray.set(new Vector3(x, guess + 2.5, z), DOWN);
+  ray.far = 6;
+  const hit = ray.intersectObject(driveRoot, true)[0];
+  return hit && Math.abs(hit.point.y - guess) < 3 ? hit.point.y : null;
+};
+const hsm = hs.map((h, i) => surfaceAt(res[i][0], res[i][1], h) ?? h);
 
 // free road either side (for lamps and billboards): walk sideways to the first non-road cell
 const sideRoom = (i) => {
@@ -426,21 +451,94 @@ const room = res.map((_, i) => sideRoom(i));
 let length = 0;
 for (let i = 1; i < points.length; i++) length += Math.hypot(points[i][0] - points[i - 1][0], points[i][2] - points[i - 1][2]);
 
+// holes in the model's road under the route (the same curve the app builds): patched
+const curve = new CatmullRomCurve3(points.map(([x, y, z]) => new Vector3(x, y, z)), false, 'centripetal', 0.5);
+curve.arcLengthDivisions = 6000;
+const curveLen = curve.getLength();
+const patches = [];
+for (let s = 0; s <= curveLen; s += 0.25) {
+  const p = curve.getPointAt(s / curveLen);
+  const ok = surfaceAt(p.x, p.z, p.y) !== null;
+  const last = patches[patches.length - 1];
+  if (ok) continue;
+  if (last && s - last[1] <= 0.5) last[1] = +s.toFixed(2);
+  else patches.push([+s.toFixed(2), +s.toFixed(2)]);
+}
+for (const p of patches) {
+  p[0] = +(p[0] - 1.5).toFixed(2);
+  p[1] = +(p[1] + 1.5).toFixed(2);
+}
+
+// open road ends at the edge of the model (sealed with barriers in the scene)
+const ends = [];
+{
+  const margin = 6 / CELL;
+  const seen = new Uint8Array(W * H);
+  let x0 = W, x1 = 0, y0 = H, y1 = 0;
+  for (let k = 0; k < W * H; k++) {
+    if (Number.isNaN(height[k])) continue;
+    x0 = Math.min(x0, k % W);
+    x1 = Math.max(x1, k % W);
+    y0 = Math.min(y0, Math.floor(k / W));
+    y1 = Math.max(y1, Math.floor(k / W));
+  }
+  const edge = (x, y) => x - x0 < margin || x1 - x < margin || y - y0 < margin || y1 - y < margin;
+  for (let k = 0; k < W * H; k++) {
+    if (seen[k] || Number.isNaN(height[k]) || !edge(k % W, Math.floor(k / W))) continue;
+    // flood the edge cells of this road end
+    const stack = [k];
+    seen[k] = 1;
+    const cellsIn = [];
+    while (stack.length) {
+      const c = stack.pop();
+      cellsIn.push(c);
+      const cx = c % W;
+      const cy = Math.floor(c / W);
+      for (const [dx, dy] of N8) {
+        const n = (cy + dy) * W + cx + dx;
+        if (cx + dx < 0 || cy + dy < 0 || cx + dx >= W || cy + dy >= H || seen[n] || Number.isNaN(height[n]) || !edge(cx + dx, cy + dy)) continue;
+        seen[n] = 1;
+        stack.push(n);
+      }
+    }
+    if (cellsIn.length < 12) continue;
+    let sx = 0, sy = 0, sh = 0, minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
+    for (const c of cellsIn) {
+      const cx = c % W, cy = Math.floor(c / W);
+      sx += cx; sy += cy; sh += height[c];
+      minx = Math.min(minx, cx); maxx = Math.max(maxx, cx); miny = Math.min(miny, cy); maxy = Math.max(maxy, cy);
+    }
+    const n = cellsIn.length;
+    const cx = sx / n, cy = sy / n;
+    // which edge: the barrier runs along it
+    const dists = [cx - x0, x1 - cx, cy - y0, y1 - cy];
+    const side = dists.indexOf(Math.min(...dists));
+    const along = side < 2 ? (maxy - miny + 1) * CELL : (maxx - minx + 1) * CELL;
+    ends.push([+(minX + cx * CELL).toFixed(1), +(sh / n).toFixed(2), +(minZ + cy * CELL).toFixed(1), side < 2 ? 0 : 1, +Math.min(40, along + 2).toFixed(1)]);
+  }
+}
+
 const file = `/**
  * GENERATED by scripts/build-route.mjs from public/models/city.glb. Do not edit by hand
  * unless you mean to: re-running the script overwrites this file.
  *
  * The drive through the city, city-local metres (x, y = road height, z), one point
- * every ~${SPACING} m along the middle of the carriageway, and the free road either
- * side of each point [left, right] in metres.
+ * every ~${SPACING} m along the middle of the carriageway, with the height of the real road
+ * surface under it, and the free road either side of each point [left, right] in metres.
  */
 export const ROUTE_LENGTH = ${length.toFixed(1)};
+
+/** Route metres [from, to] where the model has a hole in the road under the route (patched in the scene). */
+export const ROUTE_PATCHES: [number, number][] = ${JSON.stringify(patches)};
+
+/** Open road ends at the edge of the model: [x, y, z, 0 = runs along z / 1 = along x, width]. */
+export const ROAD_ENDS: [number, number, number, number, number][] = ${JSON.stringify(ends)};
 
 export const ROUTE_POINTS: [number, number, number][] = ${JSON.stringify(points)};
 
 export const ROUTE_ROOM: [number, number][] = ${JSON.stringify(room)};
 `;
 fs.writeFileSync(OUT, file);
-console.log(`route: ${points.length} points, ${length.toFixed(0)} m, height ${Math.min(...hsm).toFixed(1)} .. ${Math.max(...hsm).toFixed(1)} m -> ${OUT}`);
+console.log(`route: ${points.length} points, ${length.toFixed(0)} m, height ${Math.min(...hsm).toFixed(1)} .. ${Math.max(...hsm).toFixed(1)} m, ${patches.length} patches, ${ends.length} open road ends -> ${OUT}`);
 
 if (PREVIEW) await preview(PREVIEW, cells);

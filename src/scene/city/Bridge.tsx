@@ -3,8 +3,6 @@
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import {
-  BufferAttribute,
-  BufferGeometry,
   CanvasTexture,
   Color,
   type Group,
@@ -18,18 +16,13 @@ import {
   Vector3,
 } from 'three';
 import { chapterState } from '@/lib/chapterRuntime';
-import { BRIDGE, CITY_ORIGIN, getRoute, SEA_LEVEL, sampleRoute } from '@/lib/cityRoute';
+import { DECK_T, deckFrameAt, deckRange, deckStrip, patchGeometry } from '@/lib/bridgePath';
+import { BRIDGE, CITY_ORIGIN, getRoute, SEA_LEVEL } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
-import { forwardOf, leftOf } from '@/lib/motion';
 import { patchCityMaterial } from './cityMaterials';
 import { registerLamps } from './StreetLights';
 import { useCityLayer } from './City';
 
-/** Where the model's own flyover ends and the bridge deck takes over (city-local z). */
-const MODEL_EDGE_Z = 350;
-/** The deck runs on past the end of the drive, into the haze. */
-const DECK_EXTRA = 420;
-const DECK_T = 2.6;
 const SEA_Y = CITY_ORIGIN.y + SEA_LEVEL;
 
 export type BridgeInfo = {
@@ -41,45 +34,6 @@ export type BridgeInfo = {
   anchors: number[];
 };
 export const bridgeInfo: BridgeInfo = { from: 0, to: 0, pylons: [], anchors: [] };
-
-type Frame = { p: Vector3; f: Vector3; l: Vector3 };
-function frameAt(s: number, route: ReturnType<typeof getRoute>): Frame {
-  const p = new Vector3();
-  let h: number;
-  if (s <= route.length) h = sampleRoute(s, p);
-  else {
-    // straight on past the end of the route
-    const end = new Vector3();
-    h = sampleRoute(route.length, end);
-    p.copy(end).addScaledVector(forwardOf(h, new Vector3()), s - route.length);
-  }
-  return { p, f: forwardOf(h, new Vector3()), l: leftOf(h, new Vector3()) };
-}
-
-/** A strip along the deck between lateral offsets a and b (left positive) at heights ya, yb (relative to the road). */
-function strip(s0: number, s1: number, route: ReturnType<typeof getRoute>, a: number, ya: number, b: number, yb: number, vScale: number) {
-  const step = 6;
-  const n = Math.ceil((s1 - s0) / step) + 1;
-  const pos = new Float32Array(n * 6);
-  const uv = new Float32Array(n * 4);
-  const idx: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const s = s0 + ((s1 - s0) * i) / (n - 1);
-    const { p, l } = frameAt(s, route);
-    pos.set([p.x + l.x * a, p.y + ya, p.z + l.z * a, p.x + l.x * b, p.y + yb, p.z + l.z * b], i * 6);
-    uv.set([0, s / vScale, 1, s / vScale], i * 4);
-    if (i < n - 1) {
-      const v = i * 2;
-      idx.push(v, v + 1, v + 2, v + 1, v + 3, v + 2);
-    }
-  }
-  const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(pos, 3));
-  g.setAttribute('uv', new BufferAttribute(uv, 2));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  return g;
-}
 
 /** Lane markings for the deck: three lanes each way, solid edges, a double line in the middle. */
 function deckTexture() {
@@ -127,21 +81,26 @@ export function Bridge() {
   const build = useMemo(() => {
     const route = getRoute();
     const hw = BRIDGE.halfWidth;
-    // the deck starts where the model's flyover runs out
-    let from = route.bridgeStart;
-    for (let s = route.bridgeStart - 80; s < route.bridgeStart + 120; s += 1) {
-      const v = new Vector3();
-      sampleRoute(s, v);
-      if (v.z - CITY_ORIGIN.z >= MODEL_EDGE_Z) {
-        from = s;
-        break;
-      }
-    }
-    const to = route.length + DECK_EXTRA;
-    const top = strip(from, to, route, hw, 0.02, -hw, 0.02, 30);
-    const sides = [strip(from, to, route, hw, 0.02, hw, -DECK_T, 30), strip(from, to, route, -hw, -DECK_T, -hw, 0.02, 30)];
-    const under = strip(from, to, route, -hw, -DECK_T, hw, -DECK_T, 30);
-    const parapets = [strip(from, to, route, hw - 0.2, 1.05, hw - 0.2, 0, 30), strip(from, to, route, -hw + 0.2, 0, -hw + 0.2, 1.05, 30)];
+    // the deck takes over right where the city route ends (tangent-continuous: it is built
+    // on the same curve), so the flyover runs straight onto it with no gap
+    const { from, to } = deckRange();
+    const top = deckStrip(from, to, hw, 0.02, -hw, 0.02, 30);
+    const sides = [deckStrip(from, to, hw, 0.02, hw, -DECK_T, 30), deckStrip(from, to, -hw, -DECK_T, -hw, 0.02, 30)];
+    const under = deckStrip(from, to, -hw, -DECK_T, hw, -DECK_T, 30);
+    // solid concrete parapets (inner face, cap, outer face) with a steel rail on top
+    const P = 0.55;
+    const parapets = [1, -1].flatMap((side) => {
+      const o = side * hw;
+      const i = side * (hw - P);
+      return side === 1
+        ? [deckStrip(from, to, i, 1.1, i, 0, 30), deckStrip(from, to, o, 1.1, i, 1.1, 30), deckStrip(from, to, o, -0.4, o, 1.1, 30)]
+        : [deckStrip(from, to, i, 0, i, 1.1, 30), deckStrip(from, to, i, 1.1, o, 1.1, 30), deckStrip(from, to, o, 1.1, o, -0.4, 30)];
+    });
+    const rails = [1, -1].map((side) => {
+      const x = side * (hw - P * 0.5);
+      return side === 1 ? deckStrip(from, to, x, 1.55, x, 1.4, 30) : deckStrip(from, to, x, 1.4, x, 1.55, 30);
+    });
+    const patches = patchGeometry();
 
     // pylons: two legs each, beyond the deck edges, from the sea to the top
     const legs: { pos: Vector3; height: number; quat: Quaternion }[] = [];
@@ -152,7 +111,7 @@ export function Bridge() {
     const pylonS = BRIDGE.pylons.map((d) => route.bridgeStart + d);
     const up = new Vector3(0, 1, 0);
     for (const s of pylonS) {
-      const { p, f, l } = frameAt(s, route);
+      const { p, f, l } = deckFrameAt(s);
       const heading = Math.atan2(f.x, f.z);
       const q = new Quaternion().setFromAxisAngle(up, heading);
       const topY = SEA_Y + BRIDGE.pylonHeight;
@@ -165,7 +124,7 @@ export function Bridge() {
           for (let k = 0; k < 11; k++) {
             const along = 26 + k * 13;
             const deckS = s + dir * along;
-            const d = frameAt(deckS, route);
+            const d = deckFrameAt(deckS);
             const a = d.p.clone().addScaledVector(d.l, side * (hw - 0.6)).setY(d.p.y + 0.6);
             const b = base.clone().setY(p.y + 44 + k * 3.4).addScaledVector(l, -side * 0.6);
             const mid = a.clone().add(b).multiplyScalar(0.5);
@@ -184,7 +143,7 @@ export function Bridge() {
     // lamps down both edges, every 30 m
     const lamps: { pos: Vector3; quat: Quaternion; head: Vector3 }[] = [];
     for (let s = from + 15; s < to - 10; s += 30) {
-      const { p, f, l } = frameAt(s, route);
+      const { p, f, l } = deckFrameAt(s);
       const heading = Math.atan2(f.x, f.z);
       for (const side of [1, -1]) {
         const pos = p.clone().addScaledVector(l, side * (hw - 0.8));
@@ -197,7 +156,7 @@ export function Bridge() {
     const piers: Vector3[] = [];
     for (let s = from + 30; s < to; s += 64) {
       if (pylonS.some((ps) => Math.abs(ps - s) < 70)) continue;
-      const { p } = frameAt(s, route);
+      const { p } = deckFrameAt(s);
       piers.push(p.clone().setY((p.y - DECK_T + SEA_Y) / 2));
     }
     const pierH = (y: number) => 2 * (y - SEA_Y);
@@ -206,7 +165,7 @@ export function Bridge() {
     bridgeInfo.to = to;
     bridgeInfo.pylons = pylonS;
     bridgeInfo.anchors = anchors.sort((x, y) => x - y);
-    return { top, sides, under, parapets, legs, beams, warn, cableMats, lamps, piers, pierH };
+    return { top, sides, under, parapets, rails, patches, legs, beams, warn, cableMats, lamps, piers, pierH };
   }, []);
 
   const deckMat = useMemo(() => {
@@ -270,7 +229,18 @@ export function Bridge() {
       ))}
       {build.parapets.map((g, i) => (
         <mesh key={i} geometry={g}>
-          <meshStandardMaterial color="#5b5d63" roughness={0.6} metalness={0.3} side={2} />
+          <meshStandardMaterial color="#56585e" roughness={0.75} side={2} />
+        </mesh>
+      ))}
+      {build.rails.map((g, i) => (
+        <mesh key={i} geometry={g}>
+          <meshStandardMaterial color="#9a9ea6" roughness={0.35} metalness={0.8} side={2} />
+        </mesh>
+      ))}
+      {/* the few holes in the model's road under the route, filled */}
+      {build.patches.map((g, i) => (
+        <mesh key={i} geometry={g} onUpdate={(m) => patchCityMaterial(m.material as MeshStandardMaterial)}>
+          <meshStandardMaterial name="road:patch" color="#2a2b2f" roughness={0.6} metalness={0} />
         </mesh>
       ))}
       {build.legs.map((l, i) => (

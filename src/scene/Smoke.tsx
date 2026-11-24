@@ -131,7 +131,7 @@ void main() {
   vec4 tex = texture2D(uMap, vUv);
   // Near the lens a puff fades out by its own size (a big one from further away), so
   // nothing close to the camera fills the frame; the shot can let it in closer still.
-  float nearFade = smoothstep(uNearFade.x, uNearFade.y, vDepth) * smoothstep(0.3 + 0.25 * vSize, 0.9 + 0.75 * vSize, vDepth);
+  float nearFade = smoothstep(uNearFade.x, uNearFade.y, vDepth) * smoothstep(0.45 + 0.35 * vSize, 1.4 + 1.2 * vSize, vDepth);
   // soft against the ground under the car...
   float groundFade = smoothstep(uGroundY, uGroundY + 0.9, vGroundY);
   // ...and against everything else: fade where the puff meets the scene's depth

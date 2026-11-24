@@ -118,7 +118,7 @@ export const CONFIG = {
     opacity: 0.16, // big, faint puffs: density comes from many of them overlapping
     soft: 1.4, // how softly a puff fades into whatever it meets (x 0.4-1 m by puff size)
     wind: 0.45, // how much of the rain's wind carries the smoke
-    lampLit: 0.5, // how much the street lamps light the smoke
+    lampLit: 0.3, // how much the street lamps light the smoke
     rise: 0.15, // stays low over the asphalt
     drag: 1.1,
     noise: 1.2,

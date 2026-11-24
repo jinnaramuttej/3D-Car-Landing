@@ -38,6 +38,8 @@ black.needsUpdate = true;
 reflectionUniforms.uReflMap.value = black;
 
 const mirror = new PerspectiveCamera();
+// the city's own layer (City.tsx CITY_LAYER) and the sky: never the car or the rain
+mirror.layers.set(3);
 const plane = new Plane();
 const clipPlane = new Vector4();
 const q = new Vector4();

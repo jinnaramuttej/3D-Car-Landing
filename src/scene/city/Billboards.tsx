@@ -26,7 +26,7 @@ import { isMobile } from '@/lib/device';
 import { leftOf } from '@/lib/motion';
 import { expoIndexAt, heartbeatPulse, stopAnchor, stopFx, useStops } from '@/lib/stops';
 import { ART_H, ART_W, type ArtState, drawStop, resolveFont } from './billboardArt';
-import { CITY_URL } from './City';
+import { CITY_URL, useCityLayer } from './City';
 
 const STOP_IDS = CHAPTERS.filter((c) => c.stop).map((c) => c.stop!) as StopId[];
 
@@ -142,6 +142,7 @@ export function Billboards() {
   const gltf = useGLTF(CITY_URL);
   const mobile = useMemo(() => isMobile(), []);
   const group = useRef<Group>(null!);
+  useCityLayer(group);
   const spill = useRef<PointLight>(null!);
 
   const boards = useMemo<Board[]>(() => {

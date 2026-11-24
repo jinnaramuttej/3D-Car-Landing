@@ -23,6 +23,7 @@ import { CONFIG } from '@/lib/config';
 import { forwardOf, leftOf } from '@/lib/motion';
 import { patchCityMaterial } from './cityMaterials';
 import { registerLamps } from './StreetLights';
+import { useCityLayer } from './City';
 
 /** Where the model's own flyover ends and the bridge deck takes over (city-local z). */
 const MODEL_EDGE_Z = 350;
@@ -115,6 +116,7 @@ function deckTexture() {
  */
 export function Bridge() {
   const group = useRef<Group>(null!);
+  useCityLayer(group);
   const cables = useRef<InstancedMesh>(null!);
   const lampPoles = useRef<InstancedMesh>(null!);
   const lampHeads = useRef<InstancedMesh>(null!);

@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
-import { type Group, MathUtils, type Mesh, type PerspectiveCamera, type Texture } from 'three';
+import { type Group, MathUtils, type Mesh, type Object3D, type PerspectiveCamera, type Texture } from 'three';
 import { chapterState } from '@/lib/chapterRuntime';
 import { CITY_ORIGIN, getRoute, SEA_LEVEL } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
@@ -13,6 +13,23 @@ import { type CityKind, cityUniforms, patchCity } from './cityMaterials';
 import { disposeReflection, reflectionUniforms, renderReflection } from './cityReflection';
 
 export const CITY_URL = '/models/city.glb';
+
+/**
+ * Everything on the city stage lives on its own layer: the main camera sees it, the
+ * street-reflection camera sees only it (and the sky), and the car's contact-shadow pass
+ * (layer 0) never has to draw the city. Layer 1 stays "main camera only" (rain, pools).
+ */
+export const CITY_LAYER = 3;
+
+/** Moves everything under `ref` to the city layer (after its children have mounted). */
+export function useCityLayer(ref: React.RefObject<Object3D | null>) {
+  useLayoutEffect(() => {
+    ref.current?.traverse((o) => {
+      if (o.layers.isEnabled(1) && !o.layers.isEnabled(0)) return;
+      o.layers.set(CITY_LAYER);
+    });
+  });
+}
 
 /** Draw the city stage only while it is the one on screen (and through the cloud). */
 export function useCityStage(ref: React.RefObject<Group | null>) {
@@ -38,6 +55,7 @@ export function City() {
   const mats = useRef<{ mat: import('three').MeshStandardMaterial; kind: CityKind }[]>([]);
   const envMap = useRef<Texture | null>(null);
   useCityStage(group);
+  useCityLayer(group);
 
   useLayoutEffect(() => {
     // static: one matrix update, then none per frame

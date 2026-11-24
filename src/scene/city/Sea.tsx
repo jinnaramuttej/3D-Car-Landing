@@ -8,6 +8,7 @@ import { CITY_ORIGIN, SEA_LEVEL } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
 import { createWaveNormalTexture } from '@/lib/textures';
 import { patchCityMaterial } from './cityMaterials';
+import { useCityLayer } from './City';
 
 /** The city's southern edge (city-local z), where the land stops and the sea starts. */
 const SHORE_Z = 353;
@@ -20,6 +21,7 @@ const SHORE_Z = 353;
  */
 export function Sea() {
   const group = useRef<Group>(null!);
+  useCityLayer(group);
   const mat = useRef<MeshStandardMaterial>(null!);
   const waves = useMemo(() => {
     const t = createWaveNormalTexture();

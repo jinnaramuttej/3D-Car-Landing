@@ -56,12 +56,17 @@ export function Scene() {
   const sunTarget = useMemo(() => new THREE.Object3D(), []);
 
   useLayoutEffect(() => {
-    // Layer 1 holds things the main camera sees but the ground reflection skips.
+    // Layer 1 holds things the main camera sees but the ground reflection skips; layer 3
+    // is the city stage (see city/City.tsx).
     camera.layers.enable(1);
+    camera.layers.enable(3);
   }, [camera]);
 
   useLayoutEffect(() => {
     sun.current.target = sunTarget;
+    // the sky light and the moon/sun also reach the city's street reflection
+    sun.current.layers.enable(3);
+    hemi.current.layers.enable(3);
   }, [sunTarget]);
 
   useEffect(() => {

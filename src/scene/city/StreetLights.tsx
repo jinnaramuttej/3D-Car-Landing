@@ -9,6 +9,7 @@ import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { carState, leftOf } from '@/lib/motion';
 import { createGlowTexture } from '@/lib/textures';
+import { useCityLayer } from './City';
 
 /**
  * Every sodium lamp head in the city stage (world space): the route's lamps from here,
@@ -34,6 +35,7 @@ export function StreetLights() {
   const mobile = useMemo(() => isMobile(), []);
   const count = mobile ? 2 : 6;
   const group = useRef<Group>(null!);
+  useCityLayer(group);
   const poles = useRef<InstancedMesh>(null!);
   const arms = useRef<InstancedMesh>(null!);
   const heads = useRef<InstancedMesh>(null!);

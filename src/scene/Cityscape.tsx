@@ -124,6 +124,7 @@ function Sky({ cityDir }: { cityDir: Vector2 }) {
     u.uEnclosed.value = e.mist;
     u.uTime.value = state.clock.elapsedTime;
     mesh.current.position.copy(state.camera.position);
+    mesh.current.layers.enable(3); // (the city's street reflection sees the sky too)
   });
   return (
     <mesh ref={mesh} material={mat} renderOrder={-100} frustumCulled={false}>

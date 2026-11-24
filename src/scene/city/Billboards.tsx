@@ -20,15 +20,19 @@ import {
 } from 'three';
 import { CHAPTERS, type StopId } from '@/lib/chapters';
 import { chapterState, stopWeight } from '@/lib/chapterRuntime';
-import { getRoute, sampleRoute, STOPS } from '@/lib/cityRoute';
+import { EXTRAS, getRoute, sampleRoute, STOPS } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { carState, leftOf } from '@/lib/motion';
-import { expoIndexAt, heartbeatPulse, stopAnchor, stopFx, useStops } from '@/lib/stops';
+import { type BoardId, boardS, expoIndexAt, heartbeatPulse, isExtra, stopAnchor, stopFx, useStops } from '@/lib/stops';
 import { ART_H, ART_W, type ArtState, drawStop, resolveFont } from './billboardArt';
 import { CITY_URL, useCityLayer } from './City';
 
 const STOP_IDS = CHAPTERS.filter((c) => c.stop).map((c) => c.stop!) as StopId[];
+/** The stops' boards and the ones the car drives past. */
+const BOARD_IDS: BoardId[] = [...STOP_IDS, ...(Object.keys(EXTRAS) as BoardId[])];
+const specOf = (id: BoardId) => (isExtra(id) ? EXTRAS[id] : STOPS[id]);
+const mountOf = (id: BoardId) => (isExtra(id) ? EXTRAS[id].mount : id === 'finale' ? 'pylon' : 'wall');
 
 const ledVert = /* glsl */ `
 #include <common>
@@ -76,7 +80,9 @@ void main() {
 `;
 
 type Board = {
-  id: StopId;
+  id: BoardId;
+  /** On a facade (or its own legs), on a gantry over the deck, or on a pylon's cross-beam. */
+  mount: 'wall' | 'gantry' | 'pylon';
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   tex: CanvasTexture;
@@ -97,16 +103,18 @@ type Board = {
 };
 
 const _ray = new Raycaster();
+// (the city is on its own render layer, CITY_LAYER: the wall search has to see it)
+_ray.layers.enableAll();
 const _o = new Vector3();
 const _d = new Vector3();
 const _l = new Vector3();
 const _n = new Vector3();
 
 /** Finds a facade beside the road at the stop and hangs the billboard on it (world space). */
-function place(id: StopId, city: Object3D) {
+function place(id: BoardId, city: Object3D) {
   const a = stopAnchor(id);
-  if (id === 'finale') return { centre: a.centre.clone(), normal: a.normal.clone(), onWall: true };
-  const spec = STOPS[id];
+  if (mountOf(id) !== 'wall') return { centre: a.centre.clone(), normal: a.normal.clone(), onWall: true };
+  const spec = specOf(id);
   const r = getRoute();
   const h = sampleRoute(spec.s, _o);
   leftOf(h, _l);
@@ -155,7 +163,7 @@ export function Billboards() {
 
   const boards = useMemo<Board[]>(() => {
     resolveFont();
-    return STOP_IDS.map((id) => {
+    return BOARD_IDS.map((id) => {
       const canvas = document.createElement('canvas');
       canvas.width = ART_W;
       canvas.height = ART_H;
@@ -164,7 +172,7 @@ export function Billboards() {
       tex.colorSpace = SRGBColorSpace;
       tex.minFilter = LinearFilter;
       tex.generateMipmaps = false;
-      const spec = STOPS[id];
+      const spec = specOf(id);
       const mat = new ShaderMaterial({
         uniforms: {
           uMap: { value: tex },
@@ -180,7 +188,7 @@ export function Billboards() {
         fragmentShader: ledFrag,
         fog: true,
       });
-      return { id, canvas, ctx, tex, mat, key: '', anim: '', tint: new Color(), centre: new Vector3(), normal: new Vector3(0, 0, 1), width: spec.width, height: spec.height, onWall: false, wake: 0 };
+      return { id, mount: mountOf(id), canvas, ctx, tex, mat, key: '', anim: '', tint: new Color(), centre: new Vector3(), normal: new Vector3(0, 0, 1), width: spec.width, height: spec.height, onWall: false, wake: 0 };
     });
   }, [mobile]);
 
@@ -232,9 +240,9 @@ export function Billboards() {
     let best: Board | null = null;
     let bestW = 0;
     for (const b of boards) {
-      const w = stopWeight(b.id);
+      const w = isExtra(b.id) ? 0 : stopWeight(b.id);
       // only the billboards near the car redraw
-      const near = Math.abs(CHAPTERS.findIndex((c) => c.stop === b.id) - chapterState.chapter) <= 1;
+      const near = isExtra(b.id) ? Math.abs(boardS(b.id) - carState.s) < 240 : Math.abs(CHAPTERS.findIndex((c) => c.stop === b.id) - chapterState.chapter) <= 1;
       if (near) {
         const key =
           b.id === 'robowars'
@@ -260,12 +268,13 @@ export function Billboards() {
       }
       const u = b.mat.uniforms;
       u.uTime.value = t;
-      const ahead = STOPS[b.id].s - carState.s;
+      const ahead = boardS(b.id) - carState.s;
       const want = ahead < 120 && ahead > -70 ? 1 : 0;
       b.wake += (want - b.wake) * (1 - Math.exp(-dt / (want > b.wake ? 0.9 : 2)));
       u.uWake.value = mobile ? want : b.wake;
       const dk = b.id === 'dkms' ? 0.8 + 0.25 * stopFx.heartbeat : 1;
-      u.uBright.value = CONFIG.city.billboardGlow * chapterState.env.city * dk;
+      // (LEDs stay readable by day: they don't dim with the city's lights)
+      u.uBright.value = CONFIG.city.billboardGlow * Math.max(0.8, chapterState.env.city) * dk;
       if (w > bestW) {
         bestW = w;
         best = b;
@@ -321,6 +330,7 @@ function BoardMesh({ board }: { board: Board }) {
     g.updateMatrixWorld(true);
   });
   const { width: w, height: h } = board;
+  const lift = specOf(board.id).lift;
   return (
     <group ref={root}>
       {/* the screen faces +z (out of the wall) */}
@@ -331,6 +341,21 @@ function BoardMesh({ board }: { board: Board }) {
         <boxGeometry args={[w + 0.7, h + 0.7, 0.6]} />
         <meshStandardMaterial color="#0d0e12" roughness={0.6} metalness={0.5} />
       </mesh>
+      {/* a gantry over the deck: two posts down to the road and a beam along the top */}
+      {board.mount === 'gantry' && (
+        <>
+          {[-1, 1].map((s) => (
+            <mesh key={s} position={[s * (w / 2 + 1.4), (0.6 - lift) / 2, -0.2]}>
+              <boxGeometry args={[0.6, lift + h + 0.6, 0.6]} />
+              <meshStandardMaterial color="#2a2c31" roughness={0.5} metalness={0.7} />
+            </mesh>
+          ))}
+          <mesh position={[0, h / 2 + 0.6, -0.2]}>
+            <boxGeometry args={[w + 3.4, 0.5, 0.5]} />
+            <meshStandardMaterial color="#2a2c31" roughness={0.5} metalness={0.7} />
+          </mesh>
+        </>
+      )}
       {/* standing on its own: two legs down to the pavement */}
       {!board.onWall &&
         [-1, 1].map((s) => (

@@ -12,7 +12,8 @@ import { interaction } from '@/lib/interaction';
 import { layoutState, type Rect } from '@/lib/layout';
 import { carState, forwardOf, leftOf } from '@/lib/motion';
 import { pointer, trackPointer } from '@/lib/pointer';
-import { stopAnchor } from '@/lib/stops';
+import { EXTRAS, type ExtraId } from '@/lib/cityRoute';
+import { type BoardId, stopAnchor } from '@/lib/stops';
 import { applyCityShot, cityShotState } from './city/cityCamera';
 import { director, directShot } from './city/director';
 
@@ -88,11 +89,17 @@ function publishLayout(cam: PerspectiveCamera, w: number, h: number) {
   let k = 0;
   for (const z of [-2.35, 2.35]) for (const x of [-1, 1]) for (const y of [0.05, 1.3]) carBox[k++].copy(carState.position).addScaledVector(_f, z).addScaledVector(_l, x).setY(carState.position.y + y);
   layoutState.car = project(cam, carBox, w, h, carRect);
-  // the billboard of the stop on screen
+  // the billboard on show: the stop's, or one the car is driving up to
   const ch = CHAPTERS[chapterState.chapter];
   layoutState.board = null;
-  if (ch.stop && stopWeight(ch.stop) > 0.05) {
-    const a = stopAnchor(ch.stop);
+  let board: BoardId | null = ch.stop && stopWeight(ch.stop) > 0.05 ? ch.stop : null;
+  if (!board)
+    for (const id of Object.keys(EXTRAS) as ExtraId[]) {
+      const ahead = EXTRAS[id].s - carState.s;
+      if (ahead > -10 && ahead < 130) board = id;
+    }
+  if (board) {
+    const a = stopAnchor(board);
     _n.copy(a.normal);
     _u.set(0, 1, 0);
     const across = _l.crossVectors(_u, _n).normalize();

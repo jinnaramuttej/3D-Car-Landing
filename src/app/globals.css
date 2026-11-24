@@ -1910,3 +1910,83 @@ li:last-child .mm-track {
     width: 46vw;
   }
 }
+
+/* ------------------------------------------------- drive-past billboard cards */
+
+.extras {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.extra {
+  position: absolute;
+  left: var(--gutter);
+  bottom: 128px;
+  display: grid;
+  gap: 10px;
+  width: min(330px, 80vw);
+  padding: 16px 18px;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: auto;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.extra[data-slot='tr'] {
+  left: auto;
+  right: calc(var(--gutter) + 56px);
+  top: 92px;
+  bottom: auto;
+}
+.extra[data-slot='tl'] {
+  top: 92px;
+  bottom: auto;
+}
+.extra > * {
+  transform: translateY(8px);
+  transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.extra.is-in > * {
+  transform: none;
+}
+.extra .kicker {
+  margin: 0;
+}
+.extra dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.extra dt {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.extra dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+}
+.extra ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.extra li em {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.extra-line {
+  margin: 0;
+  font-weight: 600;
+}
+.is-cinematic .extra a {
+  pointer-events: auto;
+}

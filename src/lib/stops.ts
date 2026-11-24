@@ -2,8 +2,14 @@ import { Vector3 } from 'three';
 import { create } from 'zustand';
 import { COMPETITIONS, ROBOWARS, VOICES } from '@/content';
 import { chapterById, type StopId } from './chapters';
-import { BRIDGE, getRoute, sampleRoute, STOPS } from './cityRoute';
-import { leftOf } from './motion';
+import { BRIDGE, EXTRAS, type ExtraId, getRoute, sampleRoute, STOPS } from './cityRoute';
+import { forwardOf, leftOf } from './motion';
+
+/** Every LED billboard: the stops' and the ones the car drives past (cityRoute.EXTRAS). */
+export type BoardId = StopId | ExtraId;
+export const isExtra = (id: BoardId): id is ExtraId => id in EXTRAS;
+/** Route metres of a billboard. */
+export const boardS = (id: BoardId) => (isExtra(id) ? EXTRAS[id].s : STOPS[id].s);
 
 export type SpeakerCategory = keyof typeof VOICES.categories;
 export const SPEAKER_CATEGORIES = Object.keys(VOICES.categories) as SpeakerCategory[];
@@ -56,21 +62,28 @@ export const stopFx = {
  */
 export type StopAnchor = { centre: Vector3; normal: Vector3; width: number; height: number; placed: boolean };
 
-const anchors = new Map<StopId, StopAnchor>();
+const anchors = new Map<BoardId, StopAnchor>();
 const _p = new Vector3();
 const _l = new Vector3();
 
-export function stopAnchor(id: StopId): StopAnchor {
+export function stopAnchor(id: BoardId): StopAnchor {
   let a = anchors.get(id);
   if (a) return a;
-  const spec = STOPS[id];
+  const spec = isExtra(id) ? EXTRAS[id] : STOPS[id];
   const r = getRoute();
-  if (id === 'finale') {
-    // across the far pylon's cross-beam, facing back down the deck at the car
-    const h = sampleRoute(r.bridgeStart + BRIDGE.pylons[1], _p);
+  const mount = isExtra(id) ? EXTRAS[id].mount : id === 'finale' ? 'pylon' : 'wall';
+  if (mount === 'pylon') {
+    // across a pylon's cross-beam (the far one for the finale), facing back down the deck
+    const h = sampleRoute(r.bridgeStart + (id === 'finale' ? BRIDGE.pylons[1] : BRIDGE.pylons[0]), _p);
     const centre = _p.clone();
     centre.y += 30;
     a = { centre, normal: new Vector3(-Math.sin(h), 0, -Math.cos(h)), width: spec.width, height: spec.height, placed: true };
+  } else if (mount === 'gantry') {
+    // over the middle of the deck, facing the oncoming car
+    const h = sampleRoute(spec.s, _p);
+    const centre = _p.clone();
+    centre.y += spec.lift + spec.height / 2;
+    a = { centre, normal: forwardOf(h, new Vector3()).negate(), width: spec.width, height: spec.height, placed: true };
   } else {
     const h = sampleRoute(spec.s, _p);
     leftOf(h, _l);

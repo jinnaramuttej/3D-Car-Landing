@@ -8,6 +8,7 @@ import { useScrollTimeline } from '@/lib/useScrollTimeline';
 import { Scene } from '@/scene/Scene';
 import { Warmup } from '@/scene/Warmup';
 import { DebugPanel } from './DebugPanel';
+import { Extras } from './Extras';
 import { Loader } from './Loader';
 
 import { MiniMap } from './MiniMap';
@@ -49,6 +50,7 @@ export default function Experience() {
 
       <Overlay />
       <Stops />
+      <Extras />
       <Navbar />
       <MiniMap />
       <PlayControls />

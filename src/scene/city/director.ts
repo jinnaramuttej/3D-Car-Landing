@@ -223,8 +223,8 @@ let parkedKeys: Key[] | null = null;
 function getParkedKeys(): Key[] {
   return (parkedKeys ??= [
     // up the street past the parked car to the Catalyst billboard, rain in the lamps
-    { at: chapterAt('stillness', 0), pos: [-3.3, 1.2, -9.4], look: [0.7, 1.7, 8], fov: 34 },
-    { at: chapterAt('stillness', 0.5), pos: [-2.95, 0.95, -6.6], look: [0.45, 1.15, 4], fov: 32 },
+    { at: chapterAt('stillness', 0), pos: [-3.3, 1.05, -9.4], look: [1.2, 4.4, 10], fov: 34 },
+    { at: chapterAt('stillness', 0.5), pos: [-2.95, 0.9, -6.6], look: [0.7, 2.4, 6], fov: 32 },
     // in on the rear three-quarter and along the right flank...
     { at: chapterAt('stillness', 0.94), pos: [-2.75, 0.74, -3.5], look: [-0.25, 0.62, 0.2], fov: 31 },
     { at: chapterAt('ignition', 0.06), pos: [-2.95, 0.62, 0.7], look: [-0.7, 0.6, 1.7], fov: 30 },

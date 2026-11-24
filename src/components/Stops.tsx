@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
-import { COMMITTEE_NAMES, COMPETITIONS, EXPO, HEARTBEAT, ROBOWARS, SITE, TWMUN, UI, VOICES } from '@/content';
+import { COMMITTEE_NAMES, COMPETITIONS, EXPO, HEARTBEAT, ROBOWARS, SITE, TECHEXPO, TWMUN, UI, VOICES } from '@/content';
 import { CHAPTERS, chapterById, FINALE, type StopId } from '@/lib/chapters';
 import { chapterState, stopWeight } from '@/lib/chapterRuntime';
 import { COMPETITION_TAGS, expoIndexAt, heartbeatPulse, initials, SPEAKER_CATEGORIES, useStops } from '@/lib/stops';
@@ -306,7 +306,10 @@ function ExpoPanel() {
   return (
     <section className="d-block d-expo" aria-label={EXPO.heading}>
       <div className="block-head col">
-        <p className="kicker">{UI.expo.kicker}</p>
+        <p className="kicker">
+          {TECHEXPO.name} · {TECHEXPO.pavilion}
+        </p>
+        <p className="tagline">{TECHEXPO.line}</p>
         <h2 className="heading">{EXPO.heading}</h2>
       </div>
       <div className="exhibit-now">

@@ -145,8 +145,8 @@ export function Overlay() {
     // the finale's as the bridge opens up, gone before the CTA
     for (const c of CHAPTERS.slice(CHAPTERS.findIndex((x) => x.id === 'arrival'))) {
       if (c.id === 'finale') {
-        cardIn(c.id, 0.3, 0.05);
-        cardOut(c.id, 0.5);
+        cardIn(c.id, 0.46, 0.04);
+        cardOut(c.id, 0.56, 0.05);
       } else {
         cardIn(c.id, 0.2, 0.04);
         cardOut(c.id, 0.36, 0.05);
@@ -185,6 +185,7 @@ export function Overlay() {
         el.classList.toggle('is-in', on && lay.gate > 0.3);
         if (on) active = el;
       }
+      layoutState.titleUp = !!active && lay.gate > 0.3;
       if (active && now > lay.fadeUntil && !lay.pending) {
         const slot = pickSlot(['tl', 'tr', 'tc', 'bl'], active.offsetWidth, active.offsetHeight, lay.slot);
         if (slot !== lay.slot) {

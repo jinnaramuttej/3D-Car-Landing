@@ -1,10 +1,10 @@
-import { COMPETITIONS, EXPO, HEARTBEAT, ROBOWARS, SITE, theme, TWMUN, UI, VOICES } from '@/content';
-import type { StopId } from '@/lib/chapters';
-import { COMPETITION_TAGS, initials, type SpeakerCategory } from '@/lib/stops';
+import { ALSO, CATALYST, CES2027, COMPETITIONS, EXPO, HEARTBEAT, ROBOWARS, SITE, TECHEXPO, theme, TWMUN, UI, VOICES } from '@/content';
+import { type BoardId, COMPETITION_TAGS, initials, type SpeakerCategory } from '@/lib/stops';
 
 /**
- * What each stop's LED billboard shows, drawn on a 2D canvas (text and shapes only: no
- * images, no logos). The billboard shader turns the canvas into LEDs.
+ * What each LED billboard shows (the stops' and the ones the car drives past), drawn on a
+ * 2D canvas (text and shapes only: no images, no logos). The billboard shader turns the
+ * canvas into LEDs.
  */
 
 export const ART_W = 1024;
@@ -74,7 +74,22 @@ function chip(ctx: CanvasRenderingContext2D, text: string, x: number, y: number,
   return w;
 }
 
-const draw: Record<StopId, (ctx: CanvasRenderingContext2D, s: ArtState) => void> = {
+/** Word-wraps text at maxW, returns the y after the last line. */
+function wrap(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, lh: number) {
+  let line = '';
+  for (const w of text.split(' ')) {
+    const next = line ? `${line} ${w}` : w;
+    if (ctx.measureText(next).width > maxW && line) {
+      ctx.fillText(line, x, y);
+      line = w;
+      y += lh;
+    } else line = next;
+  }
+  if (line) ctx.fillText(line, x, y);
+  return y + lh;
+}
+
+const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void> = {
   arrival(ctx) {
     base(ctx, '#140608', '#050306');
     kicker(ctx, SITE.edition, 64, 110);
@@ -161,7 +176,10 @@ const draw: Record<StopId, (ctx: CanvasRenderingContext2D, s: ArtState) => void>
   expo(ctx, s) {
     const ex = EXPO.exhibits[s.expoIndex] ?? EXPO.exhibits[0];
     base(ctx, '#03141a', '#020608');
-    kicker(ctx, `${UI.expo.kicker}  ${String(s.expoIndex + 1).padStart(2, '0')} / ${String(EXPO.exhibits.length).padStart(2, '0')}`, 64, 96, '#36f0e0');
+    kicker(ctx, `${TECHEXPO.name} · ${TECHEXPO.pavilion}`, 64, 70, '#36f0e0');
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = `700 22px ${display}`;
+    ctx.fillText(`${UI.expo.past.toUpperCase()}  ${String(s.expoIndex + 1).padStart(2, '0')} / ${String(EXPO.exhibits.length).padStart(2, '0')}`, 64, 112);
     ctx.fillStyle = '#fff';
     fit(ctx, ex.name.toUpperCase(), 900, 110, 900);
     ctx.fillText(ex.name.toUpperCase(), 60, 232);
@@ -230,6 +248,49 @@ const draw: Record<StopId, (ctx: CanvasRenderingContext2D, s: ArtState) => void>
       ctx.fillText(c, x + 16, y);
     });
   },
+  catalyst(ctx) {
+    base(ctx, '#160a02', '#060301');
+    kicker(ctx, UI.extras.catalyst, 64, 92, '#ffb347');
+    ctx.fillStyle = '#fff';
+    fit(ctx, CATALYST.name.toUpperCase(), 900, 120, 880);
+    ctx.fillText(CATALYST.name.toUpperCase(), 58, 220);
+    CATALYST.items.forEach((it, i) => {
+      const y = 310 + i * 86;
+      ctx.fillStyle = '#ffb347';
+      ctx.font = `700 24px ${display}`;
+      ctx.fillText(it.label.toUpperCase(), 64, y);
+      ctx.fillStyle = '#fff';
+      fit(ctx, it.value, 800, 40, 880);
+      ctx.fillText(it.value, 64, y + 44);
+    });
+  },
+  also(ctx) {
+    base(ctx, '#04101c', '#02050a');
+    kicker(ctx, ALSO.heading, 64, 92, '#7fc8ff');
+    ctx.fillStyle = '#fff';
+    ALSO.items.forEach((it, i) => {
+      const y = 196 + i * 112;
+      fit(ctx, it.name, 800, 50, 880);
+      ctx.fillText(it.name, 64, y);
+      const where = (it as { where?: string }).where;
+      if (where) {
+        ctx.fillStyle = '#7fc8ff';
+        ctx.font = `700 28px ${display}`;
+        ctx.fillText(where, 64, y + 44);
+        ctx.fillStyle = '#fff';
+      }
+    });
+  },
+  ces(ctx) {
+    base(ctx, '#0b0b14', '#030306');
+    kicker(ctx, UI.extras.ces, 64, 100, '#9ab4ff');
+    ctx.fillStyle = '#fff';
+    fit(ctx, CES2027.name.toUpperCase(), 900, 150, 900);
+    ctx.fillText(CES2027.name.toUpperCase(), 58, 270);
+    ctx.fillStyle = 'rgba(255,255,255,0.82)';
+    ctx.font = `700 38px ${display}`;
+    wrap(ctx, CES2027.line, 64, 360, 880, 52);
+  },
   finale(ctx) {
     base(ctx, '#1a0605', '#050203');
     kicker(ctx, SITE.edition, 64, 110);
@@ -242,7 +303,7 @@ const draw: Record<StopId, (ctx: CanvasRenderingContext2D, s: ArtState) => void>
   },
 };
 
-export function drawStop(id: StopId, ctx: CanvasRenderingContext2D, s: ArtState) {
+export function drawStop(id: BoardId, ctx: CanvasRenderingContext2D, s: ArtState) {
   ctx.save();
   draw[id](ctx, s);
   ctx.restore();

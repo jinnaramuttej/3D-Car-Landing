@@ -13,6 +13,8 @@ export const layoutState = {
   board: null as Rect | null,
   /** The stop panel on screen (set by Stops.tsx), so a title never lands on it. */
   panel: null as Rect | null,
+  /** A chapter title is on screen (set by Overlay.tsx): the drive-past cards wait. */
+  titleUp: false,
   /** 1 when the car is slow enough for titles, 0 at speed. */
   calm: 1,
   /** The camera has settled on a stop's shot (titles and panels may come in). */

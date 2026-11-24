@@ -495,7 +495,7 @@ function MoreRow() {
     <section className="more" aria-label={UI.more}>
       <p className="more-head">{UI.more}</p>
       {items.map((it) => (
-        <a key={it.kicker} className="more-item glass" href={it.href} target="_blank" rel="noopener noreferrer">
+        <a key={it.line} className="more-item glass" href={it.href} target="_blank" rel="noopener noreferrer">
           <strong>{it.kicker}</strong>
           <span>{it.line}</span>
           <em aria-hidden>↗</em>

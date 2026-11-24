@@ -50,6 +50,7 @@ import {
   prepareLivery,
 } from './carMaterials';
 import { createLiveryUniforms, LIVERIES, patchPaint } from './livery';
+import { CITY_LAYER } from './city/City';
 
 export const MODEL_URL = '/models/gt3r.glb';
 
@@ -414,6 +415,11 @@ export function Car() {
   useLayoutEffect(() => {
     // (layer 1, with the street lamps' pools: out of the car's contact-shadow pass)
     tailPool.current.layers.set(1);
+    // the beams light the street reflection's city too: a pass that sees fewer lights than
+    // the main one changes the light count twice a frame, and three then works out every
+    // city material's program again each time (about 1 ms a reflection frame)
+    beamL.current.layers.enable(CITY_LAYER);
+    beamR.current.layers.enable(CITY_LAYER);
   }, []);
   const beamTargets = useMemo(() => [new Object3D(), new Object3D()] as const, []);
   const pop = useRef<Sprite>(null!);

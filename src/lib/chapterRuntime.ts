@@ -124,12 +124,12 @@ function drive(raw: number, dt: number) {
     return;
   }
   const dist = Math.abs(diff);
-  // metres of route per unit of journey here and just ahead: the car's speed limit as a
-  // journey rate
+  // metres of route per unit of journey here (and one frame on): the car's speed limit as
+  // a journey rate
   const h = 2e-4;
   const dir = Math.sign(diff);
   let dsdp = 0;
-  for (const ahead of [0, 0.25, 0.5]) {
+  for (const ahead of [0, dt]) {
     const p = st.progress + dir * Math.min(dist, Math.abs(st.rate) * ahead);
     dsdp = Math.max(dsdp, Math.abs(citySAt(p + h) - citySAt(p - h)) / (2 * h));
   }

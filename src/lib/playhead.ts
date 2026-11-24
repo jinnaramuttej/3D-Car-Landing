@@ -135,7 +135,9 @@ export function capAt(t: number) {
  * stretch ahead within braking distance (a stop's phase, a glide's entry), and stopping in
  * time at `aim`.
  */
-function allowed(t: number, dir: number, aim: number, cap: number, accel: number) {
+function allowed(t: number, dir: number, aim: number, cap: number, accel: number, dt: number) {
+  // (measured from where this frame will end, so the limit holds the moment a stretch begins)
+  const ahead = Math.abs(playhead.rate) * dt;
   let v = cap;
   const glide = playhead.glide;
   const showing = !glide || dir * (t - glide.entry) >= 0;
@@ -145,11 +147,11 @@ function allowed(t: number, dir: number, aim: number, cap: number, accel: number
   for (const p of cueWindows()) {
     if (!counts(p)) continue;
     const d = dir > 0 ? p.from - t : t - p.to;
-    if (d > 0 && d < 30) v = Math.min(v, Math.sqrt(p.cap * p.cap + 2 * accel * d));
+    if (d > 0 && d < 30) v = Math.min(v, Math.sqrt(p.cap * p.cap + 2 * accel * Math.max(0, d - ahead)));
   }
   if (glide && !showing) {
     const d = dir * (glide.entry - t);
-    if (d > 0) v = Math.min(v, Math.sqrt(CONFIG.playhead.enter ** 2 + 2 * accel * d));
+    if (d > 0) v = Math.min(v, Math.sqrt(CONFIG.playhead.enter ** 2 + 2 * accel * Math.max(0, d - ahead)));
   }
   // stop at the aim: brake in time, and settle the last bit like a damped spring
   const dist = Math.abs(aim - t);
@@ -203,9 +205,11 @@ export function stepPlayhead(target: number, dt: number, snap = false, playing =
   } else {
     const dir = Math.sign(diff);
     const gliding = !!ph.glide;
-    const cap = gliding ? c.glide : c.chase;
+    // (a glide that has reached its destination's zone plays it at no more than 1x)
+    const arrived = gliding && ph.glide!.dir * (ph.t - ph.glide!.entry) >= 0;
+    const cap = gliding ? (arrived ? c.enter : c.glide) : c.chase;
     const accel = gliding ? c.glideAccel : c.accel;
-    const v = allowed(ph.t, dir, ph.aim, cap, accel);
+    const v = allowed(ph.t, dir, ph.aim, cap, accel, dt);
     const dv = clamp(dir * v - ph.rate, -accel * dt, accel * dt);
     // (never over the limit here, whatever the acceleration: the dwell holds)
     ph.rate = clamp(ph.rate + dv, -v, v);

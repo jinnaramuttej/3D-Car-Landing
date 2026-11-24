@@ -1804,7 +1804,7 @@ li:last-child .mm-track {
 /* a glide (a mini-map jump, src/lib/playhead.ts) hides the titles and panels on the way; they
    come back as it slows into the destination */
 html[data-glide] .cards,
-html[data-glide] .stops > .d-block {
+html[data-glide] .stops {
   opacity: 0;
   transition: opacity 0.2s ease;
 }

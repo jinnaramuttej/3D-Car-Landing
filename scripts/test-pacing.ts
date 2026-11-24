@@ -53,6 +53,7 @@ function play(run: Run, all: Cue[]) {
   const shown = new Map<string, number[]>(); // cue -> each visit's seconds
   const inside = new Map<string, number>();
   let maxRate = 0;
+  let maxArrived = 0;
   let offRoad = 0;
   let worstOff = 0;
   let firstOff = -1;
@@ -64,6 +65,7 @@ function play(run: Run, all: Cue[]) {
     time += DT;
     stepPlayhead(run.target(time), DT, false, false);
     maxRate = Math.max(maxRate, Math.abs(playhead.rate));
+    if (playhead.glide && !playhead.hidden) maxArrived = Math.max(maxArrived, Math.abs(playhead.rate));
     if (arrived < 0 && Math.abs(playhead.t - run.target(run.length)) < 0.05 && Math.abs(playhead.rate) < 0.05) arrived = time;
     stepCityDrive(progressAtTime(playhead.t), DT);
     if (carState.s >= PARK_S + 0.5) {
@@ -92,6 +94,7 @@ function play(run: Run, all: Cue[]) {
   const cap = run.glide !== undefined ? CONFIG.playhead.glide : CONFIG.playhead.chase;
   if (maxRate > cap + 1e-6) issues.push(`${run.name}: played at ${maxRate.toFixed(2)}x, over the ${cap}x limit`);
   if (offRoad) issues.push(`${run.name}: a wheel off the road for ${offRoad} frames (first at ${firstOff.toFixed(1)} m, worst ${(worstOff * 100).toFixed(1)} cm)`);
+  if (maxArrived > CONFIG.playhead.enter + 1e-6) issues.push(`${run.name}: played its destination at ${maxArrived.toFixed(2)}x, over ${CONFIG.playhead.enter}x`);
   if (arrived < 0) issues.push(`${run.name}: never got there`);
   if (hiddenShown) issues.push(`${run.name}: the glide showed cues on the way (${hiddenShown} cue-frames)`);
   let shortest = Infinity;

@@ -16,6 +16,7 @@ import { CameraRig } from './CameraRig';
 import { Billboards } from './city/Billboards';
 import { Bridge } from './city/Bridge';
 import { City } from './city/City';
+import { CorridorBarriers } from './city/CorridorBarriers';
 import { EdgeSeal } from './city/EdgeSeal';
 import { RouteDebug } from './city/RouteDebug';
 import { DebugContact } from './DebugContact';
@@ -162,6 +163,7 @@ export function Scene() {
         <Sea />
         <Bridge />
         <EdgeSeal />
+        <CorridorBarriers />
         <Traffic />
         <Steam />
         <RouteDebug />

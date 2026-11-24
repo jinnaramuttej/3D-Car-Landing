@@ -16,6 +16,8 @@ import { CameraRig } from './CameraRig';
 import { ChapterProps } from './ChapterProps';
 import { City } from './city/City';
 import { RouteDebug } from './city/RouteDebug';
+import { StreetLights } from './city/StreetLights';
+import './fogLayers';
 import { Cityscape } from './Cityscape';
 import { createDayEnvironment } from './dayEnvironment';
 import { Effects } from './Effects';
@@ -147,6 +149,7 @@ export function Scene() {
       {/* chapters V on: the city, the sea and the bridge (src/scene/city) */}
       <Suspense fallback={null}>
         <City />
+        <StreetLights />
         <RouteDebug />
       </Suspense>
       <CameraRig />

@@ -204,6 +204,14 @@ export const CONFIG = {
     driftFrom: 7, // lateral acceleration (m/s^2, at a steady scroll) where a corner starts to slide
     driftFull: 16, // ... and where it is fully sideways
     showRoute: false, // draw the route, its waypoints and the stops (debug)
+    nightAlbedo: 0.42, // how dark the city's surfaces are at night (1 = daylight textures)
+    windowGlow: 2.2, // lit windows
+    signGlow: 2.4, // shop fronts and neon
+    ledGlow: 5, // the LED palms and trees
+    puddles: 1, // puddle coverage on the wet roads
+    reflection: 1, // wet-street reflection strength (desktop)
+    reflectionScale: 0.5, // (mount-ish) reflection resolution, fraction of the canvas width
+    lampLight: 260, // each of the real sodium lights that follow the camera
   },
 
   /** Post chain (src/scene/Effects.tsx). Mobile skips DOF, motion blur, streaks and lens drops. */
@@ -379,6 +387,14 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     driftYawDeg: [0, 50, 0.5],
     driftFrom: [0, 40, 0.5],
     driftFull: [1, 60, 0.5],
+    nightAlbedo: [0.05, 1, 0.01],
+    windowGlow: [0, 8, 0.05],
+    signGlow: [0, 8, 0.05],
+    ledGlow: [0, 15, 0.1],
+    puddles: [0, 1.5, 0.01],
+    reflection: [0, 3, 0.01],
+    reflectionScale: [0.2, 1, 0.05],
+    lampLight: [0, 1500, 5],
   },
   interaction: {
     revRise: [0.01, 1, 0.01],

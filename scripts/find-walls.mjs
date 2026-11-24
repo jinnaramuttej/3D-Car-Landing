@@ -72,12 +72,13 @@ function wallAt(s, side, dy) {
   return c;
 }
 const found = [];
-for (let s = 30; s < 840; s += 4) for (const side of [1, -1]) for (const dy of [8, 11, 14]) { const d = wallAt(s, side, dy); if (d !== null) found.push({ s, side, dy, d }); }
+for (let s = 30; s < L - 10; s += 4) for (const side of [1, -1]) for (const dy of [8, 11, 14]) { const d = wallAt(s, side, dy); if (d !== null) found.push({ s, side, dy, d, edge: d - room[Math.min(room.length - 1, Math.round((s / L) * (pts.length - 1)))][side === 1 ? 0 : 1] }); }
 for (const [id, [s0]] of Object.entries(stops)) {
   const c = found.filter(f => Math.abs(f.s - s0) <= 50).sort((a, b) => (Math.abs(a.d - 20) + Math.abs(a.s - s0) * 0.15) - (Math.abs(b.d - 20) + Math.abs(b.s - s0) * 0.15));
   console.log(id, s0, c.slice(0, 4).map(x => `s${x.s} side${x.side} lift${x.dy} d${x.d.toFixed(1)}`).join(' | ') || 'NONE');
 }
 console.log('--- all walls (s side d)');
 const bySide = {};
-for (const f of found) { const k = `${f.side}`; (bySide[k] ??= new Map()).set(f.s, Math.min(bySide[k].get(f.s) ?? 99, f.d)); }
-for (const [side, m] of Object.entries(bySide)) console.log('side', side, [...m.entries()].map(([s, d]) => `${s}:${d.toFixed(0)}`).join(' '));
+for (const f of found) { const k = `${f.side}`; const m = (bySide[k] ??= new Map()); const was = m.get(f.s); if (!was || f.d < was.d) m.set(f.s, f); }
+// "s:distance from the centre line/from the road's edge" (boards go on walls within 15 m of the road's edge)
+for (const [side, m] of Object.entries(bySide)) console.log('side', side, [...m.entries()].map(([s, f]) => `${s}:${f.d.toFixed(0)}/${f.edge.toFixed(0)}`).join(' '));

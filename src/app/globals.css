@@ -823,31 +823,6 @@ li:last-child .mm-track {
 }
 
 /* V arrival */
-.facts {
-  position: absolute;
-  left: var(--gutter);
-  top: clamp(90px, 14vh, 140px);
-  display: grid;
-  gap: 16px;
-  width: min(400px, 80vw);
-  margin: 0;
-  padding: 22px 24px;
-}
-
-.fact dt {
-  margin-bottom: 4px;
-  font-size: 10px;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-.fact dd {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.4;
-}
-
 /* VI Robowars: a race-control console */
 .d-robowars .panel {
   position: absolute;
@@ -1341,69 +1316,6 @@ li:last-child .mm-track {
   color: var(--accent);
 }
 
-.committees {
-  position: absolute;
-  left: var(--gutter);
-  right: calc(var(--gutter) + 50px);
-  bottom: clamp(40px, 8vh, 80px);
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  max-width: 920px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  perspective: 900px;
-}
-
-.committee button {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 92px;
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  pointer-events: auto;
-  transform-style: preserve-3d;
-  transition: transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-.committee:hover button,
-.committee button:focus-visible,
-.committee.is-flipped button {
-  transform: rotateY(180deg);
-}
-
-.face {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 10px 14px;
-  border: 1px solid rgba(176, 122, 255, 0.35);
-  border-radius: 14px;
-  background: rgba(20, 10, 32, 0.86);
-  backface-visibility: hidden;
-  text-align: center;
-}
-
-.face.front {
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: clamp(16px, 1.6vw, 22px);
-  letter-spacing: 0.06em;
-}
-
-.face.back {
-  transform: rotateY(180deg);
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--fg);
-  background: rgba(60, 28, 100, 0.72);
-}
-
 /* finale */
 .finale-cta {
   position: absolute;
@@ -1592,7 +1504,6 @@ li:last-child .mm-track {
     font-size: 9px;
   }
 
-  .facts,
   .block-head,
   .d-robowars .panel {
     top: 70px;
@@ -1685,15 +1596,6 @@ li:last-child .mm-track {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .committees {
-    right: calc(var(--gutter) + 40px);
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .committee button {
-    height: 70px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1907,12 +1809,10 @@ li:last-child .mm-track {
     --col-right: calc(var(--gutter) + 56px);
   }
   .stops .block-head,
-  .stops .facts,
   .stops .d-robowars .panel,
   .stops .exhibit-now,
   .stops .exhibit-detail,
   .stops .hb,
-  .stops .committees,
   .stops .bays-window {
     left: var(--col-left);
     right: auto;
@@ -1920,12 +1820,10 @@ li:last-child .mm-track {
     max-width: var(--col);
   }
   .stops[data-side='right'] .block-head,
-  .stops[data-side='right'] .facts,
   .stops[data-side='right'] .d-robowars .panel,
   .stops[data-side='right'] .exhibit-now,
   .stops[data-side='right'] .exhibit-detail,
   .stops[data-side='right'] .hb,
-  .stops[data-side='right'] .committees,
   .stops[data-side='right'] .bays-window {
     left: auto;
     right: var(--col-right);
@@ -1939,12 +1837,6 @@ li:last-child .mm-track {
   }
   .stops .exhibit-detail {
     top: 50%;
-  }
-  .stops .committees {
-    top: 300px;
-    bottom: auto;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
   }
 
   /* VII: the bays are a compact strip down the column, collapsed to a line each while
@@ -2059,81 +1951,3 @@ li:last-child .mm-track {
 }
 
 /* ------------------------------------------------- drive-past billboard cards */
-
-.extras {
-  position: fixed;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-}
-.extra {
-  position: absolute;
-  left: var(--gutter);
-  bottom: 128px;
-  display: grid;
-  gap: 10px;
-  width: min(330px, 80vw);
-  padding: 16px 18px;
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: auto;
-  font-size: 13px;
-  line-height: 1.4;
-}
-.extra[data-slot='tr'] {
-  left: auto;
-  right: calc(var(--gutter) + 56px);
-  top: 92px;
-  bottom: auto;
-}
-.extra[data-slot='tl'] {
-  top: 92px;
-  bottom: auto;
-}
-.extra > * {
-  transform: translateY(8px);
-  transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.extra.is-in > * {
-  transform: none;
-}
-.extra .kicker {
-  margin: 0;
-}
-.extra dl {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-}
-.extra dt {
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.extra dd {
-  margin: 2px 0 0;
-  font-weight: 600;
-}
-.extra ul {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.extra li em {
-  display: block;
-  font-style: normal;
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.extra-line {
-  margin: 0;
-  font-weight: 600;
-}
-.is-cinematic .extra a {
-  pointer-events: auto;
-}

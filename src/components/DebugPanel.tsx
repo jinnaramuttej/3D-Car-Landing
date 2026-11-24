@@ -12,6 +12,7 @@ import { glideTo, playhead } from '@/lib/playhead';
 import { carContact, contactState } from '@/lib/cityDrive';
 import { cameraCollision } from '@/lib/collide';
 import { debugContact } from '@/scene/DebugContact';
+import { cityDraw } from '@/scene/city/City';
 import { chapterState } from '@/lib/chapterRuntime';
 import { interaction } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
@@ -179,6 +180,7 @@ export function DebugPanel() {
       hud.current.textContent =
         `${c.numeral} ${c.title.toUpperCase()} / ${cameraState.shotId}${blend}  s ${carState.s.toFixed(1)} m  t ${timeAtProgress(chapterState.progress).toFixed(1)} s  zone ${zone}  ${(carState.speed * 3.6).toFixed(0)} km/h` +
         `  wheels ${contactState.ok ? hits : 0}/4 twist ${twist.toFixed(1)} cm  box ${debugContact.boxHits ? `HIT ${debugContact.boxHits}` : 'clear'}  cam ${cameraCollision.hit ? `HIT -${cameraCollision.pulled.toFixed(1)} m` : cameraCollision.pulled > 0.05 ? `easing -${cameraCollision.pulled.toFixed(1)} m` : 'clear'}` +
+        `  draws ${debugContact.draws} (city ${cityDraw.meshes - cityDraw.inFog}/${cityDraw.meshes} out of the fog)` +
         `  scroll ${useStore.getState().progress.toFixed(3)} screen ${chapterState.progress.toFixed(3)}  x${chapterState.rate.toFixed(2)}${playhead.glide ? (playhead.hidden ? ' GLIDE' : ' glide in') : ''}${playhead.pull > 0.05 ? ` magnet ${playhead.pull.toFixed(2)}` : ''}`;
     }, 100);
     // jump to a route metre: /?debug&s=510, or [ and ] for -/+10 m (with Shift: 50 m), or __gt3r.goS(510)

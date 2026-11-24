@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import {
   BoxGeometry,
   BufferAttribute,
@@ -39,6 +39,17 @@ export function DebugContact() {
 }
 
 function ContactHud() {
+  // draw calls in a whole frame, every pass (the scene, the reflection, the post chain):
+  // the renderer's counter reset by hand before the frame and read after the composer
+  const gl = useThree((s) => s.gl);
+  useFrame(() => {
+    gl.info.autoReset = false;
+    gl.info.reset();
+  }, -100);
+  useFrame(() => {
+    debugContact.draws = gl.info.render.calls;
+    debugContact.triangles = gl.info.render.triangles;
+  }, 100);
   const box = useMemo(() => {
     const l = new LineSegments(new EdgesGeometry(new BoxGeometry(1, 1, 1)), new LineBasicMaterial({ color: '#3cff8a', depthTest: false, transparent: true }));
     l.renderOrder = 20;
@@ -121,4 +132,4 @@ function ContactHud() {
 }
 
 /** What the HUD found this frame (the text HUD prints it). */
-export const debugContact = { boxHits: 0 };
+export const debugContact = { boxHits: 0, draws: 0, triangles: 0 };

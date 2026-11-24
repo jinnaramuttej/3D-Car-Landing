@@ -15,8 +15,10 @@ import { Car } from './Car';
 import { CameraRig } from './CameraRig';
 import { ChapterProps } from './ChapterProps';
 import { Billboards } from './city/Billboards';
+import { Bridge } from './city/Bridge';
 import { City } from './city/City';
 import { RouteDebug } from './city/RouteDebug';
+import { Sea } from './city/Sea';
 import { StreetLights } from './city/StreetLights';
 import './fogLayers';
 import { Cityscape } from './Cityscape';
@@ -152,6 +154,8 @@ export function Scene() {
         <City />
         <StreetLights />
         <Billboards />
+        <Sea />
+        <Bridge />
         <RouteDebug />
       </Suspense>
       <CameraRig />

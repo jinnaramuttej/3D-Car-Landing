@@ -228,9 +228,9 @@ const TWMUN_AIR: Env = { ...CITY, fogColor: '#130c1e', skyGlow: '#4a2a6a' };
 const DAWN: Env = {
   ...CITY,
   rain: 0,
-  fog: 0.0032,
-  fogColor: '#9a7a78',
-  exposure: 0.95,
+  fog: 0.0019,
+  fogColor: '#8c7a80',
+  exposure: 0.92,
   skyTop: '#2c3d66',
   skyHorizon: '#e5946c',
   skyGlow: '#ff9a5a',

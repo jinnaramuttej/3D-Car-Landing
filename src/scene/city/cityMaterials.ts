@@ -36,7 +36,7 @@ export const cityUniforms = {
   ...reflectionUniforms,
 };
 
-const KINDS = ['road', 'ground', 'window', 'sign', 'metal', 'foliage', 'ledpalm', 'ledtree', 'plain'] as const;
+const KINDS = ['road', 'ground', 'window', 'sign', 'metal', 'foliage', 'ledpalm', 'ledtree', 'plain', 'sea'] as const;
 export type CityKind = (typeof KINDS)[number];
 
 export const kindOf = (m: Material): CityKind => {
@@ -127,7 +127,20 @@ const fragMain = /* glsl */ `
   // night: everything that is not a light source is darker
   diffuseColor.rgb *= uNight;
 
-  #ifndef CITY_LED
+  #ifdef CITY_SEA
+  {
+    // water: the reflection, bent by the waves, strong at grazing angles
+    vec3 V = normalize(cameraPosition - vCityPos);
+    float fres = 0.02 + 0.98 * pow(1.0 - max(V.y, 0.0), 5.0);
+    float nearPlane = 1.0 - smoothstep(0.35, 1.4, abs(vCityPos.y - uReflPlaneY));
+    vec4 rc = uReflMatrix * vec4(vCityPos, 1.0);
+    vec2 ruv = rc.xy / rc.w + normal.xy * 0.045;
+    vec3 r = texture2D(uReflMap, ruv).rgb;
+    totalEmissiveRadiance += r * uReflOn * nearPlane * uReflStrength * mix(0.2, 1.0, fres);
+  }
+  #endif
+
+  #if !defined(CITY_LED) && !defined(CITY_SEA)
   float up = smoothstep(0.55, 0.85, cn.y);
   if (up > 0.0) {
     // rain: darker, smoother, and pooled into puddles
@@ -164,6 +177,7 @@ const DEFINE: Partial<Record<CityKind, string>> = {
   sign: 'CITY_SIGN',
   ledpalm: 'CITY_LED',
   ledtree: 'CITY_LED',
+  sea: 'CITY_SEA',
 };
 
 /** Patches one material in place for its kind. */

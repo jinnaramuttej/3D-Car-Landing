@@ -1,5 +1,5 @@
 import type { Material, MeshStandardMaterial, Object3D, WebGLProgramParametersWithUniforms } from 'three';
-import { Mesh } from 'three';
+import { Mesh, Vector3 } from 'three';
 import { reflectionUniforms } from './cityReflection';
 
 /**
@@ -26,6 +26,10 @@ export const cityUniforms = {
   uWet: { value: 1 },
   /** Most a light's direct specular may add (see the patch after the lights). */
   uSpecCap: { value: 3 },
+  /** Lane-dash glow on the runs, 0 at walking pace (the speed cue on the road's paint). */
+  uDash: { value: 0 },
+  /** Where the car is (world): the dashes light up round it. */
+  uCarPos: { value: new Vector3() },
   /** Lit windows, signs and LEDs (chapter env `city`: dims as the sun comes up). */
   uCity: { value: 1 },
   /** Albedo multiplier: dark at night, back toward 1 at dawn. */
@@ -66,6 +70,8 @@ const fragPars = /* glsl */ `
 uniform float uTime;
 uniform float uWet;
 uniform float uSpecCap;
+uniform float uDash;
+uniform vec3 uCarPos;
 uniform float uCity;
 uniform float uNight;
 uniform float uPuddles;
@@ -94,6 +100,18 @@ const fragMain = /* glsl */ `
   vec3 cn = normalize(vCityNormal);
   vec3 albedo = diffuseColor.rgb;
   float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+
+  #ifdef CITY_ROAD
+    // the road's paint (lane dashes, edge lines, crossings: far brighter than the asphalt
+    // in the map) brightens and shimmers round the car on the runs, and motion blur smears
+    // it into streaks: a cheap speed cue, nothing at walking pace
+    if (uDash > 0.001) {
+      float paint = smoothstep(0.36, 0.55, luma);
+      float near = 1.0 - smoothstep(6.0, 55.0, length(vCityPos.xz - uCarPos.xz));
+      float flick = 0.72 + 0.28 * sin(uTime * 23.0 + cityHash(floor(vCityPos.xz / 3.0)) * 6.283);
+      totalEmissiveRadiance += albedo * paint * near * flick * uDash;
+    }
+  #endif
 
   #ifdef CITY_SIGN
     float signId = cityHash(floor(vCityPos.xz / 6.0));

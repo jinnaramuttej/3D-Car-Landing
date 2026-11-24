@@ -210,6 +210,7 @@ export const CONFIG = {
     reflectionFar: 420, // metres the reflection reaches
     lampLight: 260, // each of the real sodium lights that follow the camera
     lampShafts: 0.14, // the cone of light under each lamp, in the rain
+    dashGlow: 1.4, // lane dashes brightening round the car at speed (0 off)
     specCap: 3, // most a light's specular peak may add on the city (wet-road glare)
     billboardGlow: 2.2, // LED billboard brightness (blooms above ~1)
     billboardLight: 420, // the light the active billboard spills on the street
@@ -392,6 +393,7 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     reflectionFar: [60, 800, 10],
     lampLight: [0, 1500, 5],
     lampShafts: [0, 0.5, 0.005],
+    dashGlow: [0, 6, 0.05],
     specCap: [0.2, 40, 0.1],
     billboardGlow: [0, 8, 0.05],
     billboardLight: [0, 3000, 10],

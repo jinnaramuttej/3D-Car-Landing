@@ -69,6 +69,9 @@ export function City() {
     u.uTime.value = state.clock.elapsedTime;
     u.uWet.value = e.wet;
     u.uSpecCap.value = CONFIG.city.specCap;
+    // lane dashes light up with speed: on the runs, not through the slow zones
+    u.uDash.value = MathUtils.smoothstep(Math.abs(carState.speed), 6, 17) * CONFIG.city.dashGlow * (mobile ? 0.6 : 1);
+    u.uCarPos.value.copy(carState.position);
     u.uCity.value = e.city;
     u.uNight.value = MathUtils.lerp(c.nightAlbedo, 0.95, 1 - MathUtils.clamp(e.city, 0, 1));
     u.uPuddles.value = c.puddles;

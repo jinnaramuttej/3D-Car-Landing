@@ -155,7 +155,8 @@ export function Effects() {
 
     const mb = fx.motionBlur;
     mb.strength = p.motionBlur;
-    mb.maxBlur = p.motionBlurMax;
+    // (a little longer smear on the runs, so the lit lane dashes streak)
+    mb.maxBlur = p.motionBlurMax * (1 + 0.5 * MathUtils.smoothstep(Math.abs(carState.speed), 8, 18));
     mb.cutDistance = p.cutDistance;
 
     const an = fx.anamorphic;

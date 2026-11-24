@@ -40,9 +40,12 @@ export function PlayControls() {
   // the bar follows what is on screen
   useEffect(() => {
     const total = autoplayLength();
+    let shown = '';
     const render = (p: number) => {
       if (bar.current) bar.current.style.transform = `scaleX(${p.toFixed(4)})`;
-      if (time.current) time.current.textContent = `${clock(timeAtProgress(p))} / ${clock(total)}`;
+      // (new text only when the second changes: rewriting it re-lays out the navbar)
+      const text = `${clock(timeAtProgress(p))} / ${clock(total)}`;
+      if (time.current && text !== shown) time.current.textContent = shown = text;
     };
     render(useStore.getState().view);
     return useStore.subscribe((s) => render(s.view));

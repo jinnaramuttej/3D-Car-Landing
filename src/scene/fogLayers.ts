@@ -1,12 +1,13 @@
 import { ShaderChunk } from 'three';
 
 /**
- * Fog with a cloud layer: on top of the scene's exponential fog, everything high up in
- * the city fades into the low rain cloud (towers lose their tops above ~60 m). It lives
- * in three's fog chunks, so every fogged material gets it, and it only applies on the
- * city stage (which sits far out along +x, see CITY_ORIGIN): the waterfront of chapters
- * I-IV keeps its fog exactly as it was. Its strength follows the fog density, so it thins
- * out with the fog at dawn. Imported once by Scene before anything compiles.
+ * Fog in layers, on top of the scene's exponential fog: everything high up in the city
+ * fades into the low rain cloud (towers lose their tops above ~60 m), and the air at street
+ * level is a little thicker than the fog alone (distant things near the camera's height go
+ * hazy first). It lives in three's fog chunks, so every fogged material gets it; it only
+ * applies to the city (far out along +x, see CITY_ORIGIN), and its strength follows the fog
+ * density, so it thins out with the fog at dawn. Imported once by Scene before anything
+ * compiles.
  */
 const PATCHED = '/* cloud-layer */';
 
@@ -33,7 +34,11 @@ if (!ShaderChunk.fog_fragment.includes(PATCHED)) {
     `${PATCHED}
 	#ifdef FOG_EXP2
 		float cloudLayer = step( 3000.0, vFogWorld.x ) * smoothstep( 58.0, 150.0, vFogWorld.y ) * clamp( fogDensity * 85.0, 0.0, 0.9 );
-		fogFactor = 1.0 - ( 1.0 - fogFactor ) * ( 1.0 - cloudLayer );
+		// low haze: the air at street level is thicker than the fog alone (aerial layers),
+		// strongest for distant things near the camera's own height
+		float low = exp( - max( vFogWorld.y - cameraPosition.y + 3.0, 0.0 ) / 14.0 );
+		float lowHaze = low * ( 1.0 - exp( - vFogDepth * fogDensity * 0.85 ) ) * 0.5;
+		fogFactor = 1.0 - ( 1.0 - fogFactor ) * ( 1.0 - cloudLayer ) * ( 1.0 - lowHaze );
 	#endif
 	gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );`,
   );

@@ -93,7 +93,14 @@ const fragMain = /* glsl */ `
   float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
 
   #ifdef CITY_SIGN
-    float flick = 0.86 + 0.14 * sin(uTime * 2.3 + cityHash(floor(vCityPos.xz / 6.0)) * 40.0);
+    float signId = cityHash(floor(vCityPos.xz / 6.0));
+    float flick = 0.86 + 0.14 * sin(uTime * 2.3 + signId * 40.0);
+    // one sign in eight is a failing tube: now and then it stutters and drops out
+    if (signId > 0.875) {
+      float burst = step(0.78, cityNoise(vec2(uTime * 0.6, signId * 17.0)));
+      float buzz = step(0.42, fract(sin(floor(uTime * 14.0 + signId * 60.0) * 12.9898) * 43758.5453));
+      flick *= mix(1.0, 0.08 + 0.92 * buzz, burst);
+    }
     totalEmissiveRadiance += albedo * uSignGlow * uCity * flick;
   #endif
 
@@ -145,13 +152,19 @@ const fragMain = /* glsl */ `
   if (up > 0.0) {
     // rain: darker, smoother, and pooled into puddles
     float nz = cityNoise(vCityPos.xz * 0.11) * 0.65 + cityNoise(vCityPos.xz * 0.47) * 0.35;
+    // some stretches are dry-ish, some flooded: the threshold drifts across the city
+    float spread = cityNoise(vCityPos.xz * 0.021 + 3.7);
     #ifdef CITY_ROAD
-      float puddle = smoothstep(0.5, 0.58, nz) * uPuddles;
+      float th = mix(0.43, 0.6, spread);
+      float puddle = smoothstep(th, th + 0.07, nz) * uPuddles;
     #else
-      float puddle = smoothstep(0.62, 0.7, nz) * uPuddles * 0.6;
+      float th = mix(0.58, 0.72, spread);
+      float puddle = smoothstep(th, th + 0.08, nz) * uPuddles * 0.6;
     #endif
+    // a darker damp rim round each puddle
+    float rim = (smoothstep(th - 0.09, th, nz) - puddle) * uPuddles;
     float wet = uWet * up;
-    diffuseColor.rgb *= mix(1.0, 0.55, wet) * mix(1.0, 0.55, puddle * wet);
+    diffuseColor.rgb *= mix(1.0, 0.55, wet) * mix(1.0, 0.55, puddle * wet) * mix(1.0, 0.8, rim * wet);
     roughnessFactor = mix(roughnessFactor, mix(0.3, 0.04, puddle), wet);
 
     // the street reflected in the wet surface (only near the mirror's plane)

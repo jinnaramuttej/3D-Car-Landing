@@ -4,9 +4,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
 import { COMMITTEE_NAMES, COMPETITIONS, EXPO, HEARTBEAT, ROBOWARS, SITE, TWMUN, UI, VOICES } from '@/content';
-import { chapterById, FINALE, type StopId } from '@/lib/chapters';
+import { CHAPTERS, chapterById, FINALE, type StopId } from '@/lib/chapters';
 import { chapterState, stopWeight } from '@/lib/chapterRuntime';
 import { COMPETITION_TAGS, expoIndexAt, heartbeatPulse, initials, SPEAKER_CATEGORIES, useStops } from '@/lib/stops';
+import { layoutState, overlap, type Rect } from '@/lib/layout';
 import { useStore } from '@/lib/store';
 
 gsap.registerPlugin(Flip);
@@ -111,7 +112,7 @@ function RobowarsPanel() {
   const kg = useStops((s) => s.robowarsClass);
   return (
     <section className="d-block d-robowars" aria-label={UI.robowars.kicker}>
-      <div className="panel glass">
+      <div className="panel glass col">
         <p className="kicker">{UI.robowars.kicker}</p>
         <p className="prize">
           <span>{UI.robowars.prizeLabel}</span>
@@ -177,8 +178,8 @@ function CompetitionsPanel({ measure }: { measure: () => void }) {
   }, [filter, measure]);
 
   return (
-    <section className="d-block d-competitions" aria-label={UI.competitions.kicker}>
-      <div className="block-head">
+    <section className="d-block d-competitions" data-open="0" aria-label={UI.competitions.kicker}>
+      <div className="block-head col">
         <p className="kicker">{UI.competitions.kicker}</p>
         <div className="chips" role="group" aria-label="Filter competitions">
           {COMPETITION_TAGS.map((t) => (
@@ -253,7 +254,7 @@ function SpeakersPanel() {
 
   return (
     <section className="d-block d-speakers" aria-label={VOICES.heading}>
-      <div className="block-head">
+      <div className="block-head col">
         <p className="kicker">{UI.speakers.kicker}</p>
         <h2 className="heading">{VOICES.heading}</h2>
         <div className="chips" role="tablist" aria-label="Speaker categories">
@@ -304,7 +305,7 @@ function ExpoPanel() {
   const set = useStops.getState;
   return (
     <section className="d-block d-expo" aria-label={EXPO.heading}>
-      <div className="block-head">
+      <div className="block-head col">
         <p className="kicker">{UI.expo.kicker}</p>
         <h2 className="heading">{EXPO.heading}</h2>
       </div>
@@ -365,7 +366,7 @@ function DkmsPanel() {
 
   return (
     <section className="d-block d-dkms" aria-label={HEARTBEAT.campaign}>
-      <div className="hb">
+      <div className="hb col">
         <p className="kicker">{HEARTBEAT.campaign}</p>
         <h2 className="hb-headline">{HEARTBEAT.headline}</h2>
         <p className="hb-body">{HEARTBEAT.body}</p>
@@ -406,7 +407,7 @@ function TwmunPanel() {
   const [flipped, setFlipped] = useState<string | null>(null);
   return (
     <section className="d-block d-twmun" aria-label={TWMUN.name}>
-      <div className="block-head">
+      <div className="block-head col">
         <p className="kicker">{UI.twmun.kicker}</p>
         <h2 className="heading">{TWMUN.name}</h2>
         <p className="tagline">{TWMUN.tagline}</p>
@@ -443,8 +444,10 @@ export function Stops() {
     () => () => {
       const track = root.current?.querySelector<HTMLElement>('.bays');
       if (!track) return;
+      // a vertical strip on both: it slides up through its window while the car holds
+      const win = track.parentElement;
       const mobile = window.matchMedia(MOBILE_Q).matches;
-      const travel = mobile ? track.scrollHeight - 0.24 * window.innerHeight : track.scrollWidth - 0.3 * window.innerWidth;
+      const travel = mobile ? track.scrollHeight - 0.24 * window.innerHeight : track.scrollHeight - (win?.clientHeight ?? 0);
       track.style.setProperty('--travel', `${Math.max(0, travel)}px`);
     },
     [],
@@ -467,7 +470,65 @@ export function Stops() {
     });
     const unsubscribe = useStore.subscribe((s) => tl?.progress(s.view));
     window.addEventListener('resize', measure);
+
+    // layout: panels wait for the camera to settle on the stop, sit on whichever side keeps
+    // them off the car and the billboard, and the competition strip opens only at the stop
+    const comp = el.querySelector<HTMLElement>('.d-competitions');
+    const lay = { gate: 0, side: 'left' as 'left' | 'right', open: '0', until: 0 };
+    let raf = 0;
+    let last = performance.now();
+    const loop = () => {
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      const L = layoutState;
+      const id = CHAPTERS[chapterState.chapter].stop;
+      const want = !id ? 0 : id === 'finale' ? 1 : L.atStop ? 1 : 0;
+      lay.gate += (want - lay.gate) * (1 - Math.exp(-dt / (want > lay.gate ? 0.3 : 0.15)));
+      el.style.setProperty('--gate', lay.gate.toFixed(3));
+      if (id && id !== 'finale' && now > lay.until) {
+        const col = el.querySelector<HTMLElement>(`.d-${id} .col`);
+        if (col && col.offsetWidth) {
+          const w = col.offsetWidth;
+          const g = Math.max(16, Math.min(56, L.w * 0.04));
+          const r = (x0: number) => ({ x0, y0: 84, x1: x0 + w, y1: L.h - 100 });
+          // (nothing may cover the car: it outweighs the billboard many times over)
+          const score = (x0: number) => 12 * overlap(r(x0), L.car) + 2 * overlap(r(x0), L.board);
+          const left = score(g) + (lay.side === 'left' ? -1500 : 0);
+          const right = score(L.w - g - 56 - w) + (lay.side === 'right' ? -1500 : 0) + 800;
+          const side = left <= right ? 'left' : 'right';
+          if (side !== lay.side) {
+            lay.side = side;
+            el.dataset.side = side;
+            lay.until = now + 1200;
+          }
+        }
+      }
+      // tell the title solver where the panel is
+      const shown = id && id !== 'finale' && lay.gate > 0.05 ? el.querySelector<HTMLElement>(`.d-${id}`) : null;
+      const parts = shown && getComputedStyle(shown).visibility !== 'hidden' ? shown.querySelectorAll<HTMLElement>('.col, .bays-window, .committees, .exhibit-now') : null;
+      let panel: Rect | null = null;
+      if (parts) {
+        for (const part of parts) {
+          const b = part.getBoundingClientRect();
+          if (!b.width) continue;
+          panel = panel
+            ? { x0: Math.min(panel.x0, b.left), y0: Math.min(panel.y0, b.top), x1: Math.max(panel.x1, b.right), y1: Math.max(panel.y1, b.bottom) }
+            : { x0: b.left, y0: b.top, x1: b.right, y1: b.bottom };
+        }
+      }
+      L.panel = panel;
+      const open = id === 'competitions' && L.atStop ? '1' : '0';
+      if (comp && open !== lay.open) {
+        lay.open = open;
+        comp.dataset.open = open;
+        requestAnimationFrame(measure);
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
     return () => {
+      cancelAnimationFrame(raf);
       unsubscribe();
       mm.revert();
       window.removeEventListener('resize', measure);
@@ -475,9 +536,9 @@ export function Stops() {
   }, [measure]);
 
   return (
-    <div ref={root} className="stops">
+    <div ref={root} className="stops" data-side="left">
       <section className="d-block d-arrival" aria-label={UI.arrival.kicker}>
-        <dl className="facts glass">
+        <dl className="facts glass col">
           {[
             ['Edition', SITE.edition],
             ['Dates', SITE.dates],

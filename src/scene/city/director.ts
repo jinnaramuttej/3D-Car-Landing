@@ -397,7 +397,8 @@ function stopRig(stop: ReturnType<typeof nearestStop>, out: Pose) {
         const d = p.clone().sub(pos).normalize();
         worst = Math.max(worst, Math.acos(clamp(d.dot(_c), -1, 1)));
       }
-      return MathUtils.radToDeg(worst) * 2 * 1.25;
+      // (room to spare: the group is framed off-centre, see below)
+      return MathUtils.radToDeg(worst) * 2 * 1.45;
     };
     put();
     let fov = need();
@@ -412,6 +413,13 @@ function stopRig(stop: ReturnType<typeof nearestStop>, out: Pose) {
   out.pos.copy(place.pos);
   _a.copy(carState.position).setY(carState.position.y + 0.7);
   out.look.copy(_a).lerp(a.centre, 0.5);
+  // frame the car and the billboard in the right two-thirds: the stop's panel takes the
+  // left column (the DOM layout solver moves it if the car ends up there anyway)
+  _c.subVectors(out.look, out.pos);
+  const dist = _c.length();
+  _d.crossVectors(_c, _b.set(0, 1, 0)).normalize();
+  const halfW = Math.tan(MathUtils.degToRad(place.fov) / 2) * (16 / 9);
+  out.look.addScaledVector(_d, -dist * halfW * 0.28);
   out.fov = place.fov;
   out.focus.copy(a.centre);
   out.dof = 2.2;

@@ -76,14 +76,71 @@ button {
   transform-origin: bottom;
 }
 
-/* chapter cards: numeral, title, one line */
+/* chapter cards: numeral, title, one line. One at a time, in the slot the layout solver
+   picks (Overlay.tsx), faded by --gate (calm, settled) and --slotfade (moving slots) */
+.cards {
+  --gate: 1;
+  --slotfade: 1;
+  --px: 0;
+  --py: 0;
+  position: absolute;
+  inset: 0;
+  opacity: calc(var(--gate) * var(--slotfade));
+  transition: opacity 0.26s ease;
+}
+
 .chapter-card {
   position: absolute;
   left: var(--gutter);
-  bottom: clamp(88px, 15vh, 150px);
-  max-width: min(640px, 70vw);
+  top: 92px;
+  max-width: min(440px, 62vw);
   visibility: hidden;
   opacity: 0;
+}
+.cards[data-slot='tr'] .chapter-card {
+  left: auto;
+  right: calc(var(--gutter) + 56px);
+  text-align: right;
+}
+.cards[data-slot='tr'] .chapter-num {
+  justify-content: flex-end;
+}
+.cards[data-slot='tc'] .chapter-card {
+  left: 50%;
+  translate: -50% 0;
+  text-align: center;
+}
+.cards[data-slot='tc'] .chapter-num {
+  justify-content: center;
+}
+.cards[data-slot='bl'] .chapter-card {
+  top: auto;
+  bottom: 128px;
+}
+
+/* kinetic reveal: each word rises out of its own mask as the card arrives */
+.kl {
+  display: inline-block;
+  overflow: hidden;
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+  vertical-align: bottom;
+}
+.kl > span {
+  display: inline-block;
+  transform: translateY(105%);
+  transition: transform 0.9s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition-delay: calc(var(--i) * 42ms);
+}
+.chapter-card.is-in .kl > span {
+  transform: none;
+}
+/* depth parallax: the line moves more than the numeral */
+.chapter-num {
+  transform: translate3d(calc(var(--px) * 5px), calc(var(--py) * -3px), 0);
+}
+.chapter-line {
+  transform: translate3d(calc(var(--px) * 12px), calc(var(--py) * -7px), 0);
 }
 
 .chapter-card[data-chapter='stillness'] {
@@ -115,7 +172,7 @@ button {
   margin: 0;
   font-family: var(--display);
   font-weight: 700;
-  font-size: clamp(26px, 3.4vw, 50px);
+  font-size: clamp(20px, 2.2vw, 32px);
   line-height: 1.08;
   letter-spacing: -0.01em;
   text-wrap: balance;
@@ -126,7 +183,7 @@ button {
 .hints {
   position: absolute;
   left: 50%;
-  bottom: 28px;
+  bottom: 64px;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -154,18 +211,33 @@ button {
   color: var(--fg);
 }
 
-/* chapter IV: the title that forms out of the smoke */
+/* chapter IV: the title that forms in the smoke, above the car (slot from Overlay.tsx) */
 .title-block {
   position: absolute;
   left: 50%;
-  top: 50%;
+  top: 92px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: min(1100px, 94vw);
+  width: min(760px, 80vw);
   text-align: center;
-  transform: translate(-50%, -56%);
+  translate: -50% 0;
   visibility: hidden;
+  transition:
+    left 0.6s ease,
+    translate 0.6s ease;
+}
+.title-block[data-slot='tl'] {
+  left: var(--gutter);
+  translate: 0 0;
+  align-items: flex-start;
+  text-align: left;
+}
+.title-block[data-slot='tr'] {
+  left: calc(100% - var(--gutter) - 56px);
+  translate: -100% 0;
+  align-items: flex-end;
+  text-align: right;
 }
 
 .title-block h1 {
@@ -180,7 +252,7 @@ button {
   display: block;
   font-family: var(--display);
   font-weight: 900;
-  font-size: clamp(52px, 11.5vw, 190px);
+  font-size: clamp(44px, 7vw, 116px);
   text-transform: uppercase;
   visibility: hidden;
   text-shadow: 0 6px 60px rgba(0, 0, 0, 0.45);
@@ -191,7 +263,7 @@ button {
   margin-top: 0.12em;
   font-family: var(--display);
   font-weight: 700;
-  font-size: clamp(22px, 3.2vw, 48px);
+  font-size: clamp(18px, 2.2vw, 32px);
   letter-spacing: 0.5em;
   color: var(--accent);
   text-shadow: 0 0 30px var(--accent-glow);
@@ -203,8 +275,8 @@ button {
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px 26px;
-  margin: 26px 0 30px;
-  font-size: clamp(11px, 1.1vw, 14px);
+  margin: 18px 0 22px;
+  font-size: clamp(10px, 0.95vw, 13px);
   letter-spacing: 0.28em;
   text-transform: uppercase;
 }
@@ -1667,5 +1739,174 @@ li:last-child .mm-track {
   }
   .play-btn span {
     display: none;
+  }
+}
+
+/* -------------------------------------------- stop panels: one side column (desktop) */
+
+/* panels wait for the camera to settle on the stop (--gate from Stops.tsx) */
+.stops {
+  --gate: 0;
+}
+.stops > .d-block:not(.d-finale) {
+  opacity: var(--gate);
+}
+
+@media (min-width: 768px) and (pointer: fine) {
+  /* everything of a stop lives in one column, on the side the layout solver picks */
+  .stops {
+    --col: min(420px, 34vw);
+    --col-left: var(--gutter);
+    --col-right: calc(var(--gutter) + 56px);
+  }
+  .stops .block-head,
+  .stops .facts,
+  .stops .d-robowars .panel,
+  .stops .exhibit-now,
+  .stops .exhibit-detail,
+  .stops .hb,
+  .stops .committees,
+  .stops .bays-window {
+    left: var(--col-left);
+    right: auto;
+    width: var(--col);
+    max-width: var(--col);
+  }
+  .stops[data-side='right'] .block-head,
+  .stops[data-side='right'] .facts,
+  .stops[data-side='right'] .d-robowars .panel,
+  .stops[data-side='right'] .exhibit-now,
+  .stops[data-side='right'] .exhibit-detail,
+  .stops[data-side='right'] .hb,
+  .stops[data-side='right'] .committees,
+  .stops[data-side='right'] .bays-window {
+    left: auto;
+    right: var(--col-right);
+  }
+  .stops .block-head {
+    top: 92px;
+  }
+  .stops .exhibit-now {
+    top: auto;
+    bottom: 110px;
+  }
+  .stops .exhibit-detail {
+    top: 50%;
+  }
+  .stops .committees {
+    top: 300px;
+    bottom: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  /* VII: the bays are a compact strip down the column, collapsed to a line each while
+     the car drives, opening up at the stop */
+  .stops .bays-window {
+    top: 236px;
+    bottom: 96px;
+    overflow: hidden;
+    mask-image: linear-gradient(transparent, #000 6%, #000 92%, transparent);
+  }
+  .stops .bays {
+    flex-direction: column;
+    gap: 8px;
+    padding: 6px 0;
+    transform: translateY(calc(var(--p) * var(--travel) * -1));
+  }
+  .stops .bay {
+    flex: 0 0 auto;
+    border-radius: 12px;
+  }
+  .stops .bay-door {
+    height: 6px;
+  }
+  .stops .bay-door span {
+    display: none;
+  }
+  .stops .bay-body {
+    padding: 10px 14px 12px;
+  }
+  .stops .bay h3 {
+    font-size: 15px;
+  }
+  .d-competitions[data-open='0'] .bay-line,
+  .d-competitions[data-open='0'] .bay-meta,
+  .d-competitions[data-open='0'] .bay-link {
+    display: none;
+  }
+  .d-competitions[data-open='0'] .bay-body {
+    padding: 8px 14px;
+  }
+}
+
+.title-block[data-slot='tl'] h1,
+.title-block[data-slot='tl'] .title-meta {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.title-block[data-slot='tr'] h1,
+.title-block[data-slot='tr'] .title-meta {
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+/* --------------------------------------------------------------- route HUD */
+
+.route-hud {
+  --hot: 0;
+  position: fixed;
+  left: var(--gutter);
+  bottom: 22px;
+  z-index: 4;
+  width: min(260px, 40vw);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.route-hud p {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+.route-hud em {
+  font-style: normal;
+  color: rgba(255, 255, 255, 0.4);
+}
+.route-hud .hud-speed {
+  margin-left: auto;
+  color: color-mix(in srgb, #fff calc((1 - var(--hot)) * 100%), var(--accent));
+  text-shadow: 0 0 calc(var(--hot) * 14px) var(--accent-glow);
+}
+.hud-line {
+  position: relative;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.16);
+}
+.hud-line > div {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  transform-origin: left;
+  transform: scaleX(0);
+}
+.hud-line i {
+  position: absolute;
+  top: -2px;
+  width: 1px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.5);
+}
+.is-cinematic .route-hud {
+  opacity: 0.55;
+}
+@media (max-width: 767px), (pointer: coarse) {
+  .route-hud {
+    bottom: 12px;
+    width: 46vw;
   }
 }

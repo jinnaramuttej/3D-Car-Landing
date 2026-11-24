@@ -10,7 +10,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000 to scroll it (or press **Play**), or http://localhost:3000/?debug for the leva tuning panel (add `&route` to see the route, `&dpr=1.5` to pin the resolution for measuring).
+Open http://localhost:3000 to scroll it (or press **Play**), or http://localhost:3000/?debug for the leva tuning panel and the HUD (add `&route` to see the route, `&s=510` to start at a route metre, `&dpr=1.5` to pin the resolution for measuring).
 
 ## Stack
 
@@ -24,8 +24,8 @@ Next.js 16 (App Router, Turbopack), React 19, three.js 0.187 through React Three
 scroll (Lenis) -> ScrollTrigger -> one GSAP timeline -> store.progress (zustand, global 0..1: the target)
    (the Play button moves the scroll itself at a cinematic pace)
                                                          |
-  Scene  useFrame(-3)  the journey driver chases the target (speed and acceleration limited,
-                       the car never above 110 m/s) -> chapterState.progress = what is on screen
+  Scene  useFrame(-3)  the playhead chases the target in journey seconds (at most 1.5x real time,
+                       slower in a stop's phases; a mini-map glide up to 4x) -> chapterState.progress
                        stepChapters(): chapter, environment, ignition    stepCityDrive(): the car
                        then fog, env map, sun and sky light; writes store.view for the DOM
   Car    useFrame(-2)  applies it to the model, publishes tyre contacts and the headlight beams
@@ -40,7 +40,16 @@ scroll (Lenis) -> ScrollTrigger -> one GSAP timeline -> store.progress (zustand,
 
 ## The journey
 
-The scroll is a time axis. `src/lib/pacing.ts` keys a speed curve v(t) along it (eased between keys with smoothstep, so there is no jolt at a key) and integrates it into metres along the one route, s(t); global progress is t / 122 s. Scrolling at an even pace and the Play button give the same drive, and everything that moves with the car (wheel spin, the rpm and the sound, the rain streaks, the FOV kick, motion blur, the camera shake) reads the car's actual speed, which is that integral. `src/lib/chapterRuntime.ts` eases every environment value (rain, fog, light colour, exposure, sky, sun, lamps) so nothing jumps, and keeps the **journey driver** on top: the scroll sets a target, and what is on screen drives toward it with a top speed and acceleration, so any wheel flick or mini-map click is a fast but continuous drive, never a jump.
+The scroll is a time axis. `src/lib/pacing.ts` keys a speed curve v(t) along it (eased between keys with smoothstep, so there is no jolt at a key) and integrates it into metres along the one route, s(t); global progress is t / 122 s. Scrolling at an even pace and the Play button give the same drive, and everything that moves with the car (wheel spin, the rpm and the sound, the rain streaks, the FOV kick, motion blur, the camera shake) reads the car's actual speed, which is that integral. `src/lib/chapterRuntime.ts` eases every environment value (rain, fog, light colour, exposure, sky, sun, lamps) so nothing jumps, and steps the **playhead** (`src/lib/playhead.ts`) on top: the scroll sets a target journey time, and what is on screen chases it at no more than 1.5x real time either way, so a flick of the wheel plays the stops through, a little quicker than their own pace, instead of skipping them. See [The playhead](#the-playhead).
+
+## The playhead
+
+- **The scroll.** The track is 250 px of scroll per second of the journey (`PX_PER_SECOND` in `chapters.ts`), so a wheel notch of about 100 px is 0.4 s of it, whatever the window's height.
+- **Chase.** The playhead (journey seconds on screen) chases the scroll's target at up to `CONFIG.playhead.chase` (1.5x) with a limited acceleration, and brakes in time so it never overshoots. A full flick from top to bottom plays the whole 122 s journey in about 86 s.
+- **Dwell.** Every cue that must be read has a window and a minimum (`cueWindows()`): each stop's title (1.5 s), details (4 s) and way out (1.2 s) phases, each title card (1.2 s) and the finale's card (1.5 s). Inside a window the playhead runs no faster than that window's length over its minimum (1.2x to 1.47x), braking ahead of it, so at the fastest every cue is still up for its minimum.
+- **Glide.** The mini-map and the brand move the scroll in one go and start a glide (`glideTo`): up to 4x with the titles and panels hidden (`html[data-glide]`), down to 1x as it reaches the destination's slow zone, where they come back. Any hand on the scroll mid-glide takes over.
+- **Magnet.** When the scroll rests up to 2.5 s short of a stop's title cue, the target eases onto the cue (fully within 1 s of it, fading out by 2.5 s). It only draws from the approach: a scroll resting inside a stop stays where it is. No snapping.
+- **Test.** `npm run test:pacing` (and every build) plays the playhead and the car through Node at 60 fps: a flick to the end, a flick back, a steady wheel scroll, a mini-map glide and a scroll resting before each stop. It fails if any cue is up for less than its minimum, a glide shows anything on the way, the rate goes over its limit, or a wheel leaves the road.
 
 **Cold open** (`src/lib/coldOpen.ts`, `ColdOpen.tsx`): as the loader fades, three seconds of black; the engine wakes in the dark (tail lights, an exhaust pop, a jolt of the lens, the starter if the sound is on), the headlights flicker on as the black lifts, then the Techfest title forms and the controls come in, and the lights ease back to the parked car's. Every load starts at the top with it: the browser's scroll restoration is off (`layout.tsx`, `useScrollTimeline.ts`).
 
@@ -80,7 +89,7 @@ The drive uses 738 m of the 850 m city route and 346 m of the 760 m bridge. Ever
 
 ## Play and cinematic mode
 
-**Play** in the navbar (or a tap of **Space**) drives the whole journey by itself in about 122 s: it runs the journey's time axis at real time, so the car drives exactly the planned speed curve (`src/lib/autoplay.ts`), and every title, billboard and panel comes and goes on its own cue because autoplay simply moves the scroll. An even scroll by hand gives the same pacing. Tap Space again to pause; any scroll by hand (wheel, touch, keys, the scrollbar, the mini-map) takes the wheel back, smoothed by the journey driver. A progress bar runs along the top. **Cinematic mode** (the film-frame button) brings in 2.39:1 bars (the lens widens over the same 0.9 s, so the strip between them keeps the whole shot) and hides the navbar and the mini-map; a small dock with play/pause and Exit wakes up on mouse movement, and Esc leaves it.
+**Play** in the navbar (or a tap of **Space**) drives the whole journey by itself in about 122 s: it runs the journey's time axis at real time, so the car drives exactly the planned speed curve (`src/lib/autoplay.ts`), and every title, billboard and panel comes and goes on its own cue because autoplay simply moves the scroll. An even scroll by hand gives the same pacing. Tap Space again to pause; any scroll by hand (wheel, touch, keys, the scrollbar, the mini-map) takes the wheel back, smoothed by the playhead. A progress bar runs along the top. **Cinematic mode** (the film-frame button) brings in 2.39:1 bars (the lens widens over the same 0.9 s, so the strip between them keeps the whole shot) and hides the navbar and the mini-map; a small dock with play/pause and Exit wakes up on mouse movement, and Esc leaves it.
 
 ## The city
 
@@ -94,12 +103,21 @@ The drive uses 738 m of the 850 m city route and 346 m of the 760 m bridge. Ever
   | Textures | 100 PNG, 6.0 MB | 100 WebP, 1.0 MB | 93 WebP, 0.9 MB |
 
 - **Route.** `scripts/build-route.mjs` rasterises the model's road surfaces, runs A* between a few via points along the middle of each carriageway (it cannot fall off a flyover onto the road below), smooths the path, raycasts the real road height under each point, finds the holes in the model's road (patched in the scene) and its open road ends, and writes `src/lib/cityRoute.data.ts`. `src/lib/cityRoute.ts` adds the bridge, the stops and the world placement (`CITY_ORIGIN`). The bridge deck (`src/lib/bridgePath.ts`, built by `Bridge.tsx`) starts over the end of the flyover on the same curve, so the ramp runs straight onto it with no step and no kink. **To fix the route**, open `/?debug&route`; move the `VIA` points in `scripts/build-route.mjs` and run it again.
-- **Route check.** `npm run check:route` (and automatically before every `npm run build`) walks the route, the ramp and the deck every 25 cm against the real geometry and fails on a gap, a ledge over 8 cm, the route more than 8 cm off the road, or a turn over 3 degrees between samples. Current output: `OK`, with one note (a 6 cm step at s 461-468, the model's painted crossing).
+- **Route check.** `npm run check:route` (and automatically before every `npm run build`) walks the route, the ramp and the deck every 25 cm against the real geometry and fails on a gap, a ledge over 8 cm, the route more than 8 cm off the road, or a turn over 3 degrees between samples. Current output: `OK`, with two notes (a 6 cm step at s 461-468, the model's painted crossing, and 5 cm at 421 m where a road strip meets the road).
+- **The car's corridor.** `scripts/clear-corridor.ts` (part of `npm run city`, after the trim) sweeps the car's box along the whole drive with three-mesh-bvh: 2.6 m wide, 0.2 to 2.8 m above the road, at every pose the scene drives it through (slides included) and on the route line itself; the backdrop's facade cards get a wider berth (9 m, up to 30 m over the road). A small piece in the way goes whole; a big one is cut back. Where it cut a kerb, it lays a road strip under the cut and a row of concrete barriers just outside the corridor (`CorridorBarriers.tsx`). It also lays strips under any crack between road tiles a wheel finds (scanned every 5 cm), measures each strip's height on the road itself, and settles the route line onto the road where it had been measured on a kerb. It writes `src/lib/corridor.data.ts`, and a second run changes nothing. What it takes out: a post on the route line at 187.5 m and another at 417 m, the noses of two medians the route ran over (187.5-198 m and 417-420.5 m, with a planter at 189.5-196 m), a sign at 215.5 m, the backdrop box standing across the flyover's end at the bridge approach (838-844.5 m: the car drove through its wall) and a card hanging over the bridge entrance (860-863.5 m). `npm run check:corridor` (and every build) sweeps it again and fails if anything but road is inside.
 - **Edges.** `EdgeSeal.tsx` closes the map: a fog wall round the land (open to the sea), and concrete barriers with blinking lights and a fog card across every road the model leaves open.
 - **Stops.** `STOPS` in `cityRoute.ts`: four billboards on the clearest flat, road-facing walls `scripts/find-walls.mjs` finds along the route (510, 590, 678 and 746 m: every usable facade is between 500 and 750 m, so these are as far apart as the city allows), and the finale's on the far pylon. Each billboard finds its wall with a raycast (`Billboards.tsx`) and stands on legs if it can't. The drive-past boards (Catalyst ahead of the parked car, Also at Techfest over the bridge, CES 2027 on the first pylon) stay as scenery; their content is the finale's row.
 - **Night and rain** (`src/scene/city/cityMaterials.ts`). Surfaces darken at night; up-facing ones get wet and pool into puddles (bigger in some stretches than others, with damp rims); roads, pavements and the sea take one shared planar reflection (`cityReflection.ts`, desktop only). Windows light up floor by floor, signs glow (one in eight is a failing tube that stutters), the LED trees glow; sodium lamps line the route with a cone of light through the rain under each and three real lights following the camera (`StreetLights.tsx`); steam drifts up from street grates (`Steam.tsx`); distant traffic runs along the roads well away from the car (`Traffic.tsx`); towers fade into a cloud layer and the air at street level is a little hazier than the fog alone (`src/scene/fogLayers.ts`).
 - **Billboards** (`Billboards.tsx`, `billboardArt.ts`). Each board's content is drawn to a canvas (text and shapes only) and turned into LEDs by a shader that blooms; it wakes up row by row as the car approaches and sleeps once the car is well past; the active stop's board spills its colour on the street. Phones: text only, no LED shimmer.
 - **Sea and bridge** (`Sea.tsx`, `Bridge.tsx`). Dark water with a slow swell that bends the reflection; a cable-stayed bridge built from code (deck with solid parapets and rails, two H-pylons, instanced stay cables, blinking aviation lights, lamp rows, piers).
+
+## Ground contact
+
+- **Wheels.** Each frame a ray goes down from each of the four wheels onto the road surfaces only (the model's `road:` and `ground:` materials, the bridge deck and the road strips: never kerbs, barriers or walls), through three-mesh-bvh (`src/lib/ground.ts`). The car's height, pitch and roll are a plane fitted to the four hits; the twist the plane can't follow goes into each wheel's suspension (up to 8 cm).
+- **Body.** The body follows that plane on a 1.5 Hz spring, well damped, with small acceleration effects on top: squat (nose up) up to 1.5 degrees, dive (nose down) up to 2, roll up to 3 in a corner (`src/lib/feel.ts`, the Feel folder). Slides are trimmed so the tail stays over the road (`fitToRoad` in `cityDrive.ts`) and damped in journey time, so they take the same shape at any playback rate.
+- **Reflection and pools.** The street reflection's mirror is the road under the car, tilted with it (`cityReflection.ts`), and the lamp pools lie on the road's own slope, so neither hovers over the street on a climb.
+- **Check.** `npm run check:contact` (and every build) drives the whole journey every 10 cm with the scene's own code and fails if a wheel finds no road or stands more than 5 cm off it past its travel. Current output: `OK`, worst 3.8 cm at 195 m.
+- **The camera's sphere** (`src/lib/collide.ts`): a 0.35 m sphere swept half a second ahead along the camera's path, tested against the city's solid geometry (not the road, not see-through cards such as foliage and cut-out plants). If it would touch, the camera is drawn toward what it looks at on a spring, never closer than 2.6 m to it.
 
 ## The camera
 
@@ -218,7 +236,10 @@ The city is on its own render layer (`CITY_LAYER`), so the car's contact-shadow 
 | `src/content.ts` | All site copy, the accent colour, the credits |
 | `src/lib/pacing.ts` | The speed curve on the journey's time axis, integrated into route metres; the slow zones; `npm run pacing` prints the budget |
 | `src/lib/chapters.ts` | Chapters (spans of the time axis) and their environments |
-| `src/lib/chapterRuntime.ts` | The journey driver; runs the chapters each frame: environment, ignition, stop weights |
+| `src/lib/chapterRuntime.ts` | Steps the playhead and runs the chapters each frame: environment, ignition, stop weights |
+| `src/lib/playhead.ts` | The playhead: the chase, the cues' dwell, the glide, the magnet |
+| `src/lib/ground.ts`, `collide.ts` | The wheels' rays onto the road and the plane fitted to them; the camera's collision sphere and the debug box (three-mesh-bvh) |
+| `src/lib/corridor.data.ts`, `corridorBlocks.ts` | What the corridor sweep cut, the road strips, the barrier lines (generated); where the barrier blocks stand |
 | `src/lib/cityRoute.ts`, `cityRoute.data.ts` | The route through the city and over the bridge, the stops, the drive-past billboards |
 | `src/lib/cityDrive.ts` | Journey to route metres (through pacing.ts), the drift profile, the car on the route |
 | `src/lib/bridgePath.ts` | The deck along the route (shared by the scene and the route check) |
@@ -238,16 +259,17 @@ The city is on its own render layer (`CITY_LAYER`), so the car's contact-shadow 
 | `src/scene/Smoke.tsx`, `postfx/SoftSmokeEffect.ts` | Tyre smoke, the wake and spray, and the pass that draws them |
 | `src/scene/CameraRig.tsx`, `Effects.tsx` | The camera (via the director) and the post chain |
 | `src/scene/Sound.tsx` | Feeds the powertrain and the mixer every frame |
-| `scripts/check-route.ts` | The route continuity check (runs before every build) |
+| `scripts/check-route.ts`, `check-contact.ts`, `check-corridor.ts`, `test-pacing.ts` | The route continuity check, the wheels on the road, the corridor clear, the fast-flick pacing test (all run before every build) |
+| `scripts/clear-corridor.ts`, `scripts/lib/` | Clears the car's corridor through the city model (`npm run city`); the shared city loader and corridor sweep |
 | `scripts/optimize-city.mjs`, `city-textures.mjs`, `trim-city.mjs` | Rebuild the city GLB and trim it to the journey (`npm run city` also rebuilds the route and checks it) |
 | `scripts/optimize-car.mjs` | Builds the car GLB from `assets/gt3r-source.glb` (`npm run car`) |
 | `scripts/build-route.mjs`, `find-walls.mjs` | Finds the route; finds walls for billboards |
 
 ## Testing without scrolling
 
-1. Open `/?debug`. In the **Scrub** folder, drag **progress** (global, 0-1 over the whole page): the scene drives there. The chapter buttons, the moments of the intro (engine catches, the flick, mid-drift, in the smoke) and each zone's billboard set the target; **play 0 to 1** runs the whole page in 60 s. The yellow HUD shows the chapter, the camera rig (and the blend into it), route metre, speed, slip, and the scroll target against what is on screen.
-2. Open any folder (**Drive**, **Director**, **City**, **Camera**, **Smoke**, **Car**, **Rain**, **Post** ...) and tune live; **copy config** copies the values as JSON for `config.ts`.
-3. Console (debug mode): `__gt3r.store`, `__gt3r.carState`, `__gt3r.chapterState`, `__gt3r.director`, `__gt3r.schedule()` (where the director's drive rigs start, with the slide at each), `__gt3r.warmup` (compile time, textures uploaded).
+1. Open `/?debug`. In the **Scrub** folder, drag **progress** (global, 0-1 over the whole page): the scene drives there. The chapter buttons, the moments of the intro (engine catches, the flick, mid-drift, in the smoke) and each zone's billboard set the target; **play 0 to 1** runs the whole page in 60 s. The yellow HUD shows the chapter, the camera rig (and the blend into it), route metre, journey time, the zone and its progress, speed, the wheels' contact and twist, whether anything is inside the car's box, the camera sphere, the scroll target against what is on screen and the playback rate (with GLIDE or magnet when they act). In the scene: the car's box (green, red with the triangles inside it), the four wheel rays and where they hit (magenta for a wheel that found no road). `?s=510` starts at a route metre; `[` and `]` jump 10 m (with Shift, 50 m).
+2. Open any folder (**Playhead**, **Director**, **City**, **Camera**, **Smoke**, **Car**, **Rain**, **Post** ...) and tune live; **copy config** copies the values as JSON for `config.ts`.
+3. Console (debug mode): `__gt3r.goS(510)` (glide to a route metre), `__gt3r.playhead`, `__gt3r.cameraCollision`, `__gt3r.carContact`, `__gt3r.store`, `__gt3r.carState`, `__gt3r.chapterState`, `__gt3r.director`, `__gt3r.schedule()` (where the director's drive rigs start, with the slide at each), `__gt3r.warmup` (compile time, textures uploaded).
 
 Chapter environments, the drive, the route and the stops are code, not leva: edit, save, and reload the page (hot reload keeps stale state for the frame loop).
 

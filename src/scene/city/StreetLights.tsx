@@ -8,6 +8,7 @@ import { getRoute, sampleRoute } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { carState, leftOf } from '@/lib/motion';
+import { nearestK } from '@/lib/nearest';
 import { createGlowTexture } from '@/lib/textures';
 import { useCityLayer } from './City';
 
@@ -67,9 +68,9 @@ type Lamp = { base: Vector3; head: Vector3; yaw: number; road: number };
 /**
  * Sodium street lamps along the city route: instanced posts, arms and heads, a cone of
  * light through the rain and a soft orange pool on the wet road under each, and a handful
- * of real point lights that follow
- * the camera from lamp to lamp (lights cost every material on screen, so the far lamps
- * are emissive and their pools only).
+ * of real point lights that follow the camera from lamp to lamp (lights cost every material
+ * on screen: three here, the two headlights and the billboard spill make six in all; the
+ * other lamps are emissive heads, shafts and pools only).
  */
 export function StreetLights() {
   const mobile = useMemo(() => isMobile(), []);
@@ -152,7 +153,7 @@ export function StreetLights() {
   }, [lamps]);
 
   const _focus = useMemo(() => new Vector3(), []);
-  const order = useMemo(() => [] as { i: number; d: number }[], []);
+  const near = useMemo(() => ({ idx: new Int32Array(count), d: new Float64Array(count) }), [count]);
 
   useFrame((state) => {
     const e = chapterState.env;
@@ -162,19 +163,17 @@ export function StreetLights() {
     shaftMat.uniforms.uTime.value = state.clock.elapsedTime;
     // real lights: the lamps nearest to what the camera is looking at
     _focus.copy(state.camera.position).lerp(carState.position, 0.6);
-    order.length = 0;
-    for (let i = 0; i < lampHeads.length; i++) order.push({ i, d: lampHeads[i].distanceToSquared(_focus) });
-    order.sort((a, b) => a.d - b.d);
+    nearestK(lampHeads, _focus, near.idx, near.d);
     for (let k = 0; k < count; k++) {
       const light = lights.current[k];
       if (!light) continue;
-      const pick = order[k];
-      if (!pick) {
+      const i = near.idx[k];
+      if (i < 0) {
         light.intensity = 0;
         continue;
       }
-      light.position.copy(lampHeads[pick.i]).y -= 0.4;
-      const d = Math.sqrt(pick.d);
+      light.position.copy(lampHeads[i]).y -= 0.4;
+      const d = Math.sqrt(near.d[k]);
       light.intensity = CONFIG.city.lampLight * e.lamps * (1 - MathUtils.smoothstep(d, 45, 70));
     }
   }, -1);

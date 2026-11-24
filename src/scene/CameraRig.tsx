@@ -104,7 +104,14 @@ function publishLayout(cam: PerspectiveCamera, w: number, h: number) {
   forwardOf(carState.heading, _f);
   leftOf(carState.heading, _l);
   let k = 0;
-  for (const z of [-2.35, 2.35]) for (const x of [-1, 1]) for (const y of [0.05, 1.3]) carBox[k++].copy(carState.position).addScaledVector(_f, z).addScaledVector(_l, x).setY(carState.position.y + y);
+  for (let iz = 0; iz < 2; iz++)
+    for (let ix = 0; ix < 2; ix++)
+      for (let iy = 0; iy < 2; iy++)
+        carBox[k++]
+          .copy(carState.position)
+          .addScaledVector(_f, iz ? 2.35 : -2.35)
+          .addScaledVector(_l, ix ? 1 : -1)
+          .setY(carState.position.y + (iy ? 1.3 : 0.05));
   layoutState.car = project(cam, carBox, w, h, carRect);
   // the billboard on show: the stop's, or one the car is driving up to
   const ch = CHAPTERS[chapterState.chapter];
@@ -121,7 +128,12 @@ function publishLayout(cam: PerspectiveCamera, w: number, h: number) {
     _u.set(0, 1, 0);
     const across = _l.crossVectors(_u, _n).normalize();
     k = 0;
-    for (const sx of [-0.5, 0.5]) for (const sy of [-0.5, 0.5]) boardBox[k++].copy(a.centre).addScaledVector(across, sx * a.width).setY(a.centre.y + sy * a.height);
+    for (let ix = 0; ix < 2; ix++)
+      for (let iy = 0; iy < 2; iy++)
+        boardBox[k++]
+          .copy(a.centre)
+          .addScaledVector(across, (ix - 0.5) * a.width)
+          .setY(a.centre.y + (iy - 0.5) * a.height);
     layoutState.board = project(cam, boardBox, w, h, boardRect);
   }
   layoutState.w = w;

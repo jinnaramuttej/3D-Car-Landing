@@ -25,6 +25,7 @@ import { lampHeads } from './city/StreetLights';
 import { smokeLayer } from './postfx/SoftSmokeEffect';
 import { createSmokeTexture } from '@/lib/textures';
 import { onWarmupEnd } from '@/lib/warmup';
+import { nearestK } from '@/lib/nearest';
 import { isMobile } from '@/lib/device';
 
 const LAMPS = 4;
@@ -296,7 +297,8 @@ export function Smoke() {
       }),
     [pool, particles],
   );
-  const lampOrder = useMemo(() => [] as { p: Vector3; d: number }[], []);
+  const near = useMemo(() => ({ idx: new Int32Array(LAMPS), d: new Float64Array(LAMPS) }), []);
+  const attrList = useMemo(() => Object.values(attrs), [attrs]);
 
   useFrame((state, rawDt) => {
     const dt = Math.min(rawDt, 1 / 30);
@@ -455,7 +457,7 @@ export function Smoke() {
       sh[j] = pool.shade[i];
       gr[j] = pool.base[i];
     }
-    for (const a of Object.values(attrs)) {
+    for (const a of attrList) {
       a.clearUpdateRanges();
       a.addUpdateRange(0, Math.max(1, alive) * a.itemSize);
       a.needsUpdate = true;
@@ -477,11 +479,9 @@ export function Smoke() {
     u.uFar.value = cam.far;
     u.uSoft.value = cfg.soft;
     // the nearest street lamps
-    lampOrder.length = 0;
-    for (const h of lampHeads) lampOrder.push({ p: h, d: h.distanceToSquared(s.position) });
-    lampOrder.sort((a, b) => a.d - b.d);
+    nearestK(lampHeads, s.position, near.idx, near.d);
     const lp = u.uLampPos.value as Vector3[];
-    for (let k = 0; k < LAMPS; k++) lp[k].copy(lampOrder[k]?.p ?? _far);
+    for (let k = 0; k < LAMPS; k++) lp[k].copy(near.idx[k] >= 0 ? lampHeads[near.idx[k]] : _far);
     u.uLampLit.value = cfg.lampLit * chapterState.env.lamps;
     (u.uHeadPos0.value as Vector3).copy(s.headPos[0]);
     (u.uHeadPos1.value as Vector3).copy(s.headPos[1]);

@@ -102,7 +102,7 @@ export function Traffic() {
       // keep to the right: oncoming on the left of the route's middle, the rest on the right
       const lane = c.dir === -1 ? Math.min(room[0] - 1.2, s > r.bridgeStart ? 7 : 2.8) : -Math.min(room[1] - 1.2, s > r.bridgeStart ? 3 : 2.8);
       _p.addScaledVector(_l, lane).setY(_p.y + 0.68);
-      for (const k of [0, 1]) {
+      for (let k = 0; k < 2; k++) {
         const off = (k ? 0.72 : -0.72) * 1;
         p[(i * 2 + k) * 3] = _p.x + _l.x * off;
         p[(i * 2 + k) * 3 + 1] = _p.y;

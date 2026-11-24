@@ -50,6 +50,7 @@ const target = new Vector3();
 const normal = new Vector3(0, 1, 0);
 const onPlane = new Vector3();
 const rot = new Matrix4();
+const view = new Vector3();
 
 let rt: WebGLRenderTarget | null = null;
 
@@ -71,7 +72,7 @@ export function renderReflection(gl: WebGLRenderer, scene: Scene, camera: Perspe
   onPlane.set(camPos.x, planeY, camPos.z);
 
   // mirrored position and target
-  const view = new Vector3().subVectors(onPlane, camPos).reflect(normal).negate().add(onPlane);
+  view.subVectors(onPlane, camPos).reflect(normal).negate().add(onPlane);
   rot.extractRotation(camera.matrixWorld);
   lookAt.set(0, 0, -1).applyMatrix4(rot).add(camPos);
   target.subVectors(onPlane, lookAt).reflect(normal).negate().add(onPlane);

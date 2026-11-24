@@ -2,8 +2,8 @@
 
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { AdditiveBlending, Color, type Group, type InstancedMesh, MathUtils, type MeshStandardMaterial, Object3D, type PointLight, Vector3 } from 'three';
-import { chapterState } from '@/lib/chapterRuntime';
+import { AdditiveBlending, Color, DoubleSide, type Group, type InstancedMesh, MathUtils, type MeshStandardMaterial, Object3D, type PointLight, ShaderMaterial, Vector3 } from 'three';
+import { chapterState, rainLevel } from '@/lib/chapterRuntime';
 import { getRoute, sampleRoute } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
@@ -20,14 +20,54 @@ export const registerLamps = (heads: Vector3[]) => {
   for (const h of heads) lampHeads.push(h);
 };
 
+/** A soft cone of lamplight through the rain under each head (volumetric, faked). */
+const shaftVert = /* glsl */ `
+varying float vH;
+varying vec3 vW;
+varying vec3 vN;
+void main() {
+  mat4 m = modelMatrix * instanceMatrix;
+  vec4 wp = m * vec4(position, 1.0);
+  // 1 at the lamp, 0 at the road (from the world height: the cone's own uvs gave NaNs on
+  // some GPUs through pow())
+  float top = (m * vec4(0.0, 4.05, 0.0, 1.0)).y;
+  vH = clamp(1.0 - (top - wp.y) / 8.1, 0.0, 1.0);
+  vW = wp.xyz;
+  vN = normalize(mat3(m) * normal);
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}
+`;
+const shaftFrag = /* glsl */ `
+uniform vec3 uColor;
+uniform float uOpacity;
+uniform float uTime;
+varying float vH;
+varying vec3 vW;
+varying vec3 vN;
+void main() {
+  vec3 V = normalize(cameraPosition - vW);
+  // soft edges (a cone seen side-on has none), bright under the lamp, gone by the road
+  float edge = abs(dot(normalize(vN), V));
+  edge *= sqrt(edge);
+  float h = clamp(vH, 0.0, 1.0);
+  float fall = h * h * (0.4 + 0.6 * h);
+  // rain drifting through the beam
+  float grain = 0.78 + 0.22 * sin(vW.y * 2.6 - uTime * 7.0 + vW.x * 1.3 + vW.z);
+  float near = smoothstep(1.5, 6.0, length(cameraPosition - vW));
+  float a = clamp(uOpacity * edge * fall * grain * near, 0.0, 1.0);
+  gl_FragColor = vec4(uColor * a, a);
+}
+`;
+
 const SPACING = 26;
 const MAX = 80;
 
 type Lamp = { base: Vector3; head: Vector3; yaw: number; road: number };
 
 /**
- * Sodium street lamps along the city route: instanced posts, arms and heads, a soft
- * orange pool on the wet road under each, and a handful of real point lights that follow
+ * Sodium street lamps along the city route: instanced posts, arms and heads, a cone of
+ * light through the rain and a soft orange pool on the wet road under each, and a handful
+ * of real point lights that follow
  * the camera from lamp to lamp (lights cost every material on screen, so the far lamps
  * are emissive and their pools only).
  */
@@ -40,6 +80,21 @@ export function StreetLights() {
   const arms = useRef<InstancedMesh>(null!);
   const heads = useRef<InstancedMesh>(null!);
   const pools = useRef<InstancedMesh>(null!);
+  const shafts = useRef<InstancedMesh>(null!);
+  const shaftMat = useMemo(
+    () =>
+      new ShaderMaterial({
+        uniforms: { uColor: { value: new Color(CONFIG.city.sodium) }, uOpacity: { value: 0 }, uTime: { value: 0 } },
+        vertexShader: shaftVert,
+        fragmentShader: shaftFrag,
+        transparent: true,
+        depthWrite: false,
+        blending: AdditiveBlending,
+        side: DoubleSide,
+        fog: false,
+      }),
+    [],
+  );
   const headMat = useRef<MeshStandardMaterial>(null!);
   const lights = useRef<(PointLight | null)[]>([]);
   const glow = useMemo(() => createGlowTexture(), []);
@@ -82,13 +137,18 @@ export function StreetLights() {
       o.position.copy(lamp.head).setY(lamp.road + 0.04);
       o.updateMatrix();
       pools.current.setMatrixAt(i, o.matrix);
+      o.rotation.set(0, 0, 0);
+      o.position.copy(lamp.head).setY(lamp.head.y - 4.05);
+      o.updateMatrix();
+      shafts.current.setMatrixAt(i, o.matrix);
     });
-    for (const im of [poles, arms, heads, pools]) {
+    for (const im of [poles, arms, heads, pools, shafts]) {
       im.current.count = lamps.length;
       im.current.instanceMatrix.needsUpdate = true;
       im.current.computeBoundingSphere();
     }
     pools.current.layers.set(1);
+    shafts.current.layers.set(1);
   }, [lamps]);
 
   const _focus = useMemo(() => new Vector3(), []);
@@ -97,6 +157,9 @@ export function StreetLights() {
   useFrame((state) => {
     const e = chapterState.env;
     headMat.current.emissiveIntensity = CONFIG.city.sodiumEmissive * e.lamps;
+    // the shafts show in the rain and the haze, and go with the lamps at dawn
+    shaftMat.uniforms.uOpacity.value = CONFIG.city.lampShafts * e.lamps * (0.45 + 0.55 * Math.min(1, rainLevel()));
+    shaftMat.uniforms.uTime.value = state.clock.elapsedTime;
     // real lights: the lamps nearest to what the camera is looking at
     _focus.copy(state.camera.position).lerp(carState.position, 0.6);
     order.length = 0;
@@ -129,6 +192,9 @@ export function StreetLights() {
       <instancedMesh ref={heads} args={[undefined, undefined, MAX]}>
         <boxGeometry args={[0.5, 0.16, 1.05]} />
         <meshStandardMaterial ref={headMat} color="#111" emissive={sodium} />
+      </instancedMesh>
+      <instancedMesh ref={shafts} args={[undefined, undefined, MAX]} material={shaftMat} renderOrder={3}>
+        <cylinderGeometry args={[0.32, 3.3, 8.1, 20, 1, true]} />
       </instancedMesh>
       <instancedMesh ref={pools} args={[undefined, undefined, MAX]} renderOrder={1}>
         <planeGeometry args={[17, 17]} />

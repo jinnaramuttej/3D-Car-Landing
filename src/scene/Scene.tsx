@@ -19,7 +19,9 @@ import { City } from './city/City';
 import { EdgeSeal } from './city/EdgeSeal';
 import { RouteDebug } from './city/RouteDebug';
 import { Sea } from './city/Sea';
+import { Steam } from './city/Steam';
 import { StreetLights } from './city/StreetLights';
+import { Traffic } from './city/Traffic';
 import './fogLayers';
 import { createDayEnvironment } from './dayEnvironment';
 import { Effects } from './Effects';
@@ -159,6 +161,8 @@ export function Scene() {
         <Sea />
         <Bridge />
         <EdgeSeal />
+        <Traffic />
+        <Steam />
         <RouteDebug />
       </Suspense>
       <CameraRig />

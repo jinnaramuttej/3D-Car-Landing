@@ -271,7 +271,9 @@ export function Billboards() {
       const u = b.mat.uniforms;
       u.uTime.value = t;
       const ahead = boardS(b.id) - carState.s;
-      const want = ahead < 120 && ahead > -70 ? 1 : 0;
+      // (a board high on a pylon is seen from much further down the bridge)
+      const reach = b.mount === 'pylon' ? 340 : 120;
+      const want = ahead < reach && ahead > -70 ? 1 : 0;
       b.wake += (want - b.wake) * (1 - Math.exp(-dt / (want > b.wake ? 0.9 : 2)));
       u.uWake.value = mobile ? want : b.wake;
       const dk = b.id === 'dkms' ? 0.8 + 0.25 * stopFx.heartbeat : 1;

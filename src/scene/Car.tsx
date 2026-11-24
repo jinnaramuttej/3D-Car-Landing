@@ -4,11 +4,18 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { ContactShadows, useGLTF, useTexture } from '@react-three/drei';
 import {
+  BackSide,
   Box3,
+  BufferAttribute,
+  BufferGeometry,
   Color,
+  DoubleSide,
   Group,
   MathUtils,
-  type Mesh,
+  Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial as StandardMaterial,
+  PlaneGeometry,
   type MeshPhysicalMaterial,
   type MeshStandardMaterial,
   Object3D,
@@ -85,8 +92,71 @@ function logNodes(root: Object3D) {
   console.groupEnd();
 }
 
+const _toCam = new Vector3();
+
 function materialsOf(mesh: Mesh) {
   return (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as MeshStandardMaterial[];
+}
+
+/** Float copy of a mesh's positions in the rig's space (the GLB's are quantized). */
+function bakedPositions(m: Mesh) {
+  const src = m.geometry.getAttribute('position');
+  const v = new Vector3();
+  const out = new Float32Array(src.count * 3);
+  for (let i = 0; i < src.count; i++) {
+    v.fromBufferAttribute(src, i).applyMatrix4(m.matrixWorld);
+    out.set([v.x, v.y, v.z], i * 3);
+  }
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(out, 3));
+  if (m.geometry.index) g.setIndex(m.geometry.index.clone());
+  return g;
+}
+
+/**
+ * The model ships without its interior (scripts/optimize-car.mjs). In its place: a dark
+ * shell just inside the windows (their own shape, shrunk a little toward the middle of the
+ * cabin, back faces only), so through the tinted glass you see a dark cabin rather than
+ * the street; and a flat undertray, so the low wheel shot never looks up into an empty body.
+ */
+function addCabinAndUndertray(root: Object3D, groundOffset: number) {
+  root.updateMatrixWorld(true);
+  const windows: Mesh[] = [];
+  const body = new Box3();
+  root.traverse((o) => {
+    const m = o as Mesh;
+    if (!m.isMesh) return;
+    const name = materialsOf(m)[0]?.name ?? '';
+    if (/^EXT_Windows/.test(name)) windows.push(m);
+    if (/Carpaint/.test(name)) body.expandByObject(m);
+  });
+  if (windows.length) {
+    const shell = windows.map(bakedPositions);
+    const cabin = new Box3();
+    for (const g of shell) {
+      g.computeBoundingBox();
+      cabin.union(g.boundingBox!);
+    }
+    const c = cabin.getCenter(new Vector3());
+    const dark = new MeshBasicMaterial({ color: '#060608', side: BackSide });
+    for (const g of shell) {
+      g.translate(-c.x, -c.y, -c.z);
+      g.scale(0.93, 0.9, 0.95);
+      g.translate(c.x, c.y, c.z);
+      const m = new Mesh(g, dark);
+      m.name = 'CABIN_SHELL';
+      root.add(m);
+    }
+  }
+  if (!body.isEmpty()) {
+    const size = body.getSize(new Vector3());
+    const mid = body.getCenter(new Vector3());
+    const tray = new Mesh(new PlaneGeometry(size.x - 0.22, size.z - 0.5), new StandardMaterial({ color: '#0b0b0d', roughness: 0.95, side: DoubleSide }));
+    tray.name = 'UNDERTRAY';
+    tray.rotation.x = Math.PI / 2;
+    tray.position.set(mid.x, groundOffset + 0.1, mid.z);
+    root.add(tray);
+  }
 }
 
 /**
@@ -230,6 +300,7 @@ function buildRig(source: Object3D, livery: Texture, mobile: boolean): Rig {
   root.traverse(visit);
   wheels.traverse(visit);
   if (!paint) console.error('[gt3r] EXT_Carpaint_Inst not found; the livery is not applied.');
+  addCabinAndUndertray(root, groundOffset);
 
   const rig: Rig = {
     body: root,
@@ -385,7 +456,13 @@ export function Car() {
     }
     for (const m of rig.rims) m.color.set(c.rimColor);
     for (const m of rig.calipers) m.color.set(c.caliperColor);
-    beamL.current.intensity = beamR.current.intensity = c.headBeam * hl;
+    // a camera standing in the beams, close: ease them off (as a lens stops down), or the
+    // wet road between camera and car turns into a sheet of glare
+    _toCam.subVectors(state.camera.position, s.position).setY(0);
+    const camDist = _toCam.length();
+    const ahead = camDist > 1e-3 ? _toCam.dot(s.forward) / camDist : 0;
+    const inBeam = MathUtils.smoothstep(ahead, 0.35, 0.85) * (1 - MathUtils.smoothstep(camDist, 12, 32));
+    beamL.current.intensity = beamR.current.intensity = c.headBeam * hl * (1 - 0.8 * inBeam);
     beamL.current.angle = beamR.current.angle = c.headBeamAngle;
     tailGlow.current.intensity = c.tailGlow * brake;
 

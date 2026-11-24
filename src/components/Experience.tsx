@@ -26,18 +26,23 @@ import { Stops } from './Stops';
 export default function Experience() {
   const trackRef = useRef<HTMLDivElement>(null);
   const [debug, setDebug] = useState(false);
+  // ?dpr=1.5 pins the canvas resolution (to measure at a known size)
+  const [dpr, setDprProp] = useState<number | [number, number]>([1, 1.5]);
 
   useScrollTimeline(trackRef);
 
   useEffect(() => {
-    setDebug(new URLSearchParams(window.location.search).has('debug'));
+    const q = new URLSearchParams(window.location.search);
+    setDebug(q.has('debug'));
+    const pinned = Number(q.get('dpr'));
+    if (pinned > 0) setDprProp(pinned);
   }, []);
 
   return (
     <>
       <div className="stage">
         <Canvas
-          dpr={[1, 1.5]}
+          dpr={dpr}
           gl={{ antialias: false, powerPreference: 'high-performance', stencil: false }}
           camera={{ fov: 34, near: 0.1, far: 2200, position: [6, 1, 6] }}
         >

@@ -69,7 +69,12 @@ export function useScrollTimeline(trackRef: RefObject<HTMLElement | null>) {
 
     gsap.registerPlugin(ScrollTrigger);
 
+    // every visit starts at the top, with the cold open (layout.tsx turns the browser's scroll
+    // restoration off before it can act; this catches anything that moved the page since)
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    window.scrollTo(0, 0);
     const lenis = new Lenis({ lerp: CONFIG.scroll.lenisLerp, smoothWheel: true });
+    lenis.scrollTo(0, { immediate: true, force: true });
     lenis.on('scroll', ScrollTrigger.update);
     const raf = (time: number, deltaMs: number) => {
       lenis.raf(time * 1000);

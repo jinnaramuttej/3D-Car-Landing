@@ -9,8 +9,7 @@ import { useStore } from '@/lib/store';
  * The cold open's black (src/lib/coldOpen.ts has the timeline): under the loader as it
  * fades, it holds the screen dark while the engine wakes, then lifts with the headlights,
  * and the chapter card and the controls come in after. It follows the scene's own clock,
- * so the black and the lights stay in step. Only from the top of the page: a reload
- * further down goes straight in.
+ * so the black and the lights stay in step. Every load starts at the top, so it always plays.
  */
 export function ColdOpen() {
   const load = useStore((s) => s.load);
@@ -19,10 +18,7 @@ export function ColdOpen() {
 
   useEffect(() => {
     if (load !== 'ready') return;
-    if (useStore.getState().progress > 0.02) {
-      setGone(true);
-      return;
-    }
+    // (every load starts at the top: useScrollTimeline and layout.tsx see to it)
     startColdOpen();
     const root = document.documentElement;
     root.classList.add('is-cold');

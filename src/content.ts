@@ -126,7 +126,7 @@ export const chapters: Record<ChapterId, { line: string }> = {
 };
 
 /** First screen: what you can do with the scene. */
-export const hints = ['Scroll to drive', 'Hold to rev', 'Move the cursor to wipe the lens', 'Click the car', 'H for headlights'];
+export const hints = ['Scroll to drive', 'Hold to rev', 'Move the cursor to wipe the lens', 'Click the car', 'H for headlights', 'Hold C for the camera'];
 
 export const UI = {
   cta: 'Explore Techfest 2026',

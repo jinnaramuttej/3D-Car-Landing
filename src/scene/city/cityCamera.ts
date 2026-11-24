@@ -1,89 +1,43 @@
 import { MathUtils, type PerspectiveCamera, Vector3 } from 'three';
 import { easing } from 'maath';
-import { chapterById, stageSwitchAt } from '@/lib/chapters';
 import { chapterState } from '@/lib/chapterRuntime';
-import { HOLD, nearestStop } from '@/lib/cityDrive';
-import { getRoute, sampleRoute, STOPS } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
-import { carState, forwardOf, leftOf } from '@/lib/motion';
-import { stopAnchor } from '@/lib/stops';
+import { carState } from '@/lib/motion';
 
-const { clamp, degToRad, lerp, smoothstep } = MathUtils;
+const { clamp, degToRad } = MathUtils;
 
 export type CityRig = { init: boolean; pos: Vector3; look: Vector3; fov: number };
 export const cityRig = (): CityRig => ({ init: false, pos: new Vector3(), look: new Vector3(), fov: 34 });
 
-export type CityShot = { pos: Vector3; look: Vector3; fov: number; focus: Vector3; dof: number; focusRange: number; id: string };
+/** One frame of the city camera, as the director (director.ts) asks for it. */
+export type CityShot = {
+  pos: Vector3;
+  look: Vector3;
+  fov: number;
+  focus: Vector3;
+  dof: number;
+  focusRange: number;
+  id: string;
+  /** Seconds of damping toward this pose (0 = bolted to the car). */
+  damp: number;
+  /** A hard cut this frame: the rig snaps. */
+  cut: boolean;
+  /** Metres of shake to add after the look. */
+  shake: number;
+};
 
-const _f = new Vector3();
-const _l = new Vector3();
-const _a = new Vector3();
-const _b = new Vector3();
-
-/** Car path frame (x left, y up, z forward) to world. */
-function carLocal(x: number, y: number, z: number, out: Vector3) {
-  forwardOf(carState.pathHeading, _f);
-  leftOf(carState.pathHeading, _l);
-  return out.copy(carState.position).addScaledVector(_l, x).addScaledVector(_f, z).setY(carState.position.y + y);
-}
-
-/**
- * The basic city camera: a chase camera on the drive, a framed shot of the billboard and
- * the car at each stop, and the descent out of the cloud at the start. Writes the shot
- * (world pose, focus, depth of field) into `out`.
- */
-export function cityShot(out: CityShot) {
-  const s = carState.s;
-  const stop = nearestStop(s);
-  const spec = STOPS[stop];
-  // how much of the stop framing: up through the hold, down as the car leaves
-  const hold = 1 - smoothstep(Math.abs(s - spec.s), 14, 46);
-
-  // chase
-  carLocal(0, 2.3, -8.6, out.pos);
-  carLocal(0, 1.1, 7, out.look);
-  out.fov = 34;
-  out.focus.copy(carState.position).setY(carState.position.y + 0.7);
-  out.dof = 0.6;
-  out.focusRange = 5;
-  out.id = 'chase';
-
-  if (hold > 0.001) {
-    const a = stopAnchor(stop);
-    const r = getRoute();
-    // a rear three-quarter from back down the road, on the far half of it, low: the car
-    // rolls away from the lens toward the billboard (never into its own headlights)
-    const ahead = spec.s - 30;
-    const h = sampleRoute(ahead, _a);
-    leftOf(h, _l);
-    // (on the far half of the road itself: beyond it there are barriers and walls)
-    const opposite = r.room(ahead)[spec.side === 1 ? 1 : 0];
-    _a.addScaledVector(_l, -spec.side * Math.min(opposite * 0.55, 3.2)).setY(_a.y + 1.45);
-    _b.copy(a.centre).lerp(_f.copy(carState.position).setY(carState.position.y + 0.9), 0.5);
-    out.pos.lerp(_a, hold);
-    out.look.lerp(_b, hold);
-    out.fov = lerp(out.fov, 34, hold);
-    out.focus.lerp(a.centre, hold);
-    out.dof = lerp(out.dof, 2.2, hold);
-    out.focusRange = lerp(out.focusRange, 8, hold);
-    if (hold > 0.5) out.id = `stop:${stop}`;
-  }
-
-  // out of the cloud: start high above and come down onto the chase
-  const arrival = chapterById('arrival');
-  const p = chapterState.progress;
-  const down = 1 - smoothstep(p, stageSwitchAt(), arrival.start + HOLD.arrive * (arrival.end - arrival.start));
-  if (down > 0) {
-    const k = down * down;
-    out.pos.y += 46 * k;
-    carLocal(0, 0, -26 * k, _a);
-    out.pos.x += (_a.x - carState.position.x) * 1;
-    out.pos.z += (_a.z - carState.position.z) * 1;
-    out.look.y += 8 * k;
-    out.id = 'descent';
-  }
-  return out;
-}
+export const cityShotState = (): CityShot => ({
+  pos: new Vector3(),
+  look: new Vector3(),
+  fov: 34,
+  focus: new Vector3(),
+  dof: 0,
+  focusRange: 4,
+  id: '',
+  damp: 0.2,
+  cut: false,
+  shake: 0,
+});
 
 /**
  * Long-lens rule (as on the waterfront): the FOV stays inside [camera.fovMin, fovMax]; a
@@ -99,19 +53,20 @@ export function fitLens(pos: Vector3, look: Vector3, fov: number) {
   return clamped;
 }
 
-/** Damps the rig toward the shot (snaps on the first frame and on a jump). */
-export function applyCityShot(cam: PerspectiveCamera, rig: CityRig, shot: CityShot, dt: number) {
+/** Puts the camera on the shot: snaps on a cut (or a jump), otherwise damps by the shot's own amount. */
+export function applyCityShot(cam: PerspectiveCamera, rig: CityRig, shot: CityShot, dt: number, t: number) {
   const fov = fitLens(shot.pos, shot.look, shot.fov * CONFIG.camera.fovScale);
-  if (!rig.init || chapterState.jumped || chapterState.stageChanged) {
+  const snap = !rig.init || shot.cut || chapterState.jumped || chapterState.stageChanged;
+  if (snap || shot.damp <= 0) {
     rig.pos.copy(shot.pos);
     rig.look.copy(shot.look);
-    rig.fov = fov;
+    if (snap) rig.fov = fov;
     rig.init = true;
   } else {
-    easing.damp3(rig.pos, shot.pos, 0.22, dt);
-    easing.damp3(rig.look, shot.look, 0.16, dt);
-    easing.damp(rig, 'fov', fov, 0.3, dt);
+    easing.damp3(rig.pos, shot.pos, shot.damp, dt);
+    easing.damp3(rig.look, shot.look, shot.damp * 0.7, dt);
   }
+  easing.damp(rig, 'fov', fov, 0.25, dt);
   cam.position.copy(rig.pos);
   if (cam.aspect < 1) {
     const k = Math.min(2.2, Math.pow(1 / cam.aspect, CONFIG.camera.portraitFit));
@@ -119,6 +74,13 @@ export function applyCityShot(cam: PerspectiveCamera, rig: CityRig, shot: CitySh
   }
   cam.position.y = Math.max(cam.position.y, carState.position.y + 0.15);
   cam.lookAt(rig.look);
+  // acceleration and slides shake the lens (a few layered sines, no randomness)
+  if (shot.shake > 1e-4) {
+    const a = shot.shake;
+    cam.translateX((Math.sin(t * 27.1) * 0.6 + Math.sin(t * 43.7 + 1.1) * 0.4) * a);
+    cam.translateY((Math.sin(t * 31.3 + 2.2) * 0.6 + Math.sin(t * 57.9) * 0.4) * a * 0.7);
+    cam.rotateZ(Math.sin(t * 19.3) * a * 0.12);
+  }
   if (Math.abs(cam.fov - rig.fov) > 1e-3) {
     cam.fov = rig.fov;
     cam.updateProjectionMatrix();

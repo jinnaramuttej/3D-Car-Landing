@@ -60,7 +60,7 @@ export const STOPS = {
   expo: { s: 562, side: -1, width: 16, height: 9, lift: 6.5 },
   dkms: { s: 638, side: -1, width: 14, height: 7.9, lift: 6.5 },
   twmun: { s: 746, side: -1, width: 16, height: 9, lift: 6.5 },
-  finale: { s: ROUTE_LENGTH + 400, side: 1, width: 18, height: 10, lift: 0 },
+  finale: { s: ROUTE_LENGTH + 340, side: 1, width: 18, height: 10, lift: 0 },
 } satisfies Record<string, StopSpec>;
 
 export type StopKey = keyof typeof STOPS;

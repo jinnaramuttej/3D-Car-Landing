@@ -12,6 +12,9 @@ import { chapterState } from '@/lib/chapterRuntime';
 import { interaction } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
 import { cameraState } from '@/scene/CameraRig';
+import { reflectionUniforms } from '@/scene/city/cityReflection';
+import { director, getSchedule } from '@/scene/city/director';
+import { driftAt } from '@/lib/cityDrive';
 
 type LevaSchema = Exclude<Parameters<typeof useControls>[0], string | ((...args: never[]) => unknown)>;
 type Range = readonly [number, number, number?];
@@ -139,6 +142,10 @@ export function DebugPanel() {
       chapterState,
       interaction,
       advance,
+      director,
+      reflection: reflectionUniforms,
+      // the camera director's cuts with the slide at each (none should land above ~0.3)
+      schedule: () => getSchedule().map((c) => ({ ...c, drift: +driftAt(c.s).toFixed(2) })),
     };
 
     // HUD: which drift shot or section is on screen right now

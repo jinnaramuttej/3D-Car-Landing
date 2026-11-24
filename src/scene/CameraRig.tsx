@@ -20,7 +20,8 @@ import { interaction } from '@/lib/interaction';
 import { carState, forwardOf, getAnchorFrame, leftOf, shakeAmount, type Frame } from '@/lib/motion';
 import { pointer, trackPointer } from '@/lib/pointer';
 import { type Ease, SHOTS, type Shot, shotIndexAt } from '@/lib/script';
-import { applyCityShot, type CityShot, cityRig, cityShot } from './city/cityCamera';
+import { applyCityShot, cityRig, cityShotState } from './city/cityCamera';
+import { directShot } from './city/director';
 
 const { clamp, degToRad, lerp, smootherstep } = MathUtils;
 
@@ -309,13 +310,7 @@ export function CameraRig() {
     [],
   );
 
-  const city = useMemo(
-    () => ({
-      rig: cityRig(),
-      shot: { pos: new Vector3(), look: new Vector3(), fov: 34, focus: new Vector3(), dof: 0, focusRange: 4, id: '' } as CityShot,
-    }),
-    [],
-  );
+  const city = useMemo(() => ({ rig: cityRig(), shot: cityShotState() }), []);
 
   useEffect(() => trackPointer(), []);
 
@@ -327,8 +322,8 @@ export function CameraRig() {
 
     if (chapterState.stage === 'city') {
       rig.init = false;
-      const shot = cityShot(city.shot);
-      applyCityShot(cam, city.rig, shot, dt);
+      const shot = directShot(city.shot);
+      applyCityShot(cam, city.rig, shot, dt, t);
       cameraState.mode = 'city';
       cameraState.shot = -1;
       cameraState.shotId = shot.id;
@@ -337,7 +332,7 @@ export function CameraRig() {
       cameraState.focusRange = shot.focusRange;
       cameraState.nearFade[0] = DEFAULT_NEAR_FADE[0];
       cameraState.nearFade[1] = DEFAULT_NEAR_FADE[1];
-      cameraState.shake = applyExtras(cam, pose.parallax, dt, t, 0.6, mobile);
+      cameraState.shake = shot.shake + applyExtras(cam, pose.parallax, dt, t, 0.6, mobile);
       return;
     }
     city.rig.init = false;

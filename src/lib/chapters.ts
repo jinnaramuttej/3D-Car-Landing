@@ -269,7 +269,7 @@ const chapterList: Omit<Chapter, 'start' | 'end'>[] = [
   { id: 'dkms', numeral: 'X', title: 'DKMS', pages: 2.4, env: DKMS_AIR, blend: 0.3, stop: 'dkms' },
   { id: 'twmun', numeral: 'XI', title: 'TWMUN', pages: 2.2, env: TWMUN_AIR, blend: 0.3, stop: 'twmun' },
   // dawn comes up over the sea while the car crosses; the CTA lands at FINALE.ctaAt
-  { id: 'finale', numeral: 'Fin', title: 'Finale', pages: 3, env: CITY, envEnd: DAWN, envSpan: [0.2, 0.7], blend: 0, stop: 'finale' },
+  { id: 'finale', numeral: 'Fin', title: 'Finale', pages: 3.4, env: CITY, envEnd: DAWN, envSpan: [0.2, 0.7], blend: 0, stop: 'finale' },
 ];
 
 const beatList: Omit<Beat, 'start' | 'end'>[] = [

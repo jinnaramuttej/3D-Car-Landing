@@ -9,6 +9,7 @@ import { isMobile } from '@/lib/device';
 import { engine } from '@/lib/engineAudio';
 import { getWipeTexture, interaction, isUiTarget, WIPE_H, WIPE_W } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
+import { cycleShot } from './city/director';
 import { LIVERIES } from './livery';
 
 /** Flips the headlights against whatever they show right now (H key and the navbar button). */
@@ -44,6 +45,7 @@ export function Interaction() {
       decay: 0,
       raycaster: new Raycaster(),
       ndc: new Vector2(),
+      cycledAt: 0,
     }),
     [],
   );
@@ -108,6 +110,13 @@ export function Interaction() {
         state.space = e.type === 'keydown';
       } else if (e.type === 'keydown' && !e.repeat && e.code === 'KeyH') {
         toggleHeadlights();
+      } else if (e.type === 'keydown' && e.code === 'KeyC') {
+        // tap C for the next shot; hold it and the shots keep stepping
+        const now = performance.now();
+        if (!e.repeat || now - state.cycledAt > 900) {
+          state.cycledAt = now;
+          cycleShot();
+        }
       }
     };
     const onBlur = () => {

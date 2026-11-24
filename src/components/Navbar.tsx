@@ -7,9 +7,10 @@ import { chapterState } from '@/lib/chapterRuntime';
 import { engine } from '@/lib/engineAudio';
 import { useStore } from '@/lib/store';
 import { scrollToProgress } from '@/lib/useScrollTimeline';
+import { cycleShot } from '@/scene/city/director';
 import { toggleHeadlights } from '@/scene/Interaction';
 
-/** Minimal bar: the name (back to the top), headlights, sound, and the way out to techfest.org. */
+/** Minimal bar: the name (back to the top), headlights, the next camera shot, sound, and the way out to techfest.org. */
 export function Navbar() {
   const muted = useStore((s) => s.muted);
   const headlights = useStore((s) => s.headlights);
@@ -41,6 +42,12 @@ export function Navbar() {
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
             <path d="M10 6c-3.3 0-6 2.7-6 6s2.7 6 6 6h1V6h-1z" fill="currentColor" />
             <path d="M14 8h6M14 12h7M14 16h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button type="button" className="icon-btn" onClick={cycleShot} aria-label="Next camera shot (C)" title="Camera (C)">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+            <path d="M4 8h3l1.5-2h7L17 8h3v11H4z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+            <circle cx="12" cy="13" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
           </svg>
         </button>
         <button

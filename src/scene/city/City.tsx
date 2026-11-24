@@ -67,14 +67,17 @@ export function City() {
     // what the wheels stand on: the road and ground surfaces only (src/lib/ground.ts)
     // and the camera's collision sphere and the debug HUD test against all of it (src/lib/collide.ts)
     const roads: Mesh[] = [];
-    const all: { mesh: Mesh; road: boolean }[] = [];
+    const all: { mesh: Mesh; road: boolean; card: boolean }[] = [];
     gltf.scene.traverse((o) => {
       const m = o as Mesh;
       if (!m.isMesh) return;
-      const kind = kindOf(Array.isArray(m.material) ? m.material[0] : m.material);
+      const mat = Array.isArray(m.material) ? m.material[0] : m.material;
+      const kind = kindOf(mat);
       const road = kind === 'road' || kind === 'ground';
+      // see-through cards: foliage, palms, trees and the cut-out plant sprites
+      const card = kind === 'foliage' || kind === 'ledpalm' || kind === 'ledtree' || mat.name.includes('removebg');
       if (road) roads.push(m);
-      all.push({ mesh: m, road });
+      all.push({ mesh: m, road, card });
     });
     setRoadMeshes(roads);
     setCityMeshes(all);

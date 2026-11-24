@@ -156,6 +156,12 @@ export function DebugPanel() {
       feel,
       coldOpen,
       warmup,
+      // the camera's collision sphere, the wheels' contact, the car's box, the playhead
+      cameraCollision,
+      contactState,
+      carContact,
+      debugContact,
+      playhead,
       // where the director's scheduled rigs start, with the slide at each (none above ~0.3)
       schedule: () => getSchedule().map((c) => ({ ...c, drift: +driftAt(c.s).toFixed(2) })),
     };
@@ -172,7 +178,7 @@ export function DebugPanel() {
       const twist = Math.max(...carContact.residual.map(Math.abs)) * 100;
       hud.current.textContent =
         `${c.numeral} ${c.title.toUpperCase()} / ${cameraState.shotId}${blend}  s ${carState.s.toFixed(1)} m  t ${timeAtProgress(chapterState.progress).toFixed(1)} s  zone ${zone}  ${(carState.speed * 3.6).toFixed(0)} km/h` +
-        `  wheels ${contactState.ok ? hits : 0}/4 twist ${twist.toFixed(1)} cm  box ${debugContact.boxHits ? `HIT ${debugContact.boxHits}` : 'clear'}  cam ${cameraCollision.hit ? `HIT -${cameraCollision.pulled.toFixed(1)} m` : 'clear'}` +
+        `  wheels ${contactState.ok ? hits : 0}/4 twist ${twist.toFixed(1)} cm  box ${debugContact.boxHits ? `HIT ${debugContact.boxHits}` : 'clear'}  cam ${cameraCollision.hit ? `HIT -${cameraCollision.pulled.toFixed(1)} m` : cameraCollision.pulled > 0.05 ? `easing -${cameraCollision.pulled.toFixed(1)} m` : 'clear'}` +
         `  scroll ${useStore.getState().progress.toFixed(3)} screen ${chapterState.progress.toFixed(3)}  x${chapterState.rate.toFixed(2)}${playhead.glide ? (playhead.hidden ? ' GLIDE' : ' glide in') : ''}${playhead.pull > 0.05 ? ` magnet ${playhead.pull.toFixed(2)}` : ''}`;
     }, 100);
     // jump to a route metre: /?debug&s=510, or [ and ] for -/+10 m (with Shift: 50 m), or __gt3r.goS(510)

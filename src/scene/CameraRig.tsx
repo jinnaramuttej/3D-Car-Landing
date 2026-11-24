@@ -166,7 +166,7 @@ export function CameraRig() {
     directShot(shot);
     // the camera's collision sphere: never inside a wall, a pole or a barrier (pulled toward
     // what it looks at until it is clear)
-    clearCamera(shot.pos, shot.look);
+    clearCamera(shot.pos, shot.look, dt);
     updateBars(rawDt, state.size.width, state.size.height);
     applyCityShot(cam, shot, t);
     const rev = applyExtras(cam, parallax, dt, t, shot.id.startsWith('stop') ? 1 : 0.6, mobile);

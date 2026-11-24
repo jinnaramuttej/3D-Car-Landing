@@ -1,5 +1,6 @@
 import { MathUtils, type PerspectiveCamera, Vector3 } from 'three';
 import { CONFIG } from '@/lib/config';
+import { shakeNoise } from '@/lib/feel';
 import { carState } from '@/lib/motion';
 
 const { clamp, degToRad, radToDeg } = MathUtils;
@@ -24,7 +25,7 @@ export type CityShot = {
   /** Smoke puffs fade between these camera distances. */
   nearFade: [number, number];
   id: string;
-  /** Metres of shake to add after the look. */
+  /** Shake amount, 0..1 (trauma squared times the rig's own), CONFIG.feel.shakeMax at 1. */
   shake: number;
 };
 
@@ -74,13 +75,14 @@ export function applyCityShot(cam: PerspectiveCamera, shot: CityShot, t: number)
     cam.translateY((Math.sin(t * 0.9 + 2) * 0.6 + Math.sin(t * 1.73) * 0.4) * hh * 0.7);
     cam.rotateZ(Math.sin(t * 0.43) * hh * 0.25);
   }
-  // acceleration and slides shake the lens (a few layered sines, no randomness)
+  // trauma shake (src/lib/feel.ts): shake = trauma squared, through layered simplex noise
   if (shot.shake > 1e-4) {
+    const f = CONFIG.feel;
     const a = shot.shake;
-    const ts = t * c.shakeSpeed;
-    cam.translateX((Math.sin(ts * 23.1) * 0.5 + Math.sin(ts * 37.7 + 1.3) * 0.3 + Math.sin(ts * 61.3 + 2.1) * 0.2) * a);
-    cam.translateY((Math.sin(ts * 19.7 + 0.7) * 0.5 + Math.sin(ts * 41.9 + 2.6) * 0.3 + Math.sin(ts * 67.1) * 0.2) * a * 0.7);
-    cam.rotateZ(degToRad(c.shakeRollDeg) * (a / Math.max(1e-3, c.shakePeak)) * Math.sin(ts * 13.3));
+    const ts = t * f.shakeHz;
+    cam.translateX(shakeNoise(ts, 0) * a * f.shakeMax);
+    cam.translateY(shakeNoise(ts, 1) * a * f.shakeMax * 0.7);
+    cam.rotateZ(degToRad(f.shakeRollDeg) * a * shakeNoise(ts, 2));
   }
   const full = lens.visible < 0.999 ? radToDeg(2 * Math.atan(Math.tan(degToRad(fov) / 2) / lens.visible)) : fov;
   if (Math.abs(cam.fov - full) > 1e-3) {

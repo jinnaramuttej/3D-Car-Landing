@@ -129,7 +129,7 @@ export function Effects() {
       bloom.current.luminanceMaterial.smoothing = l.bloomSmoothing;
     }
     if (ca.current) {
-      const shake = cameraState.shake / Math.max(1e-3, CONFIG.camera.shakePeak);
+      const shake = Math.min(1.5, cameraState.shake);
       const off = l.chromaticOffset + l.chromaticShake * shake;
       ca.current.offset.set(off, off * 0.6);
     }

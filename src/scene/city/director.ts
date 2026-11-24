@@ -4,6 +4,7 @@ import { chapterState } from '@/lib/chapterRuntime';
 import { DRIFT, inHold, nearestStop, PARK_S } from '@/lib/cityDrive';
 import { getRoute, routeCurvature, sampleRoute, STOPS } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
+import { feel } from '@/lib/feel';
 import { carState, forwardOf, leftOf } from '@/lib/motion';
 import { boardS, mountOf, stopAnchor } from '@/lib/stops';
 import { onWarmupEnd } from '@/lib/warmup';
@@ -488,6 +489,13 @@ function wanted(now: number): { shot: Shot; force: boolean } {
   return { shot: shot(cue.rig, cue.side, cue.s.toFixed(0)), force: false };
 }
 
+/**
+ * How much each rig rides the camera's spring-damped follow (feel.ts): a chase hangs off
+ * the car on a soft mount, a hood camera is bolted to it, a camera standing in the street
+ * doesn't follow at all.
+ */
+const FOLLOW: Record<RigId, number> = { opening: 0.6, wake: 1, stop: 0, chase: 1, wheel: 0.5, hood: 0, sidepan: 0, drone: 0.7 };
+
 /* -------------------------------------------------------------- the blend */
 
 const state = {
@@ -500,6 +508,9 @@ const state = {
   frozenLocal: true,
   blendStart: 0,
   blendDur: 1.6,
+  /** How much of the follow's lag the camera carries (eased per rig, see FOLLOW). */
+  follow: 0,
+  lastNow: 0,
   over: false,
   out: makePose(),
   a: makePose(),
@@ -629,7 +640,10 @@ export function directShot(out: CityShot) {
   const speed = Math.abs(carState.speed);
   const rig = st.current.rig;
   const driving = rig !== 'stop';
-  out.pos.copy(o.pos);
+  const dt = Math.min(0.1, Math.max(0, (now - st.lastNow) / 1000));
+  st.lastNow = now;
+  st.follow = MathUtils.damp(st.follow, FOLLOW[rig], 3, dt);
+  out.pos.copy(o.pos).addScaledVector(feel.lag, st.follow);
   // never under the road: rigs are set relative to the car, and the streets climb (15% by
   // the parked car), so check the road at the camera's own place along the route
   forwardOf(carState.pathHeading, _f);
@@ -647,14 +661,16 @@ export function directShot(out: CityShot) {
     if (lat > max || lat < min) out.pos.addScaledVector(_l, clamp(lat, min, max) - lat);
   }
   out.look.copy(o.look);
-  out.fov = driving ? clamp(o.fov + smoothstep(speed, 8, 60) * 4, CONFIG.camera.fovMin, CONFIG.camera.fovMax) : o.fov;
+  const kick = smoothstep(speed, 8, 60) * CONFIG.feel.fovKick + smoothstep(carState.accel, 2, 12) * CONFIG.feel.fovKickAccel;
+  out.fov = driving ? clamp(o.fov + kick, CONFIG.camera.fovMin, CONFIG.camera.fovMax) : o.fov;
   out.focus.copy(o.focus);
   out.dof = o.dof;
   out.focusRange = o.focusRange;
   out.handheld = o.handheld;
   out.nearFade[0] = o.nearFade[0];
   out.nearFade[1] = o.nearFade[1];
-  out.shake = (smoothstep(Math.abs(carState.accel), 2, 14) * 0.05 + carState.slip * CONFIG.camera.shakePeak) * o.shake;
+  // trauma (feel.ts): shake = trauma squared, times how much this rig shakes at all
+  out.shake = feel.shake * o.shake;
   out.id = st.current.id;
   return out;
 }

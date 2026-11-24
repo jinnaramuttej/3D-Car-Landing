@@ -12,6 +12,7 @@ import { interaction } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
 import { cameraState } from '@/scene/CameraRig';
 import { engine } from '@/lib/engineAudio';
+import { feel } from '@/lib/feel';
 import { powertrain } from '@/lib/powertrain';
 import { reflectionUniforms } from '@/scene/city/cityReflection';
 import { smokeLayer } from '@/scene/postfx/SoftSmokeEffect';
@@ -116,6 +117,7 @@ export function DebugPanel() {
   useControls('Director', configSchema('director'), { collapsed: true });
   useControls('Drift', configSchema('drift'), { collapsed: true });
   useControls('Camera', configSchema('camera'), { collapsed: true });
+  useControls('Feel', configSchema('feel'), { collapsed: true });
   useControls('Smoke', configSchema('smoke'), { collapsed: true });
   useControls('Skid marks', configSchema('skid'), { collapsed: true });
   useControls('Car', configSchema('car'), { collapsed: true });
@@ -143,6 +145,7 @@ export function DebugPanel() {
       engine,
       smokeLayer,
       powertrain,
+      feel,
       warmup,
       // where the director's scheduled rigs start, with the slide at each (none above ~0.3)
       schedule: () => getSchedule().map((c) => ({ ...c, drift: +driftAt(c.s).toFixed(2) })),

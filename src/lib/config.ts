@@ -81,13 +81,39 @@ export const CONFIG = {
     fovMin: 24, // long-lens rule: vertical FOV is clamped to [fovMin, fovMax]
     fovMax: 40, // (wider requests pull the camera back to keep the framing)
     fovScale: 1, // multiplies every shot's FOV
-    shakePeak: 0.07, // metres of shake at full slip
-    shakeRollDeg: 0.7,
-    shakeSpeed: 1,
     handheld: 0.02, // metres of slow float at handheld = 1
     dofScale: 1, // multiplies every shot's bokeh (0 = depth of field off)
     portraitFit: 0.75, // camera pulls back by (1/aspect)^portraitFit on portrait screens
     parallax: 0.25, // metres of mouse parallax (desktop)
+  },
+
+  /**
+   * How the car and the camera feel the drive (src/lib/feel.ts): the body on its springs,
+   * the camera's spring-damped follow and speed kick, the trauma that shakes it, the
+   * exhaust pops.
+   */
+  feel: {
+    bodyHz: 1.7, // natural frequency of the body on its springs
+    bodyDamping: 0.42, // damping ratio (1 = no bounce)
+    pitchPerAccel: 0.0022, // radians of pitch per m/s² (squat under power, dive on the brakes)
+    rollPerAccel: 0.0011, // radians of roll per m/s² of cornering
+    heavePerAccel: 0.004, // metres of heave per m/s² over crests and dips
+    bumps: 0.006, // metres of road texture at speed
+    followHz: 1.3, // the camera's spring-damped follow: lags the car's acceleration
+    followDamping: 0.8,
+    followMax: 0.9, // metres it may lag at most
+    fovKick: 4, // degrees the lens opens at full speed
+    fovKickAccel: 1.5, // more degrees while the car pulls hard
+    traumaDecay: 0.9, // trauma lost per second
+    traumaAccel: 1.2, // trauma per second under hard acceleration or braking
+    traumaSlip: 1.6, // trauma per second at full slide
+    traumaShift: 0.18, // kick per gear change
+    traumaBump: 0.25, // per second, scaled by how fast the body heaves
+    traumaPop: 0.08, // kick per exhaust pop
+    shakeMax: 0.09, // metres of shake at trauma 1 (shake = trauma squared)
+    shakeRollDeg: 0.9, // degrees of roll at trauma 1
+    shakeHz: 6, // noise speed (the layers run at 1x, 2.1x and 4.3x)
+    popFlash: 8, // brightness of the exhaust flash
   },
 
   smoke: {
@@ -229,6 +255,29 @@ type Range = readonly [min: number, max: number, step?: number];
 export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } } = {
   drive: { maxSpeed: [10, 400, 1], maxRate: [0.02, 2, 0.01], maxAccel: [0.02, 4, 0.01], settle: [0.01, 1, 0.01] },
   director: { blendMin: [0.2, 4, 0.05], blendMax: [0.2, 4, 0.05] },
+  feel: {
+    bodyHz: [0.3, 5, 0.05],
+    bodyDamping: [0.05, 1.5, 0.01],
+    pitchPerAccel: [0, 0.01, 0.0001],
+    rollPerAccel: [0, 0.01, 0.0001],
+    heavePerAccel: [0, 0.02, 0.0005],
+    bumps: [0, 0.03, 0.0005],
+    followHz: [0.3, 5, 0.05],
+    followDamping: [0.1, 2, 0.01],
+    followMax: [0, 3, 0.05],
+    fovKick: [0, 10, 0.1],
+    fovKickAccel: [0, 6, 0.1],
+    traumaDecay: [0.1, 4, 0.05],
+    traumaAccel: [0, 4, 0.05],
+    traumaSlip: [0, 4, 0.05],
+    traumaShift: [0, 1, 0.01],
+    traumaBump: [0, 2, 0.01],
+    traumaPop: [0, 0.5, 0.01],
+    shakeMax: [0, 0.4, 0.005],
+    shakeRollDeg: [0, 4, 0.05],
+    shakeHz: [0.2, 12, 0.1],
+    popFlash: [0, 20, 0.1],
+  },
   autoplay: { seconds: [30, 600, 5] },
   drift: {
     yawPeakDeg: [0, 60, 0.5],
@@ -267,9 +316,6 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     fovMin: [10, 40, 0.5],
     fovMax: [24, 70, 0.5],
     fovScale: [0.5, 1.5, 0.01],
-    shakePeak: [0, 0.3, 0.005],
-    shakeRollDeg: [0, 4, 0.05],
-    shakeSpeed: [0, 3, 0.05],
     handheld: [0, 0.1, 0.001],
     dofScale: [0, 3, 0.05],
     portraitFit: [0, 1.5, 0.01],

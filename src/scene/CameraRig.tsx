@@ -9,6 +9,7 @@ import { chapterState, stopWeight } from '@/lib/chapterRuntime';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { interaction } from '@/lib/interaction';
+import { stepCamera } from '@/lib/feel';
 import { layoutState, type Rect } from '@/lib/layout';
 import { carState, forwardOf, leftOf } from '@/lib/motion';
 import { pointer, trackPointer } from '@/lib/pointer';
@@ -20,7 +21,7 @@ import { director, directShot } from './city/director';
 
 /**
  * What the rest of the scene needs to know about the current shot. Written every frame by
- * CameraRig: Effects reads focus/dof/shake, Smoke and Rain read nearFade.
+ * CameraRig: Effects reads focus/dof/shake (0..1), Smoke and Rain read nearFade.
  */
 export const cameraState = {
   shotId: '',
@@ -148,12 +149,14 @@ export function CameraRig() {
     const c = CONFIG.camera;
     const dt = Math.min(rawDt, 1 / 20);
     const t = state.clock.elapsedTime;
+    stepCamera(dt);
     directShot(shot);
     updateBars(rawDt, state.size.width, state.size.height);
     applyCityShot(cam, shot, t);
     const rev = applyExtras(cam, parallax, dt, t, shot.id.startsWith('stop') ? 1 : 0.6, mobile);
     cameraState.shotId = shot.id;
-    cameraState.shake = shot.shake + rev;
+    // (0..1: the trauma shake plus the rev shake, as a share of the most the lens shakes)
+    cameraState.shake = shot.shake + rev / Math.max(1e-3, CONFIG.feel.shakeMax);
     cameraState.focus.copy(shot.focus);
     cameraState.dof = shot.dof * c.dofScale;
     cameraState.focusRange = shot.focusRange;

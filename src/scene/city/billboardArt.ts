@@ -18,6 +18,8 @@ export type ArtState = {
   previousFilter: string;
   speakerCategory: SpeakerCategory;
   expoIndex: number;
+  /** The Stage board has moved on from the speakers to the exhibits. */
+  stageExpo: boolean;
   /** 0..1 heartbeat envelope (DKMS). */
   pulse: number;
 };
@@ -98,21 +100,38 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, x: number, y: number,
   return y + lh;
 }
 
+/** The Stage board's second half: the TechExpo / Ignite exhibit on show (past tense: brought to campus before). */
+function drawExpo(ctx: CanvasRenderingContext2D, s: ArtState) {
+  const ex = EXPO.exhibits[s.expoIndex] ?? EXPO.exhibits[0];
+  base(ctx, BASE_TOP, BASE_BOTTOM);
+  kicker(ctx, `${TECHEXPO.name} · ${TECHEXPO.pavilion}`, 64, 70);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = `700 22px ${display}`;
+  ctx.fillText(`${UI.expo.past.toUpperCase()}  ${String(s.expoIndex + 1).padStart(2, '0')} / ${String(EXPO.exhibits.length).padStart(2, '0')}`, 64, 112);
+  ctx.fillStyle = '#fff';
+  fit(ctx, ex.name.toUpperCase(), 900, 110, 900);
+  ctx.fillText(ex.name.toUpperCase(), 60, 232);
+  ctx.fillStyle = ACCENT;
+  fit(ctx, ex.from, 700, 40, 900);
+  ctx.fillText(ex.from, 64, 300);
+  // blurb, wrapped
+  ctx.fillStyle = 'rgba(255,255,255,0.78)';
+  ctx.font = `600 30px ${display}`;
+  const words = ex.blurb.split(' ');
+  let line = '';
+  let y = 380;
+  for (const w of words) {
+    const next = line ? `${line} ${w}` : w;
+    if (ctx.measureText(next).width > 880) {
+      ctx.fillText(line, 64, y);
+      line = w;
+      y += 44;
+    } else line = next;
+  }
+  if (line) ctx.fillText(line, 64, y);
+}
+
 const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void> = {
-  arrival(ctx) {
-    base(ctx, BASE_TOP, BASE_BOTTOM);
-    kicker(ctx, SITE.edition, 64, 110);
-    const [word, year] = SITE.name.split(' ');
-    ctx.fillStyle = '#fff';
-    fit(ctx, word.toUpperCase(), 900, 170, 880);
-    ctx.fillText(word.toUpperCase(), 60, 290);
-    ctx.fillStyle = ACCENT;
-    ctx.font = `900 120px ${display}`;
-    ctx.fillText(year, 64, 420);
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    fit(ctx, SITE.dates, 700, 40, 880);
-    ctx.fillText(SITE.dates, 64, 500);
-  },
   robowars(ctx, s) {
     base(ctx, BASE_TOP, BASE_BOTTOM);
     kicker(ctx, UI.robowars.kicker, 64, 96);
@@ -158,6 +177,8 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
     ctx.globalAlpha = 1;
   },
   speakers(ctx, s) {
+    // The Stage: past speakers first, the exhibits brought to campus before after
+    if (s.stageExpo) return drawExpo(ctx, s);
     base(ctx, BASE_TOP, BASE_BOTTOM);
     kicker(ctx, UI.speakers.kicker, 64, 90);
     ctx.fillStyle = '#fff';
@@ -181,35 +202,6 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
       fit(ctx, title, 600, 22, 780);
       ctx.fillText(title, 146, y + 20);
     });
-  },
-  expo(ctx, s) {
-    const ex = EXPO.exhibits[s.expoIndex] ?? EXPO.exhibits[0];
-    base(ctx, BASE_TOP, BASE_BOTTOM);
-    kicker(ctx, `${TECHEXPO.name} · ${TECHEXPO.pavilion}`, 64, 70);
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = `700 22px ${display}`;
-    ctx.fillText(`${UI.expo.past.toUpperCase()}  ${String(s.expoIndex + 1).padStart(2, '0')} / ${String(EXPO.exhibits.length).padStart(2, '0')}`, 64, 112);
-    ctx.fillStyle = '#fff';
-    fit(ctx, ex.name.toUpperCase(), 900, 110, 900);
-    ctx.fillText(ex.name.toUpperCase(), 60, 232);
-    ctx.fillStyle = ACCENT;
-    fit(ctx, ex.from, 700, 40, 900);
-    ctx.fillText(ex.from, 64, 300);
-    // blurb, wrapped
-    ctx.fillStyle = 'rgba(255,255,255,0.78)';
-    ctx.font = `600 30px ${display}`;
-    const words = ex.blurb.split(' ');
-    let line = '';
-    let y = 380;
-    for (const w of words) {
-      const next = line ? `${line} ${w}` : w;
-      if (ctx.measureText(next).width > 880) {
-        ctx.fillText(line, 64, y);
-        line = w;
-        y += 44;
-      } else line = next;
-    }
-    if (line) ctx.fillText(line, 64, y);
   },
   dkms(ctx, s) {
     base(ctx, BASE_TOP, BASE_BOTTOM);
@@ -235,27 +227,6 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
     ctx.fillStyle = 'rgba(255,240,230,0.7)';
     ctx.font = `600 28px ${display}`;
     ctx.fillText(`${HEARTBEAT.stats[2].value} · ${HEARTBEAT.stats[2].label}`, 64, 520);
-  },
-  twmun(ctx) {
-    base(ctx, BASE_TOP, BASE_BOTTOM);
-    kicker(ctx, UI.twmun.kicker, 64, 90);
-    ctx.fillStyle = '#fff';
-    fit(ctx, TWMUN.name.toUpperCase(), 900, 74, 900);
-    ctx.fillText(TWMUN.name.toUpperCase(), 60, 180);
-    ctx.fillStyle = ACCENT;
-    ctx.font = `700 36px ${display}`;
-    ctx.fillText(TWMUN.tagline, 64, 236);
-    const codes = TWMUN.committees.map((c) => c.replace(/\s*\(.*\)$/, ''));
-    codes.forEach((c, i) => {
-      const x = 64 + (i % 4) * 228;
-      const y = 330 + Math.floor(i / 4) * 110;
-      ctx.strokeStyle = withAlpha(ACCENT, 0.8);
-      ctx.lineWidth = 3;
-      ctx.strokeRect(x, y - 56, 208, 84);
-      ctx.fillStyle = '#fff';
-      fit(ctx, c, 800, 34, 180);
-      ctx.fillText(c, x + 16, y);
-    });
   },
   catalyst(ctx) {
     base(ctx, BASE_TOP, BASE_BOTTOM);

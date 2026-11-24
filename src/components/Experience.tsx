@@ -11,7 +11,6 @@ import { Scene } from '@/scene/Scene';
 import { Warmup } from '@/scene/Warmup';
 import { ColdOpen } from './ColdOpen';
 import { DebugPanel } from './DebugPanel';
-import { Extras } from './Extras';
 import { Loader } from './Loader';
 
 import { MiniMap } from './MiniMap';
@@ -88,7 +87,6 @@ export default function Experience() {
 
       <Overlay />
       <Stops />
-      <Extras />
       <Navbar />
       <MiniMap />
       <PlayControls />

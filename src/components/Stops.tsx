@@ -3,9 +3,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
-import { COMMITTEE_NAMES, COMPETITIONS, EXPO, HEARTBEAT, ROBOWARS, SITE, TECHEXPO, TWMUN, UI, VOICES } from '@/content';
-import { CHAPTERS, chapterById, FINALE, type StopId } from '@/lib/chapters';
+import { ALSO, CATALYST, CES2027, COMPETITIONS, EXPO, HEARTBEAT, ROBOWARS, SITE, TECHEXPO, TWMUN, UI, VOICES } from '@/content';
+import { CHAPTERS, chapterById, FINALE } from '@/lib/chapters';
 import { chapterState, stopWeight } from '@/lib/chapterRuntime';
+import { citySAt } from '@/lib/cityDrive';
+import { progressAtZone, type ZoneId, zoneById, zoneProgress } from '@/lib/pacing';
 import { COMPETITION_TAGS, expoIndexAt, heartbeatPulse, initials, SPEAKER_CATEGORIES, useStops } from '@/lib/stops';
 import { layoutState, overlap, type Rect } from '@/lib/layout';
 import { useStore } from '@/lib/store';
@@ -15,13 +17,17 @@ gsap.registerPlugin(Flip);
 const MOBILE_Q = '(max-width: 767px), (pointer: coarse)';
 const DESKTOP_Q = '(min-width: 768px) and (pointer: fine)';
 
-/** Global progress at a fraction of a stop's chapter, and a duration in chapter fractions. */
-const at = (id: StopId, f: number) => {
-  const c = chapterById(id);
+/** Global progress at zone progress f of a stop (the car rolling past its billboard). */
+const zf = (id: ZoneId, f: number) => progressAtZone(id, f);
+/** A span of zone progress as global progress. */
+const zd = (id: ZoneId, f: number, d: number) => zf(id, f + d) - zf(id, f);
+/** Finale: global progress at a fraction of its chapter. */
+const fin = (f: number) => {
+  const c = chapterById('finale');
   return c.start + f * (c.end - c.start);
 };
-const len = (id: StopId, f: number) => {
-  const c = chapterById(id);
+const finLen = (f: number) => {
+  const c = chapterById('finale');
   return f * (c.end - c.start);
 };
 
@@ -36,71 +42,77 @@ function parseStat(v: string) {
 }
 
 /**
- * One paused timeline on the global 0..1 scale: each panel is on screen while the car
- * holds at its stop (the middle of the chapter, see src/lib/cityDrive.ts) and scrubs both ways.
+ * One paused timeline on the global 0..1 scale, scrubbed by the journey on screen. Each
+ * stop's panel follows its slow zone (src/lib/pacing.ts: zone progress 0 -> 1 as the car
+ * rolls past the billboard): the stop's title comes in at 0.1 (Overlay.tsx), the panel's
+ * details stagger in from 0.3 to 0.7, and everything is gone by 0.85 as the car launches.
  */
 function buildTimeline(q: Q, mobile: boolean) {
   const tl = gsap.timeline({ paused: true, defaults: { ease: 'none' } });
-  const show = (id: StopId, inAt = 0.2, outAt = 0.74) => {
-    const layer = q(`.d-${id}`);
-    tl.fromTo(layer, { autoAlpha: 0 }, { autoAlpha: 1, duration: len(id, 0.05) }, at(id, inAt));
-    if (outAt <= 1) tl.to(layer, { autoAlpha: 0, duration: len(id, 0.06) }, at(id, outAt));
+  const show = (sel: string, id: ZoneId, inAt = 0.1, outAt = 0.8) => {
+    const layer = q(sel);
+    tl.fromTo(layer, { autoAlpha: 0 }, { autoAlpha: 1, duration: zd(id, inAt, 0.06) }, zf(id, inAt));
+    tl.to(layer, { autoAlpha: 0, duration: zd(id, outAt, 0.05) }, zf(id, outAt));
   };
-  const rise = (sel: string, id: StopId, f: number, d = 0.1, y = 22) =>
-    tl.fromTo(q(sel), { autoAlpha: 0, y }, { autoAlpha: 1, y: 0, duration: len(id, d), ease: 'power2.out', stagger: len(id, 0.025) }, at(id, f));
+  /** Details rise in one after another between `from` and `to` of the zone. */
+  const stagger = (sel: string, id: ZoneId, from = 0.3, to = 0.7, y = 18) => {
+    const els = q(sel);
+    if (!els.length) return;
+    const step = (to - from) / Math.max(1, els.length);
+    els.forEach((el, i) => {
+      const f = from + i * step;
+      tl.fromTo(el, { autoAlpha: 0, y }, { autoAlpha: 1, y: 0, duration: zd(id, f, Math.min(0.08, step * 1.5)), ease: 'power2.out' }, zf(id, f));
+    });
+  };
 
-  show('arrival');
-  rise('.d-arrival .fact', 'arrival', 0.22, 0.1, 14);
-
-  // Robowars: prize, classes, stats counting up, zonals
-  show('robowars');
-  rise('.d-robowars .panel > *', 'robowars', 0.22, 0.1, 16);
+  // The Arena: prize, classes, the stats counting up, zonals
+  show('.d-robowars', 'robowars');
+  stagger('.d-robowars .panel > *', 'robowars');
   q('.arena-stat').forEach((el, i) => {
-    const s = parseStat(ROBOWARS.stats[i].value);
+    const st = parseStat(ROBOWARS.stats[i].value);
     const out = el.querySelector('.stat-value');
     const box = { v: 0 };
     tl.fromTo(
       box,
       { v: 0 },
       {
-        v: s.value,
-        duration: len('robowars', 0.26),
+        v: st.value,
+        duration: zd('robowars', 0.4, 0.22),
         ease: 'power2.out',
         onUpdate: () => {
-          if (out) out.textContent = `${s.prefix}${box.v.toFixed(s.decimals)}${s.suffix}`;
+          if (out) out.textContent = `${st.prefix}${box.v.toFixed(st.decimals)}${st.suffix}`;
         },
       },
-      at('robowars', 0.26 + i * 0.04),
+      zf('robowars', 0.4 + i * 0.04),
     );
   });
 
-  // Competitions: the cards slide past (vertically on phones) while the car holds
-  show('competitions', 0.18, 0.78);
-  rise('.d-competitions .block-head > *', 'competitions', 0.2, 0.08);
-  tl.fromTo(q('.bays'), { '--p': 0 }, { '--p': 1, duration: len('competitions', mobile ? 0.5 : 0.52) }, at('competitions', 0.24));
+  // The Pit Lane: the head, then the seven lanes slide past (vertically on phones)
+  show('.d-competitions', 'competitions');
+  stagger('.d-competitions .block-head > *', 'competitions', 0.3, 0.45);
+  tl.fromTo(q('.bays'), { '--p': 0 }, { '--p': 1, duration: zd('competitions', 0.35, mobile ? 0.4 : 0.42) }, zf('competitions', 0.35));
 
-  show('speakers');
-  rise('.d-speakers .block-head > *', 'speakers', 0.22, 0.1);
+  // The Stage: past speakers first, then the exhibits brought to campus before
+  show('.d-speakers', 'speakers', 0.1, 0.46);
+  stagger('.d-speakers .block-head > *', 'speakers', 0.22, 0.4);
+  show('.d-expo', 'speakers', 0.44, 0.8);
+  stagger('.d-expo .block-head > *', 'speakers', 0.46, 0.58);
+  stagger('.d-expo .exhibit-now > *', 'speakers', 0.5, 0.7, 12);
 
-  show('expo', 0.18, 0.78);
-  rise('.d-expo .block-head > *', 'expo', 0.2, 0.06);
+  // The Heartbeat: slow fades only
+  show('.d-dkms', 'dkms', 0.1, 0.8);
+  tl.fromTo(q('.d-dkms .hb > *'), { autoAlpha: 0 }, { autoAlpha: 1, duration: zd('dkms', 0.3, 0.12), stagger: zd('dkms', 0.3, 0.06) }, zf('dkms', 0.3));
 
-  // DKMS: slow fades only
-  show('dkms', 0.2, 0.76);
-  tl.fromTo(q('.d-dkms .hb > *'), { autoAlpha: 0 }, { autoAlpha: 1, duration: len('dkms', 0.12), stagger: len('dkms', 0.05) }, at('dkms', 0.22));
-
-  show('twmun');
-  rise('.d-twmun .block-head > *', 'twmun', 0.22, 0.08);
-  rise('.committee', 'twmun', 0.26, 0.1, 18);
-
-  // finale: one CTA as the sun clears the horizon
-  show('finale', 0.02, 2);
+  // the finale: one CTA as the car eases off under the far pylon, then the rest of Techfest
+  const layer = q('.d-finale');
+  tl.fromTo(layer, { autoAlpha: 0 }, { autoAlpha: 1, duration: finLen(0.04) }, fin(0.02));
   tl.fromTo(
     q('.finale-cta > *'),
     { autoAlpha: 0, filter: 'blur(14px)', y: 18 },
-    { autoAlpha: 1, filter: 'blur(0px)', y: 0, duration: len('finale', 0.1), stagger: len('finale', 0.035), ease: 'power2.out' },
-    at('finale', FINALE.ctaAt),
+    { autoAlpha: 1, filter: 'blur(0px)', y: 0, duration: finLen(0.08), stagger: finLen(0.025), ease: 'power2.out' },
+    FINALE.ctaAt,
   );
+  tl.fromTo(q('.more > *'), { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: finLen(0.06), stagger: finLen(0.02), ease: 'power2.out' }, FINALE.ctaAt + finLen(0.06));
 
   tl.set({}, {}, 1);
   return tl;
@@ -290,7 +302,7 @@ function ExpoPanel() {
     let raf = 0;
     let last = -1;
     const tick = () => {
-      const i = expoIndexAt(chapterState.progress, EXPO.exhibits.length);
+      const i = expoIndexAt(zoneProgress(zoneById('speakers'), citySAt(chapterState.progress)), EXPO.exhibits.length);
       if (i !== last) {
         last = i;
         setFocus(i);
@@ -309,8 +321,8 @@ function ExpoPanel() {
         <p className="kicker">
           {TECHEXPO.name} · {TECHEXPO.pavilion}
         </p>
-        <p className="tagline">{TECHEXPO.line}</p>
         <h2 className="heading">{EXPO.heading}</h2>
+        <p className="tagline">{UI.expo.past}</p>
       </div>
       <div className="exhibit-now">
         <span className="exhibit-index">
@@ -406,38 +418,34 @@ function DkmsPanel() {
   );
 }
 
-function TwmunPanel() {
-  const [flipped, setFlipped] = useState<string | null>(null);
+/** The finale's compact row: the rest of Techfest, each one line and a way in. */
+function MoreRow() {
+  const workshops = ALSO.items.find((it) => 'href' in it) as { name: string; href: string } | undefined;
+  const items = [
+    { kicker: CATALYST.name, line: CATALYST.items.map((it) => it.label).join(' · '), href: SITE.home },
+    { kicker: TWMUN.name, line: `${TWMUN.tagline} · ${TWMUN.committees.length} committees`, href: SITE.home },
+    { kicker: UI.extras.workshops, line: workshops?.name ?? 'Hands-on workshops', href: workshops?.href ?? SITE.home },
+    { kicker: CES2027.name, line: CES2027.line, href: SITE.home },
+  ];
   return (
-    <section className="d-block d-twmun" aria-label={TWMUN.name}>
-      <div className="block-head col">
-        <p className="kicker">{UI.twmun.kicker}</p>
-        <h2 className="heading">{TWMUN.name}</h2>
-        <p className="tagline">{TWMUN.tagline}</p>
-        <p className="hint desktop-only">{UI.twmun.hint}</p>
-      </div>
-      <ul className="committees">
-        {TWMUN.committees.map((c) => {
-          const code = c.replace(/\s*\(.*\)$/, '');
-          const back = COMMITTEE_NAMES[code] ?? c.match(/\((.*)\)/)?.[1] ?? c;
-          return (
-            <li key={c} className={`committee${flipped === c ? ' is-flipped' : ''}`}>
-              <button type="button" aria-label={`${code}: ${back}`} onClick={() => setFlipped(flipped === c ? null : c)}>
-                <span className="face front">{code}</span>
-                <span className="face back">{back}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+    <section className="more" aria-label={UI.more}>
+      <p className="more-head">{UI.more}</p>
+      {items.map((it) => (
+        <a key={it.kicker} className="more-item glass" href={it.href} target="_blank" rel="noopener noreferrer">
+          <strong>{it.kicker}</strong>
+          <span>{it.line}</span>
+          <em aria-hidden>↗</em>
+        </a>
+      ))}
     </section>
   );
 }
 
 /**
- * Chapters V-XI and the finale in the DOM: one panel per stop on the city route, on screen
- * while the car holds at that stop's billboard. The panels' controls (weight class, filter,
- * speaker category, exhibit details) share state with the billboards (src/lib/stops.ts).
+ * The four stops and the finale in the DOM: one panel per stop on the city route, on screen
+ * while the car rolls past that stop's billboard (its slow zone). The panels' controls
+ * (weight class, filter, speaker category, exhibit details) share state with the
+ * billboards (src/lib/stops.ts).
  */
 export function Stops() {
   const root = useRef<HTMLDivElement>(null);
@@ -509,7 +517,7 @@ export function Stops() {
       }
       // tell the title solver where the panel is
       const shown = id && id !== 'finale' && lay.gate > 0.05 ? el.querySelector<HTMLElement>(`.d-${id}`) : null;
-      const parts = shown && getComputedStyle(shown).visibility !== 'hidden' ? shown.querySelectorAll<HTMLElement>('.col, .bays-window, .committees, .exhibit-now') : null;
+      const parts = shown && getComputedStyle(shown).visibility !== 'hidden' ? shown.querySelectorAll<HTMLElement>('.col, .bays-window') : null;
       let panel: Rect | null = null;
       if (parts) {
         for (const part of parts) {
@@ -540,26 +548,11 @@ export function Stops() {
 
   return (
     <div ref={root} className="stops" data-side="left">
-      <section className="d-block d-arrival" aria-label={UI.arrival.kicker}>
-        <dl className="facts glass col">
-          {[
-            ['Edition', SITE.edition],
-            ['Dates', SITE.dates],
-            ['Venue', SITE.venue],
-          ].map(([k, v]) => (
-            <div key={k} className="fact">
-              <dt>{k}</dt>
-              <dd>{v}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
       <RobowarsPanel />
       <CompetitionsPanel measure={measure} />
       <SpeakersPanel />
       <ExpoPanel />
       <DkmsPanel />
-      <TwmunPanel />
       <section className="d-block d-finale" aria-label={UI.cta}>
         <div className="finale-cta">
           <div className="scrim" aria-hidden />
@@ -569,6 +562,7 @@ export function Stops() {
           </a>
           <p className="finale-sub">{SITE.disclaimer}</p>
         </div>
+        <MoreRow />
       </section>
     </div>
   );

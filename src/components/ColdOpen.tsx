@@ -30,7 +30,10 @@ export function ColdOpen() {
     const tick = () => {
       const t = coldOpen.t;
       if (black.current) black.current.style.opacity = (1 - MathUtils.smoothstep(t, COLD.lights, COLD.lift)).toFixed(3);
-      if (t >= COLD.title) root.classList.remove('is-cold');
+      if (t >= COLD.title && root.classList.contains('is-cold')) {
+        root.classList.remove('is-cold');
+        root.classList.add('title-in');
+      }
       if (t >= Math.max(COLD.lift, COLD.title)) {
         setGone(true);
         return;
@@ -41,6 +44,7 @@ export function ColdOpen() {
     return () => {
       cancelAnimationFrame(raf);
       root.classList.remove('is-cold');
+      root.classList.add('title-in');
     };
   }, [load]);
 

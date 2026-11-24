@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { create } from 'zustand';
 import { COMPETITIONS, ROBOWARS, VOICES } from '@/content';
-import { chapterById, type StopId } from './chapters';
+import { type StopId } from './chapters';
 import { BRIDGE, EXTRAS, type ExtraId, getRoute, sampleRoute, STOPS } from './cityRoute';
 import { forwardOf, leftOf } from './motion';
 
@@ -103,11 +103,10 @@ export function stopAnchor(id: BoardId): StopAnchor {
   return a;
 }
 
-/** Expo exhibit on show at global progress p: steps through the four across the stop's hold. */
+/** The Stage's second half: the exhibit on show at zone progress p steps through them across 0.45-0.8. */
+export const EXPO_SPAN: [number, number] = [0.45, 0.8];
 export function expoIndexAt(p: number, count: number) {
-  const c = chapterById('expo');
-  const local = (p - c.start) / (c.end - c.start);
-  return Math.max(0, Math.min(count - 1, Math.floor(((local - 0.2) / 0.56) * count)));
+  return Math.max(0, Math.min(count - 1, Math.floor(((p - EXPO_SPAN[0]) / (EXPO_SPAN[1] - EXPO_SPAN[0])) * count)));
 }
 
 /** Lub-dub: two soft bells per beat, the second smaller, 0..1, at `bpm`. */

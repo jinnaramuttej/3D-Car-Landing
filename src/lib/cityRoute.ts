@@ -48,24 +48,25 @@ export type StopSpec = {
 };
 
 /**
- * The eight stops. `s` is in route metres: 0 is the start of the route, the city part
- * ends at ROUTE_LENGTH and the bridge starts there. The first 460 m are chapters I-IV
- * (parked, the drive-off, the drift down the long left-hander, the wake); the stops come
- * after. Each city stop sits where a scan of the model found a flat, road-facing wall big
- * enough for its billboard (side 1 = left of the road, -1 = right; `node
+ * The four stops and the finale. `s` is in route metres (where the billboard stands): 0 is
+ * the start of the route, the city part ends at ROUTE_LENGTH and the bridge starts there.
+ * The first ~380 m are the intro (parked, the drive-off, the drift down the long
+ * left-hander); the stops come after, as far apart as the facades allow (the usable walls
+ * are all between 500 and 750 m). Each sits on the clearest flat, road-facing wall a scan of
+ * the model found near it (side 1 = left of the road, -1 = right; `node
  * scripts/find-walls.mjs` lists them); the billboard finds that wall by itself (raycast,
- * Billboards.tsx) and stands on legs if it can't. Competitions is the exception: its wall
- * has a canopy across it at board height, so its board spans the road on a gantry just
- * ahead of the stop, face-on to the car and the stop camera behind it.
+ * Billboards.tsx) and stands on legs if it can't. The slow zone around each billboard and
+ * the pace of the whole drive are src/lib/pacing.ts.
  */
-export const STOPS: Record<'arrival' | 'robowars' | 'competitions' | 'speakers' | 'expo' | 'dkms' | 'twmun' | 'finale', StopSpec> = {
-  arrival: { s: 462, side: -1, width: 16, height: 9, lift: 6.5 },
+export const STOPS: Record<'robowars' | 'competitions' | 'speakers' | 'dkms' | 'finale', StopSpec> = {
+  /** The Arena. */
   robowars: { s: 510, side: -1, width: 16, height: 9, lift: 6.5 },
-  competitions: { s: 562, side: -1, width: 14, height: 7.9, lift: 6.2, mount: 'gantry', boardS: 578 },
-  speakers: { s: 596, side: -1, width: 16, height: 9, lift: 6.5 },
-  expo: { s: 638, side: -1, width: 16, height: 9, lift: 6.5 },
-  dkms: { s: 678, side: -1, width: 14, height: 7.9, lift: 6.5 },
-  twmun: { s: 746, side: -1, width: 16, height: 9, lift: 6.5 },
+  /** The Pit Lane. */
+  competitions: { s: 590, side: -1, width: 16, height: 9, lift: 6.5 },
+  /** The Stage: past speakers, and the TechExpo / Ignite exhibits. */
+  speakers: { s: 678, side: -1, width: 16, height: 9, lift: 6.5 },
+  /** The Heartbeat. */
+  dkms: { s: 746, side: -1, width: 16, height: 9, lift: 6.5 },
   finale: { s: ROUTE_LENGTH + 340, side: 1, width: 18, height: 10, lift: 0 },
 };
 

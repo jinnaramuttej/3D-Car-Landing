@@ -141,17 +141,11 @@ export const CONCEPT = 'Unofficial concept';
 
 /** One line per chapter. */
 export const chapters: Record<ChapterId, { line: string }> = {
-  stillness: { line: 'Midnight in the city. Nothing moves but the rain.' },
-  ignition: { line: 'One turn of the key, and the night holds its breath.' },
-  turn: { line: 'Thirty editions in, we still take the corner sideways.' },
-  wake: { line: 'The smoke hangs in the street. The city is waiting.' },
-  arrival: { line: 'Into the city. The lights are on.' },
+  intro: { line: 'Midnight in the city. Nothing moves but the rain.' },
   robowars: { line: 'Steel, sparks and machines built to hit back.' },
   competitions: { line: 'Seven competitions. Pick a lane.' },
-  speakers: { line: 'Presidents, founders, champions and laureates have spoken here.' },
-  expo: { line: 'Machines from labs and launchpads, up close.' },
+  speakers: { line: 'Presidents, founders and laureates have spoken here. Machines from labs and launchpads have come to campus.' },
   dkms: { line: 'Three minutes and a cheek swab. That is the whole ask.' },
-  twmun: { line: 'Eight committees. One question: what is true?' },
   finale: { line: 'The road is open.' },
 };
 
@@ -161,7 +155,6 @@ export const hints = ['Scroll to drive', 'Hold to rev', 'Move the cursor to wipe
 export const UI = {
   cta: 'Explore Techfest 2026',
   checkStatus: 'Check status',
-  arrival: { kicker: 'V · Arrival' },
   robowars: {
     kicker: 'Robowars',
     classLabel: 'Weight class',
@@ -171,10 +164,10 @@ export const UI = {
   },
   competitions: { kicker: 'Competitions', all: 'All', finale: 'Finale', hint: 'Filter. The billboard re-sorts.' },
   speakers: { kicker: 'Past speakers', hint: 'The categories turn over on their own. Pick one to hold it.' },
-  expo: { kicker: 'TechExpo', past: 'Brought to campus before', hint: 'Scroll to move along the exhibits.', details: 'Details', close: 'Close' },
+  expo: { kicker: 'TechExpo', past: 'Past exhibits, brought to campus before', hint: 'Scroll to move along the exhibits.', details: 'Details', close: 'Close' },
   extras: { catalyst: 'Catalyst', also: 'Also at Techfest', ces: 'Partner', more: 'More on techfest.org', workshops: 'Workshops' },
   dkms: { timer: 'About how long the swab takes', start: 'Start three minutes', restart: 'Start again', done: 'Done. That was the whole swab.' },
-  twmun: { kicker: 'Model United Nations', hint: 'Hover a card to flip it.' },
+  more: 'More at Techfest',
 };
 
 /** Card backs for the MUN committees. */

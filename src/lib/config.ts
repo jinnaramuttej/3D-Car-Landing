@@ -29,12 +29,7 @@ export const CONFIG = {
     blendMax: 2, // ...and for the biggest (round to the other side of the car)
   },
 
-  /** The Play button: the whole journey by itself. */
-  autoplay: {
-    seconds: 150, // total length
-  },
-
-  /** The car's slides: the big one in chapter III (src/lib/cityDrive.ts sets where). */
+  /** The car's slides: the big one on the first run (src/lib/pacing.ts DRIFT sets where). */
   drift: {
     yawPeakDeg: 38,
     slipRefDeg: 34, // yaw that counts as "full slip" for smoke, skids and shake
@@ -281,7 +276,6 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     shakeHz: [0.2, 12, 0.1],
     popFlash: [0, 20, 0.1],
   },
-  autoplay: { seconds: [30, 600, 5] },
   drift: {
     yawPeakDeg: [0, 60, 0.5],
     slipRefDeg: [5, 60, 0.5],

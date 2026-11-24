@@ -1,13 +1,13 @@
 import { MathUtils, PerspectiveCamera, Vector3 } from 'three';
-import { chapterAt, CHAPTERS, IGNITION } from '@/lib/chapters';
+import { CHAPTERS, IGNITION } from '@/lib/chapters';
 import { chapterState } from '@/lib/chapterRuntime';
-import { DRIFT, HOLD, inHold, nearestStop, PARK_S } from '@/lib/cityDrive';
+import { DRIFT, nearestStop, PARK_S } from '@/lib/cityDrive';
+import { type ZoneId, zoneAtS, zoneById, zoneProgress, zoneSpan, ZONES } from '@/lib/pacing';
 import { getRoute, routeCurvature, sampleRoute, STOPS } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
 import { feel } from '@/lib/feel';
 import { carState, forwardOf, leftOf } from '@/lib/motion';
-import { inSight } from '@/lib/sightline';
-import { boardS, mountOf, stopAnchor } from '@/lib/stops';
+import { stopAnchor } from '@/lib/stops';
 import { onWarmupEnd } from '@/lib/warmup';
 import { bridgeInfo } from './Bridge';
 import type { CityShot } from './cityCamera';
@@ -39,9 +39,9 @@ const { clamp, lerp, smoothstep, smootherstep } = MathUtils;
  * Speed widens the lens a little (inside 24-40 degrees), changes of speed shake it.
  */
 
-export type RigId = 'opening' | 'wake' | 'stop' | 'chase' | 'wheel' | 'hood' | 'sidepan' | 'drone';
-export type DriveRig = 'chase' | 'wheel' | 'hood' | 'sidepan' | 'drone';
-export const DRIVE_RIGS: DriveRig[] = ['chase', 'wheel', 'hood', 'sidepan', 'drone'];
+export type RigId = 'opening' | 'wake' | 'stop' | 'chase' | 'launch' | 'wheel' | 'hood' | 'sidepan' | 'drone';
+export type DriveRig = 'chase' | 'launch' | 'wheel' | 'hood' | 'sidepan' | 'drone';
+export const DRIVE_RIGS: DriveRig[] = ['chase', 'launch', 'wheel', 'hood', 'sidepan', 'drone'];
 
 type Shot = { rig: RigId; side: 1 | -1; key: string; id: string };
 
@@ -65,8 +65,6 @@ export const director = {
   /** World position of the side-pan camera, fixed when its shot starts. */
   panPos: new Vector3(),
   panKey: '',
-  /** Each stop's framing as worked out (for the debug console): back, lean, lens, what fit. */
-  stops: {} as Record<string, { back: number; side: number; height: number; lean: number; fov: number; fit: string; rays?: number; ms?: number }>,
 };
 
 /** Step to the next drive rig (C key, navbar button). */
@@ -83,21 +81,22 @@ export function cycleShot() {
 type Cue = { s: number; rig: DriveRig; side: 1 | -1 };
 let schedule: Cue[] | null = null;
 
-const ORDER: DriveRig[] = ['chase', 'wheel', 'drone', 'hood', 'sidepan', 'chase', 'drone'];
 
-/** One rig per drive between two stops (two on a long one), then the bridge. */
+/**
+ * The runs between stops are short bursts (4-5 s): low, long-lens rigs that sell the speed
+ * (the launch chase, the wheel camera). The bridge gets the wide ones.
+ */
+const RUN_RIGS: DriveRig[] = ['launch', 'wheel', 'launch', 'chase'];
+
+/** One rig per run out of a stop (two on a long one), then the bridge. */
 function buildSchedule(): Cue[] {
   const route = getRoute();
   const out: Cue[] = [];
-  const holds = CHAPTERS.filter((c) => c.stop && c.stop !== 'finale').map((c) => STOPS[c.stop!].s);
-  for (let k = 0; k < holds.length; k++) {
-    const a = holds[k] + 8;
-    const b = k + 1 < holds.length ? holds[k + 1] - 10 : route.bridgeStart - 10;
-    // (a drone flying over a gantry ends up with the board in its face)
-    const gantry = CHAPTERS.some((c) => c.stop && mountOf(c.stop) === 'gantry' && boardS(c.stop) > a - 10 && boardS(c.stop) < b + 30);
-    const pick = (r: DriveRig) => (gantry && r === 'drone' ? 'chase' : r);
-    out.push({ s: a, rig: pick(ORDER[k % ORDER.length]), side: k % 2 ? -1 : 1 });
-    if (b - a > 70) out.push({ s: a + (b - a) / 2, rig: pick(ORDER[(k + 3) % ORDER.length]), side: k % 2 ? 1 : -1 });
+  for (let k = 0; k < ZONES.length; k++) {
+    const a = zoneSpan(ZONES[k])[1] + 1;
+    const b = k + 1 < ZONES.length ? zoneSpan(ZONES[k + 1])[0] - 8 : route.bridgeStart - 10;
+    out.push({ s: a, rig: RUN_RIGS[k % RUN_RIGS.length], side: k % 2 ? -1 : 1 });
+    if (b - a > 70) out.push({ s: a + (b - a) / 2, rig: 'chase', side: k % 2 ? 1 : -1 });
   }
   // over the water: the drone shows the bridge and the sea, then a pan past the first pylon
   const pyl = bridgeInfo.pylons[0] ?? route.bridgeStart + 240;
@@ -226,23 +225,23 @@ function sampleKeys(keys: Key[], t: number, pos: Vector3, look: Vector3) {
 }
 
 let parkedKeys: Key[] | null = null;
-/** I and the start of II, keyed to journey progress: the car is parked, the camera moves. */
+/** The intro while parked, keyed to journey progress: the car is still, the camera moves. */
 function getParkedKeys(): Key[] {
   return (parkedKeys ??= [
     // up the street past the parked car to the Catalyst billboard, rain in the lamps
-    { at: chapterAt('stillness', 0), pos: [-3.3, 1.05, -9.4], look: [1.2, 4.4, 10], fov: 34 },
-    { at: chapterAt('stillness', 0.5), pos: [-1.2, 0.95, -7.0], look: [0.6, 2.4, 6], fov: 32 },
+    { at: 0, pos: [-3.3, 1.05, -9.4], look: [1.2, 4.4, 10], fov: 34 },
+    { at: IGNITION.at * 0.4, pos: [-1.2, 0.95, -7.0], look: [0.6, 2.4, 6], fov: 32 },
     // round behind it, in on the rear three-quarter and along the left flank (the open
     // side of this street: a barrier lines the right)...
-    { at: chapterAt('stillness', 0.94), pos: [2.75, 0.74, -3.5], look: [0.25, 0.62, 0.2], fov: 31 },
-    { at: chapterAt('ignition', 0.06), pos: [2.95, 0.62, 0.7], look: [0.7, 0.6, 1.7], fov: 30 },
+    { at: IGNITION.at * 0.8, pos: [2.75, 0.74, -3.5], look: [0.25, 0.62, 0.2], fov: 31 },
+    { at: IGNITION.at * 0.96, pos: [2.95, 0.62, 0.7], look: [0.7, 0.6, 1.7], fov: 30 },
     // ...to the left headlight as the engine catches
-    { at: chapterAt('ignition', IGNITION.at + 0.05), pos: [2.4, 0.64, 4.4], look: [0.58, 0.64, 1.95], fov: 30 },
-    { at: chapterAt('ignition', IGNITION.driveAt), pos: [2.2, 0.6, 7.8], look: [0.3, 0.6, 1.6], fov: 31 },
+    { at: IGNITION.at + (IGNITION.driveAt - IGNITION.at) * 0.3, pos: [2.4, 0.64, 4.4], look: [0.58, 0.64, 1.95], fov: 30 },
+    { at: IGNITION.driveAt, pos: [2.2, 0.6, 7.8], look: [0.3, 0.6, 1.6], fov: 31 },
   ]);
 }
 
-/** II (from the pull-away) and III, keyed to route metres: a camera car riding ahead. */
+/** From the pull-away through the drift, keyed to route metres: a camera car riding ahead. */
 const RUN_KEYS: Key[] = [
   { at: PARK_S, pos: [2.2, 0.6, 7.8], look: [0.3, 0.6, 1.6], fov: 31 },
   { at: 128, pos: [2.0, 0.52, 9.5], look: [0, 0.56, 1.4], fov: 31 },
@@ -281,7 +280,7 @@ function openingRig(out: Pose) {
 
 /** IV: trailing well back on the road itself, through the smoke, closing up as it thins. */
 function wakeRig(out: Pose) {
-  const u = smoothstep(carState.s, DRIFT.hold + 14, STOPS.arrival.s - 14);
+  const u = smoothstep(carState.s, DRIFT.hold + 14, zoneSpan(ZONES[0])[0] - 14);
   const back = lerp(17, 9.5, u);
   const at = carState.s - back;
   const h = sampleRoute(at, out.pos);
@@ -317,6 +316,16 @@ function driveRig(rig: DriveRig, side: 1 | -1, key: string, out: Pose) {
       out.fov = 36;
       out.dof = 0.6;
       out.focusRange = 5;
+      break;
+    case 'launch':
+      // low and well back on a long lens: the road rushes under it, the car squats and goes
+      car(0.9 * side, 0.55, -11, out.pos);
+      car(0, 0.7, 6, out.look);
+      out.fov = 26;
+      out.dof = 1;
+      out.focusRange = 6;
+      out.focus.copy(carState.position).setY(carState.position.y + 0.6);
+      out.shake = 1.2;
       break;
     case 'wheel':
       // bolted low by the front wheel on the outside, looking back down the flank
@@ -372,40 +381,16 @@ function driveRig(rig: DriveRig, side: 1 | -1, key: string, out: Pose) {
   }
 }
 
-/** Where each stop's camera stands (fixed per stop, so it never jumps as the car creeps). */
-type StopPlace = {
-  pos: Vector3;
-  fov: number;
-  shift: number;
-  /** How far the look leans from the car toward the billboard (0 = on the car), while the car is short of it. */
-  lean: number;
-  /** Where the car has rolled past the board and the look is back on the car. */
-  passed: number;
-  /** Along the road at the camera, and the car's metre at the middle of the hold. */
-  along: Vector3;
-  mid: number;
-  /** The camera dollies this share of the car's creep through the hold. */
-  dolly: number;
-  /** Worked out against the board's final place (the raycast onto its wall has landed). */
-  placed: boolean;
-  /** How far below the board's centre the look aims, in board heights. */
-  drop: number;
-};
-const stopPlaces = new Map<string, StopPlace>();
+/** The finale's camera place (worked out once: the bridge never changes). */
+type StopPlace = { pos: Vector3; fov: number; shift: number; lean: number };
+let finalePlace: StopPlace | null = null;
 
 /** A throwaway lens to test framings with (16:9, as the page is designed). */
-const probe = new PerspectiveCamera(34, 16 / 9, 0.1, 3000);
+const probe = new PerspectiveCamera(30, 16 / 9, 0.1, 3000);
 const _pr = new Vector3();
-const _sa = new Vector3();
-const _sb = new Vector3();
 const _lk = new Vector3();
 const _bf = new Vector3();
 const _cb = Array.from({ length: 8 }, () => new Vector3());
-/** Share of the car's creep the stop camera follows: the car stays a steady size as it rolls past the board. */
-const STOP_DOLLY = 0.35;
-
-/** The look's lean at car metre `carS`: full up to the board, easing back onto the car as it rolls past. */
-const leanAt = (lean: number, mid: number, passed: number, carS: number) => lean * (1 - smoothstep(carS, mid, passed));
 
 /** Where the look aims on the board: its lower middle (the top may crop), or its centre (`drop` 0). */
 function boardFocus(a: ReturnType<typeof stopAnchor>, out: Vector3, drop = 0.25) {
@@ -422,56 +407,33 @@ function stopLook(cam: Vector3, car: Vector3, a: ReturnType<typeof stopAnchor>, 
   return out.addScaledVector(_d, -dist * halfW * shift);
 }
 
-/** The board's lower corner further from the camera (the end that shows past the car). */
-function boardFarCorner(a: ReturnType<typeof stopAnchor>, cam: Vector3, out: Vector3) {
-  _bf.set(0, 1, 0).cross(a.normal).normalize().multiplyScalar(a.width / 2 - 1);
-  out.copy(a.centre).add(_bf).setY(a.centre.y - a.height / 2 + 0.6);
-  _bf.multiplyScalar(-2).add(out);
-  return out.distanceToSquared(cam) >= _bf.distanceToSquared(cam) ? out : out.copy(_bf);
-}
-
-/**
- * Does the whole car sit in frame, clear of the panel's column (the left third), from this
- * camera with the car at metre `carS`? `board` 1: the board's lower middle must be in frame
- * too; 2: at least its far lower corner.
- */
-function stopFits(cam: Vector3, camS: number, carS: number, a: ReturnType<typeof stopAnchor>, lean: number, fov: number, shift: number, board: number) {
-  const h = sampleRoute(carS, _a);
-  // over a crest (the arrival ramp climbs 15%) the road itself can hide the car: the line
-  // from the lens to the car's roof must clear the road (and its barriers) all the way
-  for (let i = 1; i < 4; i++) {
-    const t = i / 4;
-    sampleRoute(camS + (carS - camS) * t, _pr);
-    if (cam.y + (_a.y + 1.1 - cam.y) * t < _pr.y + 0.9) return false;
-  }
-  forwardOf(h, _f);
-  leftOf(h, _l);
+/** Is the whole car (as it is now) in frame and clear of the panel's column, from cam looking at look? */
+function carInFrame(cam: Vector3, look: Vector3, fov: number) {
+  forwardOf(carState.heading, _f);
+  leftOf(carState.heading, _l);
   let k = 0;
   for (let iz = 0; iz < 2; iz++)
     for (let ix = 0; ix < 2; ix++)
       for (let iy = 0; iy < 2; iy++)
         _cb[k++]
-          .copy(_a)
+          .copy(carState.position)
           .addScaledVector(_f, iz ? 2.35 : -2.35)
           .addScaledVector(_l, ix ? 1 : -1)
-          .setY(_a.y + (iy ? 1.3 : 0.05));
-  _a.y += 0.7;
+          .setY(carState.position.y + (iy ? 1.3 : 0.05));
   probe.position.copy(cam);
   probe.fov = fov;
   probe.updateProjectionMatrix();
-  probe.lookAt(stopLook(cam, _a, a, lean, fov, shift, _lk));
+  probe.lookAt(look);
   probe.updateMatrixWorld();
   for (const c of _cb) {
     _pr.copy(c).project(probe);
-    if (_pr.z > 1 || _pr.x < -0.3 || _pr.x > 0.94 || _pr.y < -0.88 || _pr.y > 0.9) return false;
+    if (_pr.z > 1 || _pr.x < -0.3 || _pr.x > 0.94 || _pr.y < -0.9 || _pr.y > 0.9) return false;
   }
-  if (!board) return true;
-  (board === 2 ? boardFarCorner(a, cam, _pr) : boardFocus(a, _pr)).project(probe);
-  return _pr.z < 1 && _pr.x > -0.3 && _pr.x < 1 && _pr.y > -1 && _pr.y < 1;
+  return true;
 }
 
 /**
- * The finale's board is high on a pylon and the car rolls on 34 m under it: a camera back
+ * The finale's board is high on a pylon and the car rolls to a stop under it: a camera back
  * down the deck, the look halfway between the car and the board, the lens opened (or the
  * camera backed off) until both fit.
  */
@@ -479,7 +441,6 @@ function pylonPlace(stop: ReturnType<typeof nearestStop>, a: ReturnType<typeof s
   const spec = STOPS[stop];
   const r = getRoute();
   const pos = new Vector3();
-  const along = new Vector3();
   const carAt = new Vector3();
   sampleRoute(spec.s, carAt);
   carAt.y += 0.7;
@@ -488,7 +449,6 @@ function pylonPlace(stop: ReturnType<typeof nearestStop>, a: ReturnType<typeof s
     const at = spec.s - back;
     const h = sampleRoute(at, pos);
     leftOf(h, _l);
-    forwardOf(h, along);
     const opposite = r.room(at)[spec.side === 1 ? 1 : 0];
     pos.addScaledVector(_l, -spec.side * Math.min(opposite * 0.55, 3.2)).setY(pos.y + 1.45);
   };
@@ -508,135 +468,18 @@ function pylonPlace(stop: ReturnType<typeof nearestStop>, a: ReturnType<typeof s
     put();
     fov = need();
   }
-  director.stops[stop] = { back, side: 1, height: 1.45, lean: 0.5, fov: +clamp(fov, 30, CONFIG.camera.fovMax).toFixed(1), fit: 'pylon' };
-  return { pos, fov: clamp(fov, 30, CONFIG.camera.fovMax), shift: 0.28, lean: 0.5, passed: Infinity, along, mid: spec.s, dolly: 0, placed: true, drop: 0 };
+  return { pos, fov: clamp(fov, 30, CONFIG.camera.fovMax), shift: 0.28, lean: 0.5 };
 }
 
-/**
- * At a stop: the car big in the foreground and the billboard beyond it. A rear three-quarter
- * from back down the road (never into the headlights), on the far half of it, low. The car
- * creeps about 18 m through the hold, so the place is tested with the car at both ends and
- * the middle: the closest camera, then the most board, then the longest lens that keeps the
- * whole car in frame and right of the panel. The board's top may crop; the panel carries
- * the words. The camera dollies a third of the creep, so the car stays a steady size.
- */
-function stopRig(stop: ReturnType<typeof nearestStop>, out: Pose) {
-  const spec = STOPS[stop];
-  const a = stopAnchor(stop);
-  const mount = mountOf(stop);
-  let place = stopPlaces.get(stop);
-  if (mount === 'pylon' && !place) {
-    place = pylonPlace(stop, a);
-    stopPlaces.set(stop, place);
-  }
-  if (!place || (a.placed && !place.placed)) {
-    const t0 = performance.now();
-    const r = getRoute();
-    const pos = new Vector3();
-    const along = new Vector3();
-    // a board on a gantry is straight ahead over the road: sit right behind the car, a
-    // little higher, with the car low and the board above it
-    const gantry = mount === 'gantry';
-    const shift = gantry ? 0.19 : 0.28;
-    const ends = [spec.s - HOLD.before, spec.s + HOLD.after];
-    const mid = (ends[0] + ends[1]) / 2;
-    const dolly = STOP_DOLLY;
-    // never so far back that another stop's gantry ends up hanging across the shot
-    let maxBack = 24;
-    for (const c of CHAPTERS) {
-      if (!c.stop || c.stop === stop || mountOf(c.stop) !== 'gantry') continue;
-      const gs = boardS(c.stop);
-      if (gs < mid) maxBack = Math.min(maxBack, mid - gs - 2.5);
-    }
-    // where across the road: the far side from the board (the board face-on), further across
-    // still (looking past the car at a board that stands well back), or the middle
-    const put = (back: number, side: number, height: number, at: Vector3) => {
-      const s0 = mid - back;
-      const h = sampleRoute(s0, at);
-      leftOf(h, _l);
-      forwardOf(h, along);
-      const [roomL, roomR] = r.room(s0);
-      const room = spec.side === 1 ? roomR : roomL;
-      const lateral = gantry ? 0 : -spec.side * (side === 2 ? Math.min(room - 1, 6) : side === 1 ? Math.min(room * 0.55, 3.2) : 0);
-      return at.addScaledVector(_l, lateral).setY(at.y + height);
-    };
-    const cam = new Vector3();
-    // the car whole, in sight and clear of the panel all through the creep; the board's
-    // lower middle in frame while the car is level with it (rolling past, it may slide out)
-    const fits = (back: number, side: number, height: number, lean: number, fov: number, board: number) => {
-      put(back, side, height, pos);
-      for (const carS of [ends[0], mid, ends[1]]) {
-        const d = dolly * (carS - mid);
-        cam.copy(pos).addScaledVector(along, d);
-        if (!stopFits(cam, mid - back + d, carS, a, leanAt(lean, mid, ends[1], carS), fov, shift, carS === mid ? board : 0)) return false;
-      }
-      return true;
-    };
-    // (the highest is a crane over a ramp's walls, only when nothing lower sees the board)
-    const heights = gantry ? [2.0, 3.2] : [1.35, 2.6, 3.8, 5.5];
-    const sides = gantry ? [1] : [1, 2, 0];
-    const first = Math.min(gantry ? 11 : 13, maxBack);
-    const furthest = Math.min(maxBack, 17);
-    // (the framing test knows the road, not the buildings: a place that frames well is then
-    // checked for a clear line to the car's roof and the board through the city model)
-    // (a ray through the whole city is not cheap: each place and target is tested once)
-    const sight = new Map<string, boolean>();
-    const seen = (key: string, board: number) => {
-      const k = key + '|' + board;
-      let ok = sight.get(k);
-      if (ok === undefined) {
-        sampleRoute(mid, _sa);
-        _sa.y += 1.1;
-        ok = inSight(pos, _sa);
-        if (ok && board === 1) ok = inSight(pos, boardFocus(a, _sb));
-        if (ok && board === 2) ok = inSight(pos, boardFarCorner(a, pos, _sb));
-        sight.set(k, ok);
-      }
-      return ok;
-    };
-    const tryAt = (back: number, lean: number, board: number) => {
-      for (const height of heights)
-        for (const side of sides)
-          for (const fov of [38, CONFIG.camera.fovMax])
-            if (fits(back, side, height, lean, fov, board) && seen(`${back}|${side}|${height}`, board)) return { back, side, height, lean, fov, fit: ['car', 'car+board', 'car+corner'][board] };
-      return null;
-    };
-    // the closest camera that gets both; failing that (a board that stands well back from
-    // the road), the most board the car allows, from as close as that can be; past ~17 m the
-    // car is small again
-    const both = () => {
-      for (let back = first; back <= furthest + 1e-6; back += 2)
-        for (let lean = 0.55; lean >= 0.15 - 1e-6; lean -= 0.1) {
-          const f = tryAt(back, lean, 1);
-          if (f) return f;
-        }
-      return null;
-    };
-    // (board 2: at least the board's far end in frame; 0: the car alone)
-    const carFirst = (board: number, last = furthest) => {
-      for (let lean = 0.55; lean >= 0.05 - 1e-6; lean -= 0.1)
-        for (let back = first; back <= last + 1e-6; back += 2) {
-          const f = tryAt(back, lean, board);
-          if (f) return f;
-        }
-      return null;
-    };
-    // (for a glimpse of the board the camera may stand a little further back)
-    const best = both() ?? carFirst(2, Math.min(maxBack, 21)) ?? carFirst(0) ?? { back: furthest, side: 1, height: heights[0], lean: 0.05, fov: CONFIG.camera.fovMax, fit: 'none' };
-    director.stops[stop] = { back: best.back, side: best.side, height: best.height, lean: +best.lean.toFixed(2), fov: best.fov, fit: best.fit, rays: sight.size, ms: Math.round(performance.now() - t0) };
-    put(best.back, best.side, best.height, pos);
-    place = { pos, fov: best.fov, shift, lean: best.lean, passed: ends[1], along, mid, dolly, placed: a.placed, drop: 0.25 };
-    stopPlaces.set(stop, place);
-  }
-  const creep = clamp(carState.s - place.mid, -HOLD.before - 4, HOLD.after + 4);
-  out.pos.copy(place.pos).addScaledVector(place.along, place.dolly * creep);
+/** The finale: the car rolls to a stop under the far pylon, its board above. */
+function finaleRig(out: Pose) {
+  const a = stopAnchor('finale');
+  finalePlace ??= pylonPlace('finale', a);
+  const place = finalePlace;
+  out.pos.copy(place.pos);
   _a.copy(carState.position).setY(carState.position.y + 0.7);
-  // the car and the board in the right two-thirds: the stop's panel takes the left column
-  // (the DOM layout solver moves it if the car ends up there anyway)
-  const lean = Number.isFinite(place.passed) ? leanAt(place.lean, place.mid, place.passed, carState.s) : place.lean;
-  stopLook(out.pos, _a, a, lean, place.fov, place.shift, out.look, place.drop);
+  stopLook(out.pos, _a, a, place.lean, place.fov, place.shift, out.look, 0);
   out.fov = place.fov;
-  // focus between the car and the board, deep enough for both
   out.focus.copy(_a).lerp(a.centre, 0.35);
   out.dof = 2.2;
   out.focusRange = 14;
@@ -644,6 +487,71 @@ function stopRig(stop: ReturnType<typeof nearestStop>, out: Pose) {
   out.shake = 0;
   out.nearFade[0] = 0.35;
   out.nearFade[1] = 2;
+}
+
+/** The zone shot's lean toward the board, eased (the most the car allows changes every frame). */
+const zoneLook = { lean: 0, at: 0, key: '' };
+
+/**
+ * A stop's slow zone (src/lib/pacing.ts), keyed to the zone's progress p (0 -> 1 as the car
+ * rolls past the billboard): low on the far side of the road, trailing the car on a side
+ * three-quarter (12 m back, easing out to 15.5 m), so the car stays a steady size while it
+ * rolls at walking pace. The camera rides forward with it, a slow push-in toward the
+ * billboard: the look leans across to the board as the details come up (as far as keeps
+ * the whole car in frame and right of the panel), and the focus pulls from the car to the
+ * board and back; by 0.85 it is on the car again for the launch.
+ */
+function zoneRig(id: ZoneId, out: Pose) {
+  const z = zoneById(id);
+  const a = stopAnchor(id);
+  const spec = STOPS[id];
+  const u = clamp(zoneProgress(z, carState.s), 0, 1);
+  const back = lerp(12, 15.5, smoothstep(u, 0, 0.9));
+  const camS = carState.s - back;
+  const h = sampleRoute(camS, out.pos);
+  leftOf(h, _l);
+  const room = getRoute().room(camS)[spec.side === 1 ? 1 : 0];
+  const lateral = -spec.side * clamp(room - 1.1, 1, 3.5);
+  out.pos.addScaledVector(_l, lateral).setY(out.pos.y + lerp(0.7, 1.25, smoothstep(u, 0.1, 0.6)));
+  // the boards hang ~20 m off the road: the lens opens while the look leans across to
+  // one, so the board fits beside the car (and closes again for the launch)
+  const want = 0.75 * smoothstep(u, 0.15, 0.5) * (1 - smoothstep(u, 0.72, 0.92));
+  const fov = lerp(30, 37, want / 0.75);
+  _a.copy(carState.position).setY(carState.position.y + 0.65);
+  // the most lean the car allows (bisection), wanted lean by p, eased in real time
+  let lo = 0;
+  let hi = want;
+  if (!carInFrame(out.pos, stopLook(out.pos, _a, a, hi, fov, 0.2, _lk), fov)) {
+    for (let i = 0; i < 6; i++) {
+      const mid = (lo + hi) / 2;
+      if (carInFrame(out.pos, stopLook(out.pos, _a, a, mid, fov, 0.2, _lk), fov)) lo = mid;
+      else hi = mid;
+    }
+    hi = lo;
+  }
+  const now = performance.now();
+  if (zoneLook.key !== id) {
+    zoneLook.key = id;
+    zoneLook.lean = hi;
+  } else zoneLook.lean = MathUtils.damp(zoneLook.lean, hi, 2.5, Math.min(0.1, (now - zoneLook.at) / 1000));
+  zoneLook.at = now;
+  stopLook(out.pos, _a, a, zoneLook.lean, fov, 0.2, out.look);
+  out.fov = fov;
+  // focus: the car, pulling to the billboard as the details come up, back for the launch
+  const pull = smoothstep(u, 0.25, 0.6) * (1 - smoothstep(u, 0.78, 0.95));
+  out.focus.copy(_a).lerp(a.centre, pull);
+  out.dof = 2.6;
+  out.focusRange = lerp(4, 9, pull);
+  out.handheld = 0.3;
+  out.shake = 0.35;
+  out.nearFade[0] = 0.35;
+  out.nearFade[1] = 2;
+}
+
+/** At a stop: a zone's rolling shot, or the finale's place on the bridge. */
+function stopRig(stop: ReturnType<typeof nearestStop>, out: Pose) {
+  if (stop === 'finale') finaleRig(out);
+  else zoneRig(stop, out);
 }
 
 function evalShot(shot: Shot, out: Pose) {
@@ -676,9 +584,11 @@ function wanted(now: number): { shot: Shot; force: boolean } {
   // at a stop (and the bridge stop at the end), unless driving through it fast
   const stop = nearestStop(s);
   const spec = STOPS[stop];
-  const atStop = speed < 20 && Math.abs(s - spec.s) < (stop === 'finale' ? 60 : 24) && (inHold(s) || stop === 'finale');
-  if (atStop) return { shot: shot('stop', 1, stop), force: true };
-  if (s < STOPS.arrival.s - 14) return { shot: shot('wake', 1, 'iv'), force: false };
+  // a slow zone (from a few metres before it, so the camera has settled as the title lands)
+  const zone = zoneAtS(s + 8, 0) ?? zoneAtS(s, 2);
+  if (zone && speed < 20) return { shot: shot('stop', 1, zone.id), force: true };
+  if (stop === 'finale' && speed < 20 && Math.abs(s - spec.s) < 60) return { shot: shot('stop', 1, stop), force: true };
+  if (s < zoneSpan(ZONES[0])[0] - 14) return { shot: shot('wake', 1, 'iv'), force: false };
   if (speed > FAST) return { shot: shot('chase', 1, 'fast'), force: false };
   const cue = scheduledAt(s);
   return { shot: shot(cue.rig, cue.side, cue.s.toFixed(0)), force: false };
@@ -689,7 +599,7 @@ function wanted(now: number): { shot: Shot; force: boolean } {
  * the car on a soft mount, a hood camera is bolted to it, a camera standing in the street
  * doesn't follow at all.
  */
-const FOLLOW: Record<RigId, number> = { opening: 0.6, wake: 1, stop: 0, chase: 1, wheel: 0.5, hood: 0, sidepan: 0, drone: 0.7 };
+const FOLLOW: Record<RigId, number> = { opening: 0.6, wake: 1, stop: 0, chase: 1, launch: 1, wheel: 0.5, hood: 0, sidepan: 0, drone: 0.7 };
 
 /* -------------------------------------------------------------- the blend */
 

@@ -1,145 +1,50 @@
 import { MathUtils, Vector3 } from 'three';
 import { easing } from 'maath';
-import { CHAPTERS, chapterById, IGNITION, PAGES, type StopId } from './chapters';
+import { type StopId } from './chapters';
 import { getRoute, routeCurvature, sampleRoute, STOPS } from './cityRoute';
 import { CONFIG } from './config';
 import { carState, forwardOf, leftOf } from './motion';
+import { DRIFT, PARK_S, sAtTime, speedAtS, timeAtProgress, ZONES, zoneAtS } from './pacing';
+
+export { DRIFT, PARK_S };
 
 const { clamp, degToRad, smootherstep, smoothstep } = MathUtils;
 
 /**
  * THE DRIVE
  * =========
- * Journey progress -> metres along the route, one curve for the whole page:
+ * Journey progress -> metres along the route: progress is time (src/lib/pacing.ts), and
+ * the route metre is the integral of the planned speed curve. Parked under the title, the
+ * launch, a fast run with the drift through the plaza, then four slow zones (each a stop's
+ * billboard, rolled past at walking pace) with fast runs between, and the bridge.
  *
- *   I     parked at PARK_S, engine off
- *   II    the engine catches, then the car pulls away (from IGNITION.driveAt)
- *   III   the drift: a steady pace from DRIFT.from to DRIFT.to, sideways from the flick
- *         into the plaza to the end of the long left-hander
- *   IV    it runs on through the S-bend, slowing for the first stop
- *   V-XI  each stop chapter holds the car near its billboard (it creeps past it, engine
- *         ticking over) through the middle of the chapter and drives on to the next stop
- *         across the chapter boundary:
- *
- *           chapter k:   arrive ......... hold (creep past the billboard) ......... leave
- *                        0     ARRIVE                                    LEAVE       1
- *   Fin   up the ramp and onto the bridge, rolling to a stop under the far pylon
- *
- * Between two keys the distance follows a cubic Hermite with each key's speed at both
- * ends, so the car pulls away, runs and brakes with no step in speed. The drift angle is a
- * function of position (an explicit slide in III; from the route's curvature after), so the
- * slides always happen at the same corners and the camera knows where they are.
+ * The drift angle is a function of position (an explicit slide on the first run; small
+ * ones where the route bends hard at the planned speed after it), so the slides always
+ * happen at the same corners and the camera knows where they are.
  */
-
-/** Where the car is parked in I and II: the straight before the plaza, the Catalyst board ahead. */
-export const PARK_S = 112;
-/** The drift (chapter III), route metres. */
-export const DRIFT = {
-  from: 160,
-  /** The flick: the tail starts to come round going into the plaza... */
-  flick: 174,
-  /** ...and is fully out by here... */
-  full: 190,
-  /** ...held down the long left-hander... */
-  hold: 350,
-  /** ...and straight again by here. */
-  to: 372,
-  /** +1: tail out to the right (a left-hander). */
-  sign: 1,
-};
-
-const ARRIVE = 0.22;
-const LEAVE = 0.72;
-/** Metres the car creeps through a stop (before / after the billboard). */
-const HOLD_BEFORE = 10;
-const HOLD_AFTER = 8;
-/** The bridge stop: arrive later, roll on to the end. */
-const FINALE_ARRIVE = 0.5;
-const FINALE_ROLL = 34;
-/** A steady scroll, pages per second, for the drift profile after the stops. */
-const NOMINAL_SCROLL = 0.45;
-
-type Key = { p: number; s: number; v: number };
-
-let keys: Key[] | null = null;
-let holds: [number, number][] = [];
-
-function buildKeys(): Key[] {
-  const out: Key[] = [];
-  const at = (id: Parameters<typeof chapterById>[0], f: number) => {
-    const c = chapterById(id);
-    return c.start + f * (c.end - c.start);
-  };
-  const turn = chapterById('turn');
-  const vDrift = (DRIFT.to - DRIFT.from) / (turn.end - turn.start);
-  // I and the start of II: parked
-  out.push({ p: 0, s: PARK_S, v: 0 });
-  out.push({ p: at('ignition', IGNITION.driveAt), s: PARK_S, v: 0 });
-  // II: pulls away; III: a steady drift pace
-  out.push({ p: turn.start, s: DRIFT.from, v: vDrift });
-  out.push({ p: turn.end, s: DRIFT.to, v: vDrift });
-  // IV runs into V's first hold; then the stops
-  holds = [];
-  for (const c of CHAPTERS) {
-    if (!c.stop) continue;
-    const stop = STOPS[c.stop];
-    const len = c.end - c.start;
-    if (c.stop === 'finale') {
-      const a = c.start + FINALE_ARRIVE * len;
-      const holdV = FINALE_ROLL / (c.end - a);
-      out.push({ p: a, s: stop.s - 20, v: holdV });
-      out.push({ p: c.end, s: stop.s - 20 + FINALE_ROLL, v: holdV });
-      continue;
-    }
-    const a = c.start + ARRIVE * len;
-    const l = c.start + LEAVE * len;
-    const creep = (HOLD_BEFORE + HOLD_AFTER) / (l - a);
-    out.push({ p: a, s: stop.s - HOLD_BEFORE, v: creep });
-    out.push({ p: l, s: stop.s + HOLD_AFTER, v: creep });
-    holds.push([stop.s - HOLD_BEFORE, stop.s + HOLD_AFTER]);
-  }
-  return out;
-}
-
-const getKeys = () => (keys ??= buildKeys());
 
 /** Route metres at journey progress p. */
 export function citySAt(p: number) {
-  const k = getKeys();
-  if (p <= k[0].p) return k[0].s;
-  for (let i = 0; i < k.length - 1; i++) {
-    const a = k[i];
-    const b = k[i + 1];
-    if (p > b.p) continue;
-    const T = b.p - a.p;
-    if (T <= 1e-9) return b.s;
-    const u = (p - a.p) / T;
-    const u2 = u * u;
-    const u3 = u2 * u;
-    return (2 * u3 - 3 * u2 + 1) * a.s + (u3 - 2 * u2 + u) * a.v * T + (-2 * u3 + 3 * u2) * b.s + (u3 - u2) * b.v * T;
-  }
-  return k[k.length - 1].s;
+  return sAtTime(timeAtProgress(p));
 }
 
-/** Is route metre s inside a stop's hold (no drifting, the camera frames the billboard)? */
+/** Is route metre s inside a stop's slow zone (no drifting, the camera frames the billboard)? */
 export function inHold(s: number) {
-  getKeys();
-  for (const [a, b] of holds) if (s >= a - 2 && s <= b + 2) return true;
-  return false;
+  return zoneAtS(s, 2) !== null;
 }
 
-/** The stop whose billboard is nearest to s. */
+/** The stop whose billboard is nearest to s (the four zones, then the bridge). */
 export function nearestStop(s: number): StopId {
-  let best: StopId = 'arrival';
+  let best: StopId = ZONES[0].id;
   let d = Infinity;
-  for (const c of CHAPTERS) {
-    if (!c.stop) continue;
-    const dd = Math.abs(STOPS[c.stop].s - s);
+  for (const z of ZONES) {
+    const dd = Math.abs(z.board - s);
     if (dd < d) {
       d = dd;
-      best = c.stop;
+      best = z.id;
     }
   }
+  if (Math.abs(STOPS.finale.s - s) < d) best = 'finale';
   return best;
 }
 
@@ -161,28 +66,12 @@ function buildYaw() {
   const r = getRoute();
   const n = Math.ceil(r.length / STEP) + 1;
   const raw = new Float32Array(n);
-  // after the stops start: small slides where the route bends hard at the speed a steady
-  // scroll gives (ds/dp sampled from the mapping)
-  const dpds = new Float32Array(n);
-  const k = getKeys();
-  const first = holds[0]?.[0] ?? DRIFT.to;
-  const pFrom = k[0].p;
-  const pTo = k[k.length - 1].p;
-  const pStep = (pTo - pFrom) / 6000;
-  let lastS = citySAt(pFrom);
-  for (let p = pFrom + pStep; p <= pTo; p += pStep) {
-    const s = citySAt(p);
-    const v = (s - lastS) / pStep; // metres per unit progress
-    const i0 = Math.max(0, Math.floor(Math.min(s, lastS) / STEP));
-    const i1 = Math.min(n - 1, Math.ceil(Math.max(s, lastS) / STEP));
-    for (let i = i0; i <= i1; i++) dpds[i] = v;
-    lastS = s;
-  }
+  // after the drift: small slides where the route bends hard at the planned speed
   const peak = degToRad(CONFIG.city.driftYawDeg);
   for (let i = 0; i < n; i++) {
     const s = i * STEP;
-    if (s < first || s > r.bridgeStart - 20 || inHold(s)) continue;
-    const v = (dpds[i] * NOMINAL_SCROLL) / PAGES; // m/s
+    if (s < DRIFT.to + 10 || s > r.bridgeStart - 20 || inHold(s)) continue;
+    const v = speedAtS(s); // m/s
     const kappa = routeCurvature(s, 5);
     const lat = v * v * Math.abs(kappa);
     raw[i] = Math.sign(kappa) * smoothstep(lat, CONFIG.city.driftFrom, CONFIG.city.driftFull) * peak;
@@ -292,4 +181,3 @@ export function stepCityDrive(p: number, dt: number) {
   st.initialized = true;
 }
 
-export const HOLD = { arrive: ARRIVE, leave: LEAVE, finaleArrive: FINALE_ARRIVE, before: HOLD_BEFORE, after: HOLD_AFTER };

@@ -6,7 +6,8 @@ import { button, useControls } from 'leva';
 import { advance } from '@react-three/fiber';
 import { CONFIG, RANGES, type Config } from '@/lib/config';
 import { carState } from '@/lib/motion';
-import { chapterAnchor, chapterAt, CHAPTERS } from '@/lib/chapters';
+import { chapterAnchor, CHAPTERS, IGNITION } from '@/lib/chapters';
+import { DRIFT, progressAtTime, progressAtZone, timeAtS, ZONES } from '@/lib/pacing';
 import { chapterState } from '@/lib/chapterRuntime';
 import { interaction } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
@@ -75,10 +76,11 @@ export function DebugPanel() {
     // One button per chapter, plus the moments of the opening (no dots in leva keys: a
     // dot means "nested folder")
     ...Object.fromEntries(CHAPTERS.map((c) => [`${c.numeral}: ${c.title}`, button(() => jump(chapterAnchor(c.id)))])),
-    'II: engine catches': button(() => jump(chapterAt('ignition', 0.17))),
-    'III: the flick': button(() => jump(chapterAt('turn', 0.07))),
-    'III: mid-drift': button(() => jump(chapterAt('turn', 0.5))),
-    'IV: in the smoke': button(() => jump(chapterAt('wake', 0.15))),
+    '00: engine catches': button(() => jump(IGNITION.at + 0.002)),
+    '00: the flick': button(() => jump(progressAtTime(timeAtS(DRIFT.flick)))),
+    '00: mid-drift': button(() => jump(progressAtTime(timeAtS((DRIFT.full + DRIFT.hold) / 2)))),
+    '01: in the smoke': button(() => jump(progressAtTime(timeAtS(DRIFT.to + 30)))),
+    ...Object.fromEntries(ZONES.map((z) => [`zone ${z.id}: board`, button(() => jump(progressAtZone(z.id, z.before / (z.before + z.after))))])),
     'play 0 to 1 (60 s)': button(() => play()),
     'back to scroll': button(() => {
       tween.current?.kill();

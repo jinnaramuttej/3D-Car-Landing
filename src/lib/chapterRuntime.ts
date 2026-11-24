@@ -3,8 +3,9 @@ import { easing } from 'maath';
 import { CONFIG } from './config';
 import { engine } from './engineAudio';
 import { forwardOf, leftOf } from './motion';
-import { CHAPTERS, type ChapterLook, chapterById, chapterIndexAt, type Env, IGNITION, type StopId } from './chapters';
+import { CHAPTERS, type ChapterLook, chapterIndexAt, type Env, IGNITION, type StopId } from './chapters';
 import { citySAt } from './cityDrive';
+import { DRIFT, zoneById, zoneProgress } from './pacing';
 import { getRoute, sampleRoute } from './cityRoute';
 
 const { clamp, degToRad, lerp, smoothstep } = MathUtils;
@@ -57,13 +58,13 @@ export const chapterState = {
   rate: 0,
   chapter: 0,
   chapterLocal: 0,
-  /** Inside chapter III (the drift). */
+  /** On the drift (the first run's slide through the plaza and down the long left-hander). */
   drift: false,
   /** Damped environment (night -> dawn). */
   env: makeEnv(),
   /** Damped per-chapter effects. */
   look: { headlights: 0 } as ChapterLook,
-  /** 0 = engine off and dark .. 1 = lights fully up (chapter II ignition). */
+  /** 0 = engine off and dark .. 1 = lights fully up (the ignition, end of the intro's parked beat). */
   ignition: 0,
   engineOn: false,
   /** 0..1 bell across a chapter-to-chapter move (peaks halfway). */
@@ -101,12 +102,21 @@ function targetEnv(ci: number, local: number, out: EnvState) {
 /** Chapter index of each stop. */
 const STOP_CHAPTER = Object.fromEntries(CHAPTERS.map((c, i) => [c.stop ?? '', i])) as Record<StopId, number>;
 
-/** 0..1: how much this stop is the one on screen (up through its hold, down as the car leaves). */
+/** Where the car is on the route right now (the journey on screen), for the zone weights. */
+const carS = () => citySAt(chapterState.progress);
+
+/**
+ * 0..1: how much this stop is the one on screen: up as the car rolls into its slow zone,
+ * down as it launches out (zone progress 0.02-0.12 in, 0.84-0.95 out). The finale: across
+ * its chapter.
+ */
 export function stopWeight(id: StopId) {
-  const i = STOP_CHAPTER[id];
-  if (chapterState.chapter !== i) return 0;
-  const l = chapterState.chapterLocal;
-  return smoothstep(l, 0.08, 0.24) * (1 - smoothstep(l, 0.74, 0.9));
+  if (id === 'finale') {
+    if (chapterState.chapter !== STOP_CHAPTER.finale) return 0;
+    return smoothstep(chapterState.chapterLocal, 0.08, 0.24);
+  }
+  const p = zoneProgress(zoneById(id), carS());
+  return smoothstep(p, 0.02, 0.12) * (1 - smoothstep(p, 0.84, 0.95));
 }
 
 /**
@@ -159,7 +169,8 @@ export function stepChapters(raw: number, dt: number) {
   const ch = CHAPTERS[ci];
   st.chapter = ci;
   st.chapterLocal = clamp((p - ch.start) / (ch.end - ch.start), 0, 1);
-  st.drift = ch.id === 'turn';
+  const s = citySAt(p);
+  st.drift = s >= DRIFT.from && s <= DRIFT.to + 20;
 
   // Environment: target for this point of the chapter, damped so nothing jumps
   targetEnv(ci, st.chapterLocal, _env);
@@ -180,11 +191,9 @@ export function stepChapters(raw: number, dt: number) {
   if (snap) st.look.headlights = head;
   else easing.damp(st.look, 'headlights', head, 0.12, dt);
 
-  // Ignition (chapter II): engine catches, lights come up with a flicker
-  const ign = chapterById('ignition');
-  const len = ign.end - ign.start;
-  const igniteAt = ign.start + IGNITION.at * len;
-  st.ignition = smoothstep(p, igniteAt, igniteAt + IGNITION.lightsIn * len);
+  // Ignition (the end of the intro's parked beat): engine catches, lights come up with a flicker
+  const igniteAt = IGNITION.at;
+  st.ignition = smoothstep(p, igniteAt, igniteAt + IGNITION.lightsIn);
   st.engineOn = p >= igniteAt;
   if (p < igniteAt - 0.002) st.igniteArmed = true;
   if (st.engineOn && st.igniteArmed && !snap) {

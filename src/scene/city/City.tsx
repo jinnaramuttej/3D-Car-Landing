@@ -3,12 +3,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
-import { type Group, type Intersection, MathUtils, type Mesh, type Object3D, type PerspectiveCamera, Raycaster, type Texture, Vector3 } from 'three';
+import { type Group, MathUtils, type Mesh, type Object3D, type PerspectiveCamera, type Texture } from 'three';
 import { chapterState } from '@/lib/chapterRuntime';
 import { CITY_ORIGIN, getRoute, SEA_LEVEL } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
-import { setSightTest } from '@/lib/sightline';
 import { carState } from '@/lib/motion';
 import { type CityKind, cityUniforms, patchCity } from './cityMaterials';
 import { disposeReflection, reflectionUniforms, renderReflection } from './cityReflection';
@@ -59,23 +58,6 @@ export function City() {
       if (m.isMesh) m.receiveShadow = false;
     });
     mats.current = patchCity(gltf.scene);
-    // line of sight through the city, for the director's stop cameras (src/lib/sightline.ts)
-    const ray = new Raycaster();
-    ray.layers.enableAll();
-    const dir = new Vector3();
-    const hits: Intersection[] = [];
-    setSightTest((from, to) => {
-      dir.subVectors(to, from);
-      const len = dir.length();
-      if (len < 1) return true;
-      ray.set(from, dir.divideScalar(len));
-      ray.near = 0.3;
-      ray.far = len - 0.5;
-      hits.length = 0;
-      ray.intersectObject(gltf.scene, true, hits);
-      return hits.length === 0;
-    });
-    return () => setSightTest(null);
   }, [gltf.scene]);
 
   useEffect(() => () => disposeReflection(), []);

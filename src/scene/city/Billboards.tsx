@@ -24,7 +24,8 @@ import { EXTRAS, getRoute, sampleRoute, STOPS } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { carState, leftOf } from '@/lib/motion';
-import { type BoardId, boardS, expoIndexAt, heartbeatPulse, isExtra, mountOf, stopAnchor, stopFx, useStops } from '@/lib/stops';
+import { zoneById, zoneProgress } from '@/lib/pacing';
+import { type BoardId, boardS, EXPO_SPAN, expoIndexAt, heartbeatPulse, isExtra, mountOf, stopAnchor, stopFx, useStops } from '@/lib/stops';
 import { ART_H, ART_W, type ArtState, drawStop, resolveFont } from './billboardArt';
 import { CITY_URL, useCityLayer } from './City';
 
@@ -219,7 +220,7 @@ export function Billboards() {
   }, [boards, gltf.scene]);
 
   const art = useMemo<ArtState>(
-    () => ({ robowarsClass: 0, competitionFilter: 'All', competitionAnim: 1, previousFilter: 'All', speakerCategory: useStops.getState().speakerCategory, expoIndex: 0, pulse: 0 }),
+    () => ({ robowarsClass: 0, competitionFilter: 'All', competitionAnim: 1, previousFilter: 'All', speakerCategory: useStops.getState().speakerCategory, expoIndex: 0, stageExpo: false, pulse: 0 }),
     [],
   );
 
@@ -234,7 +235,10 @@ export function Billboards() {
     art.competitionAnim = Math.min(1, art.competitionAnim + dt * 1.4);
     art.robowarsClass = ui.robowarsClass;
     art.speakerCategory = ui.speakerCategory;
-    art.expoIndex = expoIndexAt(chapterState.progress, 4);
+    // the Stage: past speakers through the first half of its zone, then the exhibits
+    const stageP = zoneProgress(zoneById('speakers'), carState.s);
+    art.expoIndex = expoIndexAt(stageP, 4);
+    art.stageExpo = stageP >= EXPO_SPAN[0];
     stopFx.expoIndex = art.expoIndex;
     stopFx.heartbeat = heartbeatPulse(t, CONFIG.city.heartbeatBpm);
     art.pulse = mobile ? 0.6 : stopFx.heartbeat;
@@ -252,10 +256,10 @@ export function Billboards() {
             : b.id === 'competitions'
               ? art.competitionFilter
               : b.id === 'speakers'
-                ? art.speakerCategory
-                : b.id === 'expo'
-                  ? `${art.expoIndex}`
-                  : 'static';
+                ? art.stageExpo
+                  ? `expo${art.expoIndex}`
+                  : art.speakerCategory
+                : 'static';
         // (animated art redraws the canvas: only while its own stop is the one on screen)
         const own = CHAPTERS.findIndex((c) => c.stop === b.id) === chapterState.chapter;
         const anim = !own ? b.anim : b.id === 'competitions' ? art.competitionAnim.toFixed(2) : b.id === 'dkms' ? (Math.round(art.pulse * 8) / 8).toFixed(3) : '';

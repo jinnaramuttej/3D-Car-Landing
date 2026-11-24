@@ -3,7 +3,8 @@
 import { useEffect, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { type Material, type Object3D, type Texture, WebGLRenderTarget } from 'three';
-import { CHAPTERS, chapterAt } from '@/lib/chapters';
+import { chapterAt, IGNITION } from '@/lib/chapters';
+import { DRIFT, progressAtTime, progressAtZone, timeAtS, ZONES } from '@/lib/pacing';
 import { chapterState } from '@/lib/chapterRuntime';
 import { carState } from '@/lib/motion';
 import { useStore } from '@/lib/store';
@@ -19,10 +20,11 @@ function texturesOf(m: Material, out: Set<Texture>) {
 
 /** Places the warm-up drives through (journey progress), a few frames at each. */
 function warmupStops() {
-  const out = [chapterAt('stillness', 0.4), chapterAt('ignition', 0.2), chapterAt('ignition', 0.8)];
-  for (const f of [0.05, 0.12, 0.3, 0.6, 0.9]) out.push(chapterAt('turn', f));
-  out.push(chapterAt('wake', 0.15), chapterAt('wake', 0.7));
-  for (const c of CHAPTERS.slice(4)) out.push(chapterAt(c.id, 0.45));
+  const atS = (s: number) => progressAtTime(timeAtS(s));
+  const out = [IGNITION.at * 0.5, IGNITION.at + 0.004, IGNITION.driveAt + 0.004];
+  for (const s of [DRIFT.from, DRIFT.flick, DRIFT.full + 20, (DRIFT.full + DRIFT.hold) / 2, DRIFT.hold, DRIFT.to + 30, DRIFT.to + 90]) out.push(atS(s));
+  // every stop: rolling in, at the board, launching out
+  for (const z of ZONES) for (const f of [0.1, 0.5, 0.9]) out.push(progressAtZone(z.id, f));
   out.push(chapterAt('finale', 0.2), chapterAt('finale', 0.35), chapterAt('finale', 0.9));
   return out;
 }

@@ -824,7 +824,7 @@ li:last-child .mm-track {
   gap: 16px;
   width: min(440px, 84vw);
   padding: 22px 24px;
-  border-color: rgba(255, 106, 26, 0.35);
+  border-color: rgba(255, 42, 26, 0.35);
 }
 
 .prize {
@@ -844,8 +844,8 @@ li:last-child .mm-track {
   font-family: var(--display);
   font-weight: 900;
   font-size: clamp(30px, 3.4vw, 46px);
-  color: #ff7a2a;
-  text-shadow: 0 0 26px rgba(255, 106, 26, 0.45);
+  color: var(--accent);
+  text-shadow: 0 0 26px rgba(255, 42, 26, 0.45);
 }
 
 .classes {
@@ -864,8 +864,8 @@ li:last-child .mm-track {
 }
 
 .classes .chip.is-on {
-  border-color: #ff6a1a;
-  background: rgba(255, 106, 26, 0.2);
+  border-color: var(--accent);
+  background: rgba(255, 42, 26, 0.2);
 }
 
 .arena-stats {
@@ -974,7 +974,7 @@ li:last-child .mm-track {
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 2px, transparent 2px 9px),
     linear-gradient(#26282e, #1a1b20);
   border-bottom: 3px solid transparent;
-  border-image: repeating-linear-gradient(-45deg, #f2c21b 0 10px, #111 10px 20px) 3;
+  border-image: repeating-linear-gradient(-45deg, var(--accent) 0 10px, #111 10px 20px) 3;
 }
 
 .bay-door span {
@@ -1130,7 +1130,7 @@ li:last-child .mm-track {
 .exhibit-index {
   font-size: 11px;
   letter-spacing: 0.3em;
-  color: #5fe8ff;
+  color: var(--accent);
 }
 
 .exhibit-now strong {
@@ -1156,7 +1156,7 @@ li:last-child .mm-track {
   justify-items: start;
   width: min(380px, 80vw);
   padding: 24px;
-  border-color: rgba(95, 232, 255, 0.35);
+  border-color: rgba(255, 42, 26, 0.35);
   opacity: 0;
   pointer-events: none;
   transform: translate(16px, -50%);
@@ -1173,7 +1173,7 @@ li:last-child .mm-track {
 
 .exhibit-detail .kicker {
   margin: 0;
-  color: #5fe8ff;
+  color: var(--accent);
 }
 
 .exhibit-detail h3 {
@@ -1202,7 +1202,7 @@ li:last-child .mm-track {
 
 .hb .kicker {
   margin: 0;
-  color: #ff9a76;
+  color: var(--accent);
 }
 
 .hb-headline {
@@ -1226,7 +1226,7 @@ li:last-child .mm-track {
   width: 132px;
   height: 132px;
   margin: 6px 0 2px;
-  filter: drop-shadow(0 0 calc(6px + var(--beat) * 16px) rgba(255, 110, 80, 0.55));
+  filter: drop-shadow(0 0 calc(6px + var(--beat) * 16px) rgba(255, 42, 26, 0.55));
 }
 
 .hb-timer svg {
@@ -1246,7 +1246,7 @@ li:last-child .mm-track {
 }
 
 .hb-ring {
-  stroke: #ff7a52;
+  stroke: var(--accent);
   stroke-dasharray: 0 100;
 }
 
@@ -1305,7 +1305,7 @@ li:last-child .mm-track {
   font-size: 13px;
   letter-spacing: 0.36em;
   text-transform: uppercase;
-  color: #c9a6ff;
+  color: var(--accent);
 }
 
 .committees {
@@ -1367,7 +1367,7 @@ li:last-child .mm-track {
   transform: rotateY(180deg);
   font-size: 12px;
   line-height: 1.4;
-  color: #e6d6ff;
+  color: var(--fg);
   background: rgba(60, 28, 100, 0.72);
 }
 
@@ -1416,7 +1416,7 @@ li:last-child .mm-track {
   padding: 6px 10px;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.6);
-  color: #ffd84a;
+  color: var(--accent);
   font: 600 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
   letter-spacing: 0.08em;
   pointer-events: none;

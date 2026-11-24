@@ -31,7 +31,16 @@ export function resolveFont() {
   return display;
 }
 
+/** One accent and one night base on every board, the same as the page's (theme.accent). */
 const ACCENT = theme.accent;
+const BASE_TOP = '#0e0d12';
+const BASE_BOTTOM = '#040406';
+
+/** The accent (a #rrggbb colour) at an alpha. */
+function withAlpha(hex: string, a: number) {
+  const v = parseInt(hex.slice(1), 16);
+  return `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${a.toFixed(3)})`;
+}
 
 function fit(ctx: CanvasRenderingContext2D, text: string, weight: number, size: number, maxW: number) {
   let s = size;
@@ -91,7 +100,7 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, x: number, y: number,
 
 const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void> = {
   arrival(ctx) {
-    base(ctx, '#140608', '#050306');
+    base(ctx, BASE_TOP, BASE_BOTTOM);
     kicker(ctx, SITE.edition, 64, 110);
     const [word, year] = SITE.name.split(' ');
     ctx.fillStyle = '#fff';
@@ -105,23 +114,23 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
     ctx.fillText(SITE.dates, 64, 500);
   },
   robowars(ctx, s) {
-    base(ctx, '#1a0a02', '#060302');
-    kicker(ctx, UI.robowars.kicker, 64, 96, '#ff7a1a');
+    base(ctx, BASE_TOP, BASE_BOTTOM);
+    kicker(ctx, UI.robowars.kicker, 64, 96);
     ctx.fillStyle = '#fff';
     ctx.font = `900 112px ${display}`;
     ctx.fillText('ROBOWARS', 60, 220);
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
     ctx.font = `700 28px ${display}`;
     ctx.fillText(UI.robowars.prizeLabel.toUpperCase(), 64, 290);
-    ctx.fillStyle = '#ffb04a';
+    ctx.fillStyle = ACCENT;
     ctx.font = `900 76px ${display}`;
     ctx.fillText(ROBOWARS.prizePool, 60, 372);
     let x = 64;
-    for (const c of ROBOWARS.classes) x += chip(ctx, `${c} KG`, x, 486, c === s.robowarsClass, '#ff6a1a') + 18;
+    for (const c of ROBOWARS.classes) x += chip(ctx, `${c} KG`, x, 486, c === s.robowarsClass) + 18;
   },
   competitions(ctx, s) {
-    base(ctx, '#06101a', '#030508');
-    kicker(ctx, UI.competitions.kicker, 64, 90, '#3fd0ff');
+    base(ctx, BASE_TOP, BASE_BOTTOM);
+    kicker(ctx, UI.competitions.kicker, 64, 90);
     const list = COMPETITIONS.filter((c) => s.competitionFilter === 'All' || c.tag === s.competitionFilter);
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = `700 26px ${display}`;
@@ -135,7 +144,7 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
       const e = 1 - (1 - t) * (1 - t);
       const y = 214 + i * 76 + (1 - e) * 40;
       ctx.globalAlpha = e;
-      ctx.fillStyle = '#3fd0ff';
+      ctx.fillStyle = ACCENT;
       ctx.fillRect(64, y - 42, 8, 50);
       ctx.fillStyle = '#fff';
       fit(ctx, c.name, 800, 44, 600);
@@ -149,14 +158,14 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
     ctx.globalAlpha = 1;
   },
   speakers(ctx, s) {
-    base(ctx, '#070a1c', '#030409');
-    kicker(ctx, UI.speakers.kicker, 64, 90, '#8fa8ff');
+    base(ctx, BASE_TOP, BASE_BOTTOM);
+    kicker(ctx, UI.speakers.kicker, 64, 90);
     ctx.fillStyle = '#fff';
     fit(ctx, s.speakerCategory.toUpperCase(), 900, 64, 900);
     ctx.fillText(s.speakerCategory.toUpperCase(), 62, 168);
     VOICES.categories[s.speakerCategory].forEach(([name, title], i) => {
       const y = 250 + i * 80;
-      ctx.strokeStyle = '#8fa8ff';
+      ctx.strokeStyle = ACCENT;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(96, y - 14, 28, 0, Math.PI * 2);
@@ -175,15 +184,15 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
   },
   expo(ctx, s) {
     const ex = EXPO.exhibits[s.expoIndex] ?? EXPO.exhibits[0];
-    base(ctx, '#03141a', '#020608');
-    kicker(ctx, `${TECHEXPO.name} · ${TECHEXPO.pavilion}`, 64, 70, '#36f0e0');
+    base(ctx, BASE_TOP, BASE_BOTTOM);
+    kicker(ctx, `${TECHEXPO.name} · ${TECHEXPO.pavilion}`, 64, 70);
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = `700 22px ${display}`;
     ctx.fillText(`${UI.expo.past.toUpperCase()}  ${String(s.expoIndex + 1).padStart(2, '0')} / ${String(EXPO.exhibits.length).padStart(2, '0')}`, 64, 112);
     ctx.fillStyle = '#fff';
     fit(ctx, ex.name.toUpperCase(), 900, 110, 900);
     ctx.fillText(ex.name.toUpperCase(), 60, 232);
-    ctx.fillStyle = '#36f0e0';
+    ctx.fillStyle = ACCENT;
     fit(ctx, ex.from, 700, 40, 900);
     ctx.fillText(ex.from, 64, 300);
     // blurb, wrapped
@@ -203,8 +212,8 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
     if (line) ctx.fillText(line, 64, y);
   },
   dkms(ctx, s) {
-    base(ctx, '#200a06', '#080302');
-    kicker(ctx, HEARTBEAT.campaign, 64, 100, '#ff9a6a');
+    base(ctx, BASE_TOP, BASE_BOTTOM);
+    kicker(ctx, HEARTBEAT.campaign, 64, 100);
     ctx.fillStyle = '#fff3ea';
     const head = HEARTBEAT.headline;
     const half = head.lastIndexOf(' ', Math.floor(head.length / 2) + 4);
@@ -212,7 +221,7 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
     ctx.fillText(head.slice(0, half), 62, 230);
     ctx.fillText(head.slice(half + 1), 62, 320);
     // one slow heart line
-    ctx.strokeStyle = `rgba(255,140,100,${0.45 + 0.55 * s.pulse})`;
+    ctx.strokeStyle = withAlpha(ACCENT, 0.45 + 0.55 * s.pulse);
     ctx.lineWidth = 6;
     ctx.beginPath();
     const y0 = 440;
@@ -228,19 +237,19 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
     ctx.fillText(`${HEARTBEAT.stats[2].value} · ${HEARTBEAT.stats[2].label}`, 64, 520);
   },
   twmun(ctx) {
-    base(ctx, '#12071e', '#05030a');
-    kicker(ctx, UI.twmun.kicker, 64, 90, '#c08aff');
+    base(ctx, BASE_TOP, BASE_BOTTOM);
+    kicker(ctx, UI.twmun.kicker, 64, 90);
     ctx.fillStyle = '#fff';
     fit(ctx, TWMUN.name.toUpperCase(), 900, 74, 900);
     ctx.fillText(TWMUN.name.toUpperCase(), 60, 180);
-    ctx.fillStyle = '#c08aff';
+    ctx.fillStyle = ACCENT;
     ctx.font = `700 36px ${display}`;
     ctx.fillText(TWMUN.tagline, 64, 236);
     const codes = TWMUN.committees.map((c) => c.replace(/\s*\(.*\)$/, ''));
     codes.forEach((c, i) => {
       const x = 64 + (i % 4) * 228;
       const y = 330 + Math.floor(i / 4) * 110;
-      ctx.strokeStyle = 'rgba(192,138,255,0.8)';
+      ctx.strokeStyle = withAlpha(ACCENT, 0.8);
       ctx.lineWidth = 3;
       ctx.strokeRect(x, y - 56, 208, 84);
       ctx.fillStyle = '#fff';
@@ -249,14 +258,14 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
     });
   },
   catalyst(ctx) {
-    base(ctx, '#160a02', '#060301');
-    kicker(ctx, UI.extras.catalyst, 64, 92, '#ffb347');
+    base(ctx, BASE_TOP, BASE_BOTTOM);
+    kicker(ctx, UI.extras.catalyst, 64, 92);
     ctx.fillStyle = '#fff';
     fit(ctx, CATALYST.name.toUpperCase(), 900, 120, 880);
     ctx.fillText(CATALYST.name.toUpperCase(), 58, 220);
     CATALYST.items.forEach((it, i) => {
       const y = 310 + i * 86;
-      ctx.fillStyle = '#ffb347';
+      ctx.fillStyle = ACCENT;
       ctx.font = `700 24px ${display}`;
       ctx.fillText(it.label.toUpperCase(), 64, y);
       ctx.fillStyle = '#fff';
@@ -265,8 +274,8 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
     });
   },
   also(ctx) {
-    base(ctx, '#04101c', '#02050a');
-    kicker(ctx, ALSO.heading, 64, 92, '#7fc8ff');
+    base(ctx, BASE_TOP, BASE_BOTTOM);
+    kicker(ctx, ALSO.heading, 64, 92);
     ctx.fillStyle = '#fff';
     ALSO.items.forEach((it, i) => {
       const y = 196 + i * 112;
@@ -274,7 +283,7 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
       ctx.fillText(it.name, 64, y);
       const where = (it as { where?: string }).where;
       if (where) {
-        ctx.fillStyle = '#7fc8ff';
+        ctx.fillStyle = ACCENT;
         ctx.font = `700 28px ${display}`;
         ctx.fillText(where, 64, y + 44);
         ctx.fillStyle = '#fff';
@@ -282,8 +291,8 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
     });
   },
   ces(ctx) {
-    base(ctx, '#0b0b14', '#030306');
-    kicker(ctx, UI.extras.ces, 64, 100, '#9ab4ff');
+    base(ctx, BASE_TOP, BASE_BOTTOM);
+    kicker(ctx, UI.extras.ces, 64, 100);
     ctx.fillStyle = '#fff';
     fit(ctx, CES2027.name.toUpperCase(), 900, 150, 900);
     ctx.fillText(CES2027.name.toUpperCase(), 58, 270);
@@ -292,7 +301,7 @@ const draw: Record<BoardId, (ctx: CanvasRenderingContext2D, s: ArtState) => void
     wrap(ctx, CES2027.line, 64, 360, 880, 52);
   },
   finale(ctx) {
-    base(ctx, '#1a0605', '#050203');
+    base(ctx, BASE_TOP, BASE_BOTTOM);
     kicker(ctx, SITE.edition, 64, 110);
     ctx.fillStyle = '#fff';
     fit(ctx, UI.cta.toUpperCase(), 900, 92, 900);

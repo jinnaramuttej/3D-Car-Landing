@@ -134,12 +134,15 @@ const STORM: Env = { ...CITY, rain: 1, fog: 0.011, fogColor: '#16121a', bloom: 1
 /** IV: the rain eases, the smoke hangs. */
 const WAKE: Env = { ...CITY, rain: 0.6, fog: 0.0115 };
 
-/** Small shifts per stop, so each block of the city has its own air. */
-const ROBOWARS_AIR: Env = { ...CITY, fogColor: '#1c1009', skyGlow: '#7a3a12', bloom: 1.15 };
-const SPEAKERS_AIR: Env = { ...CITY, fogColor: '#0c1020', skyGlow: '#2a3a6a' };
-const EXPO_AIR: Env = { ...CITY, fogColor: '#081416', skyGlow: '#1a5a60', bloom: 1.15 };
-const DKMS_AIR: Env = { ...CITY, rain: 0.45, fog: 0.012, fogColor: '#1e0f0c', skyGlow: '#6a3020', exposure: 0.96, bloom: 0.95 };
-const TWMUN_AIR: Env = { ...CITY, rain: 0.45, fogColor: '#130c1e', skyGlow: '#4a2a6a' };
+/**
+ * The stops share one grade (the city's fog colour, sky glow, bloom and exposure, with the
+ * page's one accent on the boards): only the weather moves between them.
+ */
+const ROBOWARS_AIR: Env = CITY;
+const SPEAKERS_AIR: Env = CITY;
+const EXPO_AIR: Env = CITY;
+const DKMS_AIR: Env = { ...CITY, rain: 0.45, fog: 0.012 };
+const TWMUN_AIR: Env = { ...CITY, rain: 0.45 };
 
 /** Out over the sea on the bridge as the sun comes up. */
 const DAWN: Env = {

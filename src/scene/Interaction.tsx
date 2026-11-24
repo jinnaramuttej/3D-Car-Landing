@@ -6,7 +6,6 @@ import { Raycaster, Vector2 } from 'three';
 import { chapterState, rainLevel } from '@/lib/chapterRuntime';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
-import { engine } from '@/lib/engineAudio';
 import { getWipeTexture, interaction, isUiTarget, WIPE_H, WIPE_W } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
 import { cycleShot } from './city/director';
@@ -152,9 +151,7 @@ export function Interaction() {
     interaction.rev += (target - interaction.rev) * (1 - Math.exp(-dt / Math.max(0.01, tau)));
     if (interaction.rev < 1e-4) interaction.rev = 0;
 
-    // engine: idles once it has started, follows the rev (a rev before ignition starts it)
-    const running = chapterState.engineOn || interaction.rev > 0.02;
-    engine.setLive(running && !useStore.getState().muted, interaction.rev);
+    // (the rev goes to the powertrain model, src/scene/Sound.tsx; the sound reads that)
 
     // the drops come back as it keeps raining
     const ctx = interaction.wipeCanvas?.getContext('2d');

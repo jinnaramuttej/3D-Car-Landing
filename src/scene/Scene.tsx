@@ -27,6 +27,7 @@ import { Effects } from './Effects';
 import { Interaction } from './Interaction';
 import { Rain } from './Rain';
 import { SkidMarks } from './SkidMarks';
+import { Sound } from './Sound';
 import { Smoke } from './Smoke';
 import { Track } from './Track';
 
@@ -159,6 +160,7 @@ export function Scene() {
         <RouteDebug />
       </Suspense>
       <CameraRig />
+      <Sound />
       <Interaction />
       <Effects />
     </>

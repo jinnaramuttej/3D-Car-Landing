@@ -12,6 +12,8 @@ import { chapterState } from '@/lib/chapterRuntime';
 import { interaction } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
 import { cameraState } from '@/scene/CameraRig';
+import { engine } from '@/lib/engineAudio';
+import { powertrain } from '@/lib/powertrain';
 import { reflectionUniforms } from '@/scene/city/cityReflection';
 import { director, getSchedule } from '@/scene/city/director';
 import { driftAt } from '@/lib/cityDrive';
@@ -144,6 +146,8 @@ export function DebugPanel() {
       advance,
       director,
       reflection: reflectionUniforms,
+      engine,
+      powertrain,
       // the camera director's cuts with the slide at each (none should land above ~0.3)
       schedule: () => getSchedule().map((c) => ({ ...c, drift: +driftAt(c.s).toFixed(2) })),
     };

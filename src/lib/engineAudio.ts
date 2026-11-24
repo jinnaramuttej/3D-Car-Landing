@@ -1,304 +1,243 @@
+import { engineLoop, ENGINE_RPMS, pop, rainBed, starter, tyreSqueal, whoosh, wind } from './audio/synth';
+import { ignite as igniteModel, powertrain } from './powertrain';
+
 /**
- * Synthesised flat-six (no audio files): sawtooth/square oscillators at the firing
- * frequency, band-passed noise for intake roar, soft-clipped and low-passed. RPM,
- * throttle and level follow a piecewise-linear script.
+ * THE SOUND
+ * =========
+ * Sample-based, but every sample is generated in code (src/lib/audio/synth.ts) the first
+ * time the visitor turns the sound on (that click is also the browser's audio unlock).
  *
- * Browsers only allow audio after a user gesture, so the AudioContext is created
- * the first time the visitor turns sound on (the navbar toggle). Muted by default.
+ *   engine   18 loops (9 rpm points x on-throttle / lift-off), all running, mixed by
+ *            weight: neighbouring rpm points crossfade with equal-power curves in the
+ *            middle of each interval, on/off throttle with an equal-power curve on the
+ *            throttle. Each loop's pitch follows the rpm but stays within +-15% of the
+ *            rpm it was made at. Pops on lift and on every upshift.
+ *   tyres    squeal on the slip angle
+ *   wind     on speed
+ *   rain     a bed that ducks under the engine
+ *   bridge   a whoosh past every stay cable, a bigger one past each pylon
+ *   DKMS     a soft heartbeat at that stop, with everything else turned down
+ *   master   compressor, then the mute
+ *
+ * It reads the powertrain model (src/lib/powertrain.ts: rpm, throttle, load, shifts,
+ * lifts) and the scene's own state (slip, speed, rain, where the car is), never the
+ * scroll position or the keys.
  */
 
-/** [seconds, rpm, throttle 0..1, level 0..1] */
-type Point = readonly [number, number, number, number];
+const MASTER = 0.7;
+const PITCH_RANGE = 0.15;
 
-const MASTER = 0.55;
+export type SoundInput = {
+  /** 0..1 rain level of the chapter. */
+  rain: number;
+  /** 0..1 how much the DKMS stop is on screen (quiet, heartbeat). */
+  quiet: number;
+  /** 0..1 heartbeat envelope at the DKMS stop (a beat starts when it rises past 0.5). */
+  heartbeat: number;
+  /** Whoosh events since the last frame: 0 none, 1 a cable, 2 a pylon. */
+  whoosh: 0 | 1 | 2;
+};
 
-/** Two throttle blips on the line. */
-const REV: Point[] = [
-  [0, 950, 0.15, 1],
-  [0.25, 950, 0.15, 1],
-  [0.42, 7400, 1, 1],
-  [0.55, 6800, 0.2, 1],
-  [1.2, 1500, 0.1, 1],
-  [1.45, 1300, 0.1, 1],
-  [1.62, 7900, 1, 1],
-  [1.75, 7300, 0.2, 1],
-  [2.5, 1200, 0.1, 1],
-  [3.2, 1000, 0.1, 0.8],
-  [3.6, 950, 0.1, 0],
-];
-
-/** Launch through two shifts while the car pulls away (level drops with distance). */
-const LAUNCH: Point[] = [
-  [0, 3500, 0.6, 1],
-  [0.15, 6200, 1, 1],
-  [1.2, 8300, 1, 0.9],
-  [1.28, 5900, 0.5, 0.85],
-  [1.36, 6000, 1, 0.85],
-  [2.6, 8400, 1, 0.55],
-  [2.68, 6300, 0.5, 0.5],
-  [2.76, 6400, 1, 0.48],
-  [4.2, 8200, 1, 0.18],
-  [5.2, 8000, 0.8, 0],
-];
-
-/** Starter, the engine catching, settling to idle (chapter II). */
-const IGNITE: Point[] = [
-  [0, 220, 0.25, 0.55],
-  [0.45, 260, 0.25, 0.6],
-  [0.55, 1900, 0.9, 1],
-  [0.75, 1500, 0.4, 0.95],
-  [1.4, 1000, 0.15, 0.85],
-  [1.9, 950, 0.12, 0],
-];
-
-/** Flat-six four-stroke: three power pulses per crank revolution. */
-const fireHz = (rpm: number) => (rpm / 60) * 3;
-
-function softClip(amount: number) {
-  const n = 1024;
-  const curve = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const x = (i / (n - 1)) * 2 - 1;
-    curve[i] = ((3 + amount) * x * 20 * (Math.PI / 180)) / (Math.PI + amount * Math.abs(x));
-  }
-  return curve;
-}
+type Layer = { rpm: number; on: GainNode; off: GainNode; srcOn: AudioBufferSourceNode; srcOff: AudioBufferSourceNode };
+type Loop = { src: AudioBufferSourceNode; gain: GainNode };
 
 class EngineAudio {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
-  private noise: AudioBuffer | null = null;
+  private engineBus: GainNode | null = null;
+  private engineTone: BiquadFilterNode | null = null;
+  private layers: Layer[] = [];
+  private squeal: Loop | null = null;
+  private wind: Loop | null = null;
+  private windTone: BiquadFilterNode | null = null;
+  private rain: Loop | null = null;
+  private buffers: { pop?: AudioBuffer; whoosh?: AudioBuffer; starter?: AudioBuffer } = {};
   private muted = true;
-  private stopCurrent: (() => void) | null = null;
-  /** The held-throttle voice (hold to rev): built on demand, pitch follows `rev`. */
-  private live: {
-    out: GainNode;
-    lowpass: BiquadFilterNode;
-    band: BiquadFilterNode;
-    voices: { osc: OscillatorNode; mult: number }[];
-    noise: AudioBufferSourceNode;
-  } | null = null;
+  private building = false;
+  private ready = false;
+  private seen = { shifts: 0, lifts: 0 };
+  private beatHigh = false;
 
-  private ensure() {
+  private context() {
     if (typeof window === 'undefined') return null;
     if (!this.ctx) {
       const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!Ctx) return null;
       const ctx = new Ctx();
       const comp = ctx.createDynamicsCompressor();
-      comp.threshold.value = -14;
+      comp.threshold.value = -16;
+      comp.knee.value = 8;
       comp.ratio.value = 4;
+      comp.attack.value = 0.005;
+      comp.release.value = 0.18;
       const master = ctx.createGain();
-      master.gain.value = this.muted ? 0 : MASTER;
+      master.gain.value = 0;
       master.connect(comp).connect(ctx.destination);
-      const noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-      const data = noise.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
       this.ctx = ctx;
       this.master = master;
-      this.noise = noise;
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
     return this.ctx;
   }
 
-  /** Call from a click handler the first time (autoplay rules). */
+  /** Call from the click that turns sound on (autoplay rules); builds the samples once. */
   setMuted(muted: boolean) {
     this.muted = muted;
-    if (!muted) this.ensure();
-    if (this.ctx && this.master) {
-      this.master.gain.setTargetAtTime(muted ? 0 : MASTER, this.ctx.currentTime, 0.05);
-      if (muted) this.stopCurrent?.();
-    }
-    if (muted) this.setLive(false, 0);
-  }
-
-  rev() {
-    this.play(REV);
-  }
-
-  ignite() {
-    this.play(IGNITE);
-  }
-
-  /** One soft heartbeat (lub-dub): two low sine thumps, no engine involved. */
-  heartbeat() {
-    if (this.muted) return;
-    const ctx = this.ensure();
+    const ctx = muted ? this.ctx : this.context();
     if (!ctx || !this.master) return;
-    const t0 = ctx.currentTime + 0.01;
-    const thump = (at: number, level: number) => {
-      const osc = ctx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(70, at);
-      osc.frequency.exponentialRampToValueAtTime(42, at + 0.12);
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0, at);
-      g.gain.linearRampToValueAtTime(level, at + 0.015);
-      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
-      osc.connect(g).connect(this.master!);
-      osc.start(at);
-      osc.stop(at + 0.25);
-    };
-    thump(t0, 0.32);
-    thump(t0 + 0.28, 0.2);
+    this.master.gain.setTargetAtTime(muted ? 0 : MASTER, ctx.currentTime, 0.08);
+    if (!muted && !this.ready && !this.building) void this.build(ctx);
   }
 
-  /**
-   * Hold-to-rev: `on` while the engine runs, `rev` 0..1 from the visitor. Idles quietly,
-   * climbs to ~7800 rpm at full rev.
-   */
-  setLive(on: boolean, rev: number) {
-    if (this.muted || !on) {
-      if (this.live && this.ctx) {
-        const live = this.live;
-        this.live = null;
-        const now = this.ctx.currentTime;
-        live.out.gain.setTargetAtTime(0, now, 0.08);
-        for (const v of live.voices) v.osc.stop(now + 0.5);
-        live.noise.stop(now + 0.5);
-        window.setTimeout(() => live.out.disconnect(), 700);
-      }
-      return;
+  /** The key turns: the starter plays and the model catches. */
+  ignite() {
+    igniteModel();
+    if (this.muted || !this.ctx || !this.buffers.starter) return;
+    this.oneShot(this.buffers.starter, 0.6, 1);
+  }
+
+  private loop(ctx: AudioContext, data: Float32Array, out: AudioNode) {
+    const buf = ctx.createBuffer(1, data.length, ctx.sampleRate);
+    buf.copyToChannel(data as Float32Array<ArrayBuffer>, 0);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    src.connect(gain).connect(out);
+    src.start(ctx.currentTime + Math.random() * 0.05);
+    return { src, gain };
+  }
+
+  private oneShot(buf: AudioBuffer, level: number, rate: number, delay = 0) {
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate;
+    const g = ctx.createGain();
+    g.gain.value = level;
+    src.connect(g).connect(this.master!);
+    src.start(ctx.currentTime + delay);
+    src.onended = () => g.disconnect();
+  }
+
+  /** Generates every sample (yielding between buffers so a frame never stalls) and wires the mix. */
+  private async build(ctx: AudioContext) {
+    this.building = true;
+    const sr = ctx.sampleRate;
+    const yieldFrame = () => new Promise((r) => setTimeout(r, 0));
+    const bus = ctx.createGain();
+    bus.gain.value = 0;
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.Q.value = 0.7;
+    tone.frequency.value = 2400;
+    bus.connect(tone).connect(this.master!);
+    this.engineBus = bus;
+    this.engineTone = tone;
+    for (const rpm of ENGINE_RPMS) {
+      const on = this.loop(ctx, engineLoop(sr, rpm, 'on'), bus);
+      const off = this.loop(ctx, engineLoop(sr, rpm, 'off'), bus);
+      await yieldFrame();
+      this.layers.push({ rpm, on: on.gain, off: off.gain, srcOn: on.src, srcOff: off.src });
     }
-    const ctx = this.ensure();
-    if (!ctx || !this.master || !this.noise) return;
-    if (!this.live) {
-      const out = ctx.createGain();
-      out.gain.value = 0;
-      const lowpass = ctx.createBiquadFilter();
-      lowpass.type = 'lowpass';
-      lowpass.Q.value = 0.9;
-      const shaper = ctx.createWaveShaper();
-      shaper.curve = softClip(18);
-      const pre = ctx.createGain();
-      pre.gain.value = 0.6;
-      pre.connect(shaper).connect(lowpass).connect(out).connect(this.master);
-      const voices: { osc: OscillatorNode; mult: number }[] = [];
-      for (const [type, mult, gain] of [
-        ['sawtooth', 1, 0.5],
-        ['square', 0.5, 0.35],
-        ['sawtooth', 2, 0.18],
-      ] as const) {
-        const osc = ctx.createOscillator();
-        osc.type = type;
-        osc.frequency.value = fireHz(950) * mult;
-        const g = ctx.createGain();
-        g.gain.value = gain;
-        osc.connect(g).connect(pre);
-        osc.start();
-        voices.push({ osc, mult });
-      }
-      const noise = ctx.createBufferSource();
-      noise.buffer = this.noise;
-      noise.loop = true;
-      const band = ctx.createBiquadFilter();
-      band.type = 'bandpass';
-      band.Q.value = 1.2;
-      const ng = ctx.createGain();
-      ng.gain.value = 0.25;
-      noise.connect(band).connect(ng).connect(pre);
-      noise.start();
-      this.live = { out, lowpass, band, voices, noise };
-    }
+    this.squeal = this.loop(ctx, tyreSqueal(sr), this.master!);
+    await yieldFrame();
+    const wt = ctx.createBiquadFilter();
+    wt.type = 'lowpass';
+    wt.frequency.value = 400;
+    wt.connect(this.master!);
+    this.windTone = wt;
+    this.wind = this.loop(ctx, wind(sr), wt);
+    this.rain = this.loop(ctx, rainBed(sr), this.master!);
+    await yieldFrame();
+    const mk = (d: Float32Array) => {
+      const b = ctx.createBuffer(1, d.length, sr);
+      b.copyToChannel(d as Float32Array<ArrayBuffer>, 0);
+      return b;
+    };
+    this.buffers = { pop: mk(pop(sr)), whoosh: mk(whoosh(sr)), starter: mk(starter(sr)) };
+    this.seen = { shifts: powertrain.shifts, lifts: powertrain.lifts };
+    this.ready = true;
+    this.building = false;
+  }
+
+  /** Once per frame (src/scene/Sound.tsx). */
+  update(input: SoundInput) {
+    if (!this.ready || !this.ctx || this.muted) return;
+    const ctx = this.ctx;
     const now = ctx.currentTime;
-    const rpm = 950 + rev * 6900;
-    const live = this.live;
-    for (const v of live.voices) v.osc.frequency.setTargetAtTime(fireHz(rpm) * v.mult, now, 0.06);
-    live.lowpass.frequency.setTargetAtTime(300 + rpm * 0.55 * (0.6 + 0.4 * rev), now, 0.06);
-    live.band.frequency.setTargetAtTime(180 + rpm * 0.12, now, 0.06);
-    // quiet idle; a scripted clip (finale rev, launch) ducks it
-    const level = (this.stopCurrent ? 0.25 : 1) * (0.1 + 0.9 * rev);
-    live.out.gain.setTargetAtTime(level, now, 0.05);
-  }
+    const p = powertrain;
+    const set = (param: AudioParam, v: number, tau = 0.035) => param.setTargetAtTime(v, now, tau);
 
-  launch() {
-    this.play(LAUNCH);
-  }
+    // engine: weights over the rpm points (log scale), equal power, crossfading only in
+    // the middle half of each interval so every loop stays inside +-15% of its pitch
+    const rpm = Math.max(1, p.rpm);
+    const pts = ENGINE_RPMS;
+    let i = 0;
+    while (i < pts.length - 2 && rpm > pts[i + 1]) i++;
+    const x = Math.log(rpm / pts[i]) / Math.log(pts[i + 1] / pts[i]);
+    const xf = Math.min(1, Math.max(0, (x - 0.25) / 0.5));
+    const lowW = rpm <= pts[0] ? 1 : rpm >= pts[pts.length - 1] ? 0 : Math.cos((xf * Math.PI) / 2);
+    const highW = rpm <= pts[0] ? 0 : rpm >= pts[pts.length - 1] ? 1 : Math.sin((xf * Math.PI) / 2);
+    const thrOn = Math.sin((Math.min(1, p.throttle * 1.25) * Math.PI) / 2);
+    const thrOff = Math.cos((Math.min(1, p.throttle * 1.25) * Math.PI) / 2);
+    this.layers.forEach((l, k) => {
+      const w = k === i ? lowW : k === i + 1 ? highW : 0;
+      set(l.on.gain, w * thrOn);
+      set(l.off.gain, w * thrOff);
+      const rate = Math.min(1 + PITCH_RANGE, Math.max(1 - PITCH_RANGE, rpm / l.rpm));
+      set(l.srcOn.playbackRate, rate, 0.02);
+      set(l.srcOff.playbackRate, rate, 0.02);
+    });
+    const running = p.running ? 1 : 0;
+    const quiet = 1 - 0.6 * input.quiet;
+    const engineLevel = running * (0.32 + 0.68 * (0.35 + 0.65 * p.load)) * quiet;
+    set(this.engineBus!.gain, engineLevel, 0.05);
+    set(this.engineTone!.frequency, 900 + (p.rpm / 8600) * 5200 * (0.55 + 0.45 * p.throttle), 0.05);
 
-  private play(points: Point[]) {
-    if (this.muted) return;
-    const ctx = this.ensure();
-    if (!ctx || !this.master || !this.noise) return;
-    this.stopCurrent?.();
-
-    const t0 = ctx.currentTime + 0.02;
-    const end = t0 + points[points.length - 1][0];
-
-    const out = ctx.createGain();
-    out.gain.value = 0;
-    const lowpass = ctx.createBiquadFilter();
-    lowpass.type = 'lowpass';
-    lowpass.Q.value = 0.9;
-    const shaper = ctx.createWaveShaper();
-    shaper.curve = softClip(18);
-    shaper.oversample = '2x';
-    const pre = ctx.createGain();
-    pre.gain.value = 0.6;
-    pre.connect(shaper).connect(lowpass).connect(out).connect(this.master);
-
-    // Firing-frequency harmonics
-    const voices: { osc: OscillatorNode; mult: number }[] = [];
-    const voice = (type: OscillatorType, mult: number, gain: number) => {
-      const osc = ctx.createOscillator();
-      osc.type = type;
-      const g = ctx.createGain();
-      g.gain.value = gain;
-      osc.connect(g).connect(pre);
-      voices.push({ osc, mult });
-    };
-    voice('sawtooth', 1, 0.5);
-    voice('square', 0.5, 0.35);
-    voice('sawtooth', 2, 0.18);
-    voice('triangle', 3, 0.08);
-
-    // Intake / exhaust roar
-    const noise = ctx.createBufferSource();
-    noise.buffer = this.noise;
-    noise.loop = true;
-    const band = ctx.createBiquadFilter();
-    band.type = 'bandpass';
-    band.Q.value = 1.2;
-    const noiseGain = ctx.createGain();
-    noiseGain.gain.value = 0.25;
-    noise.connect(band).connect(noiseGain).connect(pre);
-
-    const [, rpm0, thr0, lvl0] = points[0];
-    for (const v of voices) v.osc.frequency.setValueAtTime(fireHz(rpm0) * v.mult, t0);
-    lowpass.frequency.setValueAtTime((300 + rpm0 * 0.55) * (0.5 + 0.5 * lvl0), t0);
-    band.frequency.setValueAtTime(180 + rpm0 * 0.12, t0);
-    out.gain.setValueAtTime(0, t0);
-    out.gain.linearRampToValueAtTime((0.12 + 0.88 * thr0) * lvl0, t0 + 0.05);
-    for (const [time, rpm, throttle, level] of points.slice(1)) {
-      const at = t0 + time;
-      for (const v of voices) v.osc.frequency.linearRampToValueAtTime(fireHz(rpm) * v.mult, at);
-      lowpass.frequency.linearRampToValueAtTime((300 + rpm * 0.55 * (0.6 + 0.4 * throttle)) * (0.5 + 0.5 * level), at);
-      band.frequency.linearRampToValueAtTime(180 + rpm * 0.12, at);
-      out.gain.linearRampToValueAtTime((0.12 + 0.88 * throttle) * level, at);
-    }
-
-    const sources: AudioScheduledSourceNode[] = [...voices.map((v) => v.osc), noise];
-    for (const s of sources) {
-      s.start(t0);
-      s.stop(end + 0.05);
-    }
-    const stop = () => {
-      const now = ctx.currentTime;
-      out.gain.cancelScheduledValues(now);
-      out.gain.setTargetAtTime(0, now, 0.04);
-      for (const s of sources) {
-        try {
-          s.stop(now + 0.2);
-        } catch {
-          /* already stopped */
-        }
+    // pops: on a lift from high revs, and on every upshift
+    if (p.lifts !== this.seen.lifts || p.shifts !== this.seen.shifts) {
+      const n = p.shifts !== this.seen.shifts ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
+      this.seen = { shifts: p.shifts, lifts: p.lifts };
+      if (this.buffers.pop && p.rpm > 3000 && running) {
+        for (let k = 0; k < n; k++) this.oneShot(this.buffers.pop, (0.35 + Math.random() * 0.35) * quiet, 0.8 + Math.random() * 0.5, k * (0.04 + Math.random() * 0.06));
       }
-    };
-    this.stopCurrent = stop;
-    sources[0].onended = () => {
-      out.disconnect();
-      if (this.stopCurrent === stop) this.stopCurrent = null;
-    };
+    }
+
+    // tyres, wind, rain
+    const slip = Math.max(0, (p.slip - 0.12) / 0.7);
+    const squeal = Math.min(1, slip) * Math.min(1, p.speed / 6);
+    set(this.squeal!.gain.gain, squeal * squeal * 0.55 * quiet, 0.06);
+    set(this.squeal!.src.playbackRate, 0.92 + 0.16 * Math.min(1, slip), 0.08);
+    const v = Math.min(1, p.speed / 70);
+    set(this.wind!.gain.gain, v * v * 0.55, 0.15);
+    set(this.windTone!.frequency, 260 + p.speed * 34, 0.15);
+    // the rain bed sits under the engine (sidechain-style duck)
+    set(this.rain!.gain.gain, input.rain * 0.32 * (1 - 0.55 * Math.min(1, engineLevel)), 0.2);
+
+    // bridge whooshes
+    if (input.whoosh && this.buffers.whoosh) this.oneShot(this.buffers.whoosh, input.whoosh === 2 ? 0.75 : 0.28 + Math.random() * 0.12, 0.85 + Math.random() * 0.3 + (p.speed / 120) * 0.4);
+
+    // DKMS: a soft heartbeat (lub-dub) when the stop is on screen
+    const beat = input.heartbeat > 0.5;
+    if (beat && !this.beatHigh && input.quiet > 0.5) this.thump(now, 0.3 * input.quiet);
+    this.beatHigh = beat;
+  }
+
+  private thump(at: number, level: number) {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(70, at);
+    osc.frequency.exponentialRampToValueAtTime(42, at + 0.12);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(level, at + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
+    osc.connect(g).connect(this.master!);
+    osc.start(at);
+    osc.stop(at + 0.25);
   }
 }
 

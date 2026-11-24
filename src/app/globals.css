@@ -824,7 +824,9 @@ li:last-child .mm-track {
 
 /* V arrival */
 /* VI Robowars: a race-control console */
-.d-robowars .panel {
+.d-robowars .panel,
+.d-catalyst .panel,
+.d-workshops .panel {
   position: absolute;
   left: var(--gutter);
   top: clamp(84px, 12vh, 130px);
@@ -833,6 +835,70 @@ li:last-child .mm-track {
   width: min(440px, 84vw);
   padding: 22px 24px;
   border-color: rgba(255, 42, 26, 0.35);
+}
+
+/* Catalyst and Workshops & TWMUN: the same console, their own lists */
+.cat-items,
+.ws-committees {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cat-items li {
+  display: grid;
+  gap: 2px;
+}
+
+.cat-items span {
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cat-items strong {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(18px, 1.8vw, 24px);
+}
+
+.cat-items li:last-child strong {
+  color: var(--accent);
+  font-size: clamp(26px, 3vw, 40px);
+  text-shadow: 0 0 26px rgba(255, 42, 26, 0.45);
+}
+
+.ws-line,
+.ws-tagline {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(18px, 1.8vw, 24px);
+}
+
+.ws-tagline {
+  color: var(--accent);
+}
+
+.ws-mun {
+  margin-top: 6px;
+}
+
+.ws-committees {
+  grid-template-columns: repeat(4, auto);
+  justify-content: start;
+  gap: 6px;
+}
+
+.ws-committees li {
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
 }
 
 .prize {
@@ -1505,7 +1571,9 @@ li:last-child .mm-track {
   }
 
   .block-head,
-  .d-robowars .panel {
+  .d-robowars .panel,
+  .d-catalyst .panel,
+  .d-workshops .panel {
     top: 70px;
     width: calc(100vw - 2 * var(--gutter) - 40px);
     max-width: none;
@@ -1519,7 +1587,9 @@ li:last-child .mm-track {
     font-size: clamp(20px, 6vw, 26px);
   }
 
-  .d-robowars .panel {
+  .d-robowars .panel,
+  .d-catalyst .panel,
+  .d-workshops .panel {
     gap: 10px;
     padding: 16px;
   }
@@ -1818,6 +1888,8 @@ html[data-glide] .stops {
   }
   .stops .block-head,
   .stops .d-robowars .panel,
+  .stops .d-catalyst .panel,
+  .stops .d-workshops .panel,
   .stops .exhibit-now,
   .stops .exhibit-detail,
   .stops .hb,
@@ -1829,6 +1901,8 @@ html[data-glide] .stops {
   }
   .stops[data-side='right'] .block-head,
   .stops[data-side='right'] .d-robowars .panel,
+  .stops[data-side='right'] .d-catalyst .panel,
+  .stops[data-side='right'] .d-workshops .panel,
   .stops[data-side='right'] .exhibit-now,
   .stops[data-side='right'] .exhibit-detail,
   .stops[data-side='right'] .hb,

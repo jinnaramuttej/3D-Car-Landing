@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
-import { ALSO, CATALYST, CES2027, COMPETITIONS, EXPO, HEARTBEAT, ROBOWARS, SITE, TECHEXPO, TWMUN, UI, VOICES } from '@/content';
+import { ALSO, CATALYST, CES2027, COMMITTEE_NAMES, COMPETITIONS, EXPO, HEARTBEAT, ROBOWARS, SITE, TECHEXPO, TWMUN, UI, VOICES } from '@/content';
 import { CHAPTERS, chapterById, FINALE } from '@/lib/chapters';
 import { chapterState, stopWeight } from '@/lib/chapterRuntime';
 import { citySAt } from '@/lib/cityDrive';
@@ -92,6 +92,14 @@ function buildTimeline(q: Q, mobile: boolean) {
   stagger('.d-competitions .block-head > *', 'competitions', 0.3, 0.45);
   tl.fromTo(q('.bays'), { '--p': 0 }, { '--p': 1, duration: zd('competitions', 0.35, mobile ? 0.4 : 0.42) }, zf('competitions', 0.35));
 
+  // Catalyst: the three dates and the fund, one after another
+  show('.d-catalyst', 'catalyst');
+  stagger('.d-catalyst .panel > *', 'catalyst');
+
+  // Workshops and Techfest World MUN: the workshops, then the committees
+  show('.d-workshops', 'workshops');
+  stagger('.d-workshops .panel > *', 'workshops');
+
   // The Stage: past speakers first, then the exhibits brought to campus before
   show('.d-speakers', 'speakers', 0.1, 0.46);
   stagger('.d-speakers .block-head > *', 'speakers', 0.22, 0.4);
@@ -156,6 +164,54 @@ function RobowarsPanel() {
         <p className="hint desktop-only">{UI.robowars.hint}</p>
         <a className="text-link" href={SITE.home} target="_blank" rel="noopener noreferrer">
           {UI.checkStatus} <span aria-hidden>↗</span>
+        </a>
+      </div>
+    </section>
+  );
+}
+
+function CatalystPanel() {
+  return (
+    <section className="d-block d-catalyst" aria-label={CATALYST.name}>
+      <div className="panel glass col">
+        <p className="kicker">{CATALYST.name}</p>
+        <ul className="cat-items">
+          {CATALYST.items.map((it) => (
+            <li key={it.label}>
+              <span>{it.label}</span>
+              <strong>{it.value}</strong>
+            </li>
+          ))}
+        </ul>
+        <a className="text-link" href={SITE.home} target="_blank" rel="noopener noreferrer">
+          {UI.catalyst.cta} <span aria-hidden>↗</span>
+        </a>
+      </div>
+    </section>
+  );
+}
+
+function WorkshopsPanel() {
+  const workshops = ALSO.items.find((it) => 'href' in it) as { name: string; href: string } | undefined;
+  return (
+    <section className="d-block d-workshops" aria-label={UI.workshops.kicker}>
+      <div className="panel glass col">
+        <p className="kicker">{UI.extras.workshops}</p>
+        <p className="ws-line">{workshops?.name ?? 'Hands-on workshops'}</p>
+        <a className="text-link" href={workshops?.href ?? SITE.home} target="_blank" rel="noopener noreferrer">
+          {UI.workshops.cta} <span aria-hidden>↗</span>
+        </a>
+        <p className="kicker ws-mun">{TWMUN.name}</p>
+        <p className="ws-tagline">{TWMUN.tagline}</p>
+        <ul className="ws-committees">
+          {TWMUN.committees.map((c) => (
+            <li key={c} title={COMMITTEE_NAMES[c.split(' (')[0]] ?? c}>
+              {c}
+            </li>
+          ))}
+        </ul>
+        <a className="text-link" href={SITE.home} target="_blank" rel="noopener noreferrer">
+          {UI.workshops.munCta} <span aria-hidden>↗</span>
         </a>
       </div>
     </section>
@@ -418,14 +474,11 @@ function DkmsPanel() {
   );
 }
 
-/** The finale's compact row: the rest of Techfest, each one line and a way in. */
+/** The finale's compact row: what the drive didn't stop for, each one line and a way in. */
 function MoreRow() {
-  const workshops = ALSO.items.find((it) => 'href' in it) as { name: string; href: string } | undefined;
   const items = [
-    { kicker: CATALYST.name, line: CATALYST.items.map((it) => it.label).join(' · '), href: SITE.home },
-    { kicker: TWMUN.name, line: `${TWMUN.tagline} · ${TWMUN.committees.length} committees`, href: SITE.home },
-    { kicker: UI.extras.workshops, line: workshops?.name ?? 'Hands-on workshops', href: workshops?.href ?? SITE.home },
     { kicker: CES2027.name, line: CES2027.line, href: SITE.home },
+    ...ALSO.items.filter((it) => !('href' in it)).map((it) => ({ kicker: ALSO.heading, line: 'where' in it && it.where ? `${it.name}, ${it.where}` : it.name, href: SITE.home })),
   ];
   return (
     <section className="more" aria-label={UI.more}>
@@ -550,6 +603,8 @@ export function Stops() {
     <div ref={root} className="stops" data-side="left">
       <RobowarsPanel />
       <CompetitionsPanel measure={measure} />
+      <CatalystPanel />
+      <WorkshopsPanel />
       <SpeakersPanel />
       <ExpoPanel />
       <DkmsPanel />

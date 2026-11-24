@@ -28,7 +28,7 @@ import { PATCH_COLS, PATCH_HALF, patchSpans } from '../src/lib/bridgePath';
 import { CITY_ORIGIN, getRoute, sampleRoute } from '../src/lib/cityRoute';
 import { ROUTE_POINTS } from '../src/lib/cityRoute.data';
 import { CORRIDOR_CUTS, CORRIDOR_PATCHES } from '../src/lib/corridor.data';
-import { CORRIDOR, corridorEnvelope, journeyPoses, pieces, routePoses, sweep, weldIds } from './lib/corridor';
+import { CORRIDOR, corridorEnvelope, journeyPoses, pieces, routePoses, sweep, weldIds, wheelMisses } from './lib/corridor';
 import { CITY_FILE, cityIO, cityMeshes } from './lib/world';
 
 /** A piece no bigger than this (metres, any side) goes whole. */
@@ -208,7 +208,7 @@ async function main() {
     if (line.length) barriers.push({ s: [line[0][0], line[line.length - 1][0]], side, lat: line });
   }
   // and under any wheel that finds no road at all (a crack between two of the model's road tiles)
-  const cracks = drive.filter((p) => !p.onRoad && !cuts.some((c) => c.street && p.s >= c.s[0] - 2 && p.s <= c.s[1] + 2)).map((p) => p.s);
+  const cracks = wheelMisses(city).filter((s) => !cuts.some((c) => c.street && s >= c.s[0] - 3 && s <= c.s[1] + 3));
   for (const s of cracks) patches.push([Math.floor(s - 1.5), Math.ceil(s + 1.5)]);
   patches.sort((x, y) => x[0] - y[0]);
   for (let i = patches.length - 1; i > 0; i--)

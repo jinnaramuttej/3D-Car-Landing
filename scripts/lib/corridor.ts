@@ -8,7 +8,7 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
 import { computeBoundsTree, type ExtendedTriangle, type MeshBVH, OrientedBox } from 'three-mesh-bvh';
 import { carContact, contactState, stepCityDrive } from '../../src/lib/cityDrive';
-import { fitContacts, makeContact, setRoadMeshes } from '../../src/lib/ground';
+import { fitContacts, makeContact, setRoadMeshes, WHEELS } from '../../src/lib/ground';
 import { getRoute, sampleRoute } from '../../src/lib/cityRoute';
 import { carState } from '../../src/lib/motion';
 import { journeySeconds, PARK_S, progressAtTime, sAtTime, speedAtS, timeAtS } from '../../src/lib/pacing';
@@ -185,4 +185,26 @@ export function weldIds(c: CityMesh) {
     vid[v] = id;
   }
   return vid;
+}
+
+/**
+ * Every place a wheel finds no road under it on the drive, scanned `step` apart (finer than
+ * the poses: a crack between two road tiles can be a few centimetres wide): the route metre
+ * of the wheel itself.
+ */
+export function wheelMisses(city: CityMesh[], step = 0.05) {
+  setRoadMeshes(city.filter((c) => c.road).map((c) => c.mesh));
+  const end = sAtTime(journeySeconds());
+  const out: number[] = [];
+  carState.initialized = false;
+  for (let s = PARK_S; s <= end; s += step) {
+    stepCityDrive(progressAtTime(timeAtS(s)), s === PARK_S ? 0 : step / Math.max(1.5, speedAtS(s)));
+    if (!contactState.ok) continue;
+    WHEELS.forEach((w, i) => {
+      if (carContact.hit[i]) return;
+      const at = s + w.z;
+      if (!out.some((m) => Math.abs(m - at) < 0.5)) out.push(+at.toFixed(1));
+    });
+  }
+  return out;
 }

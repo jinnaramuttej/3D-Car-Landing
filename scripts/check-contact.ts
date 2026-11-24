@@ -16,7 +16,7 @@ import { setRoadMeshes, TRAVEL, WHEELS } from '../src/lib/ground';
 import { carState } from '../src/lib/motion';
 import { loadCityMeshes } from './lib/world';
 
-const STEP = 0.5;
+const STEP = 0.1;
 const LIMIT = 0.05;
 
 async function main() {

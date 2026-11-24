@@ -108,13 +108,17 @@ export const CONFIG = {
   },
 
   smoke: {
-    maxParticles: 400, // (mount) halved on mobile
-    rate: 10, // particles/s per rear wheel at full slip (was 34: low tyre smoke, not a wall)
-    lifeMin: 1.4,
-    lifeMax: 2.8,
-    sizeStart: 0.45,
-    sizeEnd: 3.2,
-    opacity: 0.3,
+    maxParticles: 720, // (mount) halved on mobile
+    rate: 30, // particles/s per rear wheel at full slip
+    floor: 0.3, // while the car slides at all, never less than this share of the rate
+    lifeMin: 1.6,
+    lifeMax: 3.4,
+    sizeStart: 0.9,
+    sizeEnd: 5.6,
+    opacity: 0.16, // big, faint puffs: density comes from many of them overlapping
+    soft: 1.4, // how softly a puff fades into whatever it meets (x 0.4-1 m by puff size)
+    wind: 0.45, // how much of the rain's wind carries the smoke
+    lampLit: 0.5, // how much the street lamps light the smoke
     rise: 0.15, // stays low over the asphalt
     drag: 1.1,
     noise: 1.2,
@@ -125,8 +129,6 @@ export const CONFIG = {
     sprayRate: 26, // wet-road spray per rear wheel at speed (scaled by rain.intensity)
     spraySize: 0.28,
     sprayOpacity: 0.55,
-    fullScreenFrom: 0.4, // drift progress where shot IV (the tyre) starts; before it smoke can't fill the frame
-    maxCover: 0.28, // before shot IV: the most of the frame height a single puff may cover
     fillStart: 0.66, // smoke starts swelling toward the camera
     fillFull: 0.82, // screen is covered
     fillRate: 140, // extra particles/s spawned into the cloud at full fill
@@ -332,6 +334,10 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
   },
   smoke: {
     rate: [0, 150, 1],
+    floor: [0, 1, 0.01],
+    soft: [0, 6, 0.05],
+    wind: [0, 2, 0.01],
+    lampLit: [0, 3, 0.01],
     lifeMin: [0.5, 6, 0.1],
     lifeMax: [0.5, 8, 0.1],
     sizeStart: [0.1, 4, 0.05],
@@ -346,8 +352,6 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     sprayRate: [0, 120, 1],
     spraySize: [0.05, 1.5, 0.01],
     sprayOpacity: [0, 1.5, 0.01],
-    fullScreenFrom: [0, 1, 0.005],
-    maxCover: [0.02, 2, 0.01],
     fillStart: [0, 1, 0.005],
     fillFull: [0, 1, 0.005],
     fillRate: [0, 400, 1],

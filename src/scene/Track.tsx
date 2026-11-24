@@ -113,6 +113,9 @@ function seaWallGeometry(track: TrackData) {
   return g;
 }
 
+/** Sodium lamp heads on the waterfront (world space): the smoke picks up the nearest. */
+export const coastLampHeads: Vector3[] = [];
+
 function useTrackKey() {
   const [key, setKey] = useState(() => getTrack().key);
   useFrame(() => {
@@ -175,6 +178,8 @@ export function Track() {
       if (i % 2 === 0) add(s, 1, CONFIG.coast.seaWallOffset - 1.2);
       else add(s, -1, hw + 3);
     }
+    coastLampHeads.length = 0;
+    for (const lamp of out) coastLampHeads.push(lamp.base.clone().addScaledVector(lamp.inward, 3).setY(9.85));
     return out;
   }, [track]);
 

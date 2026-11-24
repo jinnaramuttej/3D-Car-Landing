@@ -14,6 +14,7 @@ import {
   type BloomEffect,
   type ChromaticAberrationEffect,
   type DepthOfFieldEffect,
+  EffectPass,
   LUT3DEffect,
   ToneMappingMode,
   type VignetteEffect,
@@ -32,12 +33,14 @@ import { MotionBlurEffect } from './postfx/MotionBlurEffect';
 import { DissolvePass } from './postfx/DissolvePass';
 import { FilmGrainEffect } from './postfx/FilmGrainEffect';
 import { createSanitizePass } from './postfx/SanitizePass';
+import { SoftSmokeEffect } from './postfx/SoftSmokeEffect';
 
 /**
  * The post chain, in order (the composer splits it into passes where effects that
  * sample neighbouring pixels would collide):
  *   sanitize     NaN/Inf scrub (the reflector throws the odd NaN), chapter exposure
  *   dissolve     holds the last frame over a cut and fades it out
+ *   smoke        the tyre smoke, soft against the scene's depth (postfx/SoftSmokeEffect)
  *   DOF          focused on the car during the drift, on the section's subject after
  *   motion blur  camera reprojection, with the car carried by its own motion
  *   bloom        + anamorphic streaks on the brightest lights
@@ -59,9 +62,13 @@ export function Effects() {
     const p = CONFIG.post;
     const lut = new LUT3DEffect(createTealOrangeLut(32));
     const grain = new FilmGrainEffect();
+    // its own pass: merged with depth of field, the blur would be built without the smoke
+    const smoke = new SoftSmokeEffect(camera, 0.5);
     return {
       sanitize: createSanitizePass(),
       dissolve: new DissolvePass(),
+      smoke,
+      smokePass: new EffectPass(camera, smoke),
       motionBlur: new MotionBlurEffect(camera, carState, p.motionBlurSamples),
       anamorphic: new AnamorphicEffect(),
       drops: new LensDropsEffect(),
@@ -78,6 +85,7 @@ export function Effects() {
       fx.lut.dispose();
       fx.grain.dispose();
       fx.dissolve.dispose();
+      fx.smokePass.dispose();
     },
     [fx],
   );
@@ -190,6 +198,8 @@ export function Effects() {
     <EffectComposer multisampling={mobile ? 0 : 4}>
       <primitive object={fx.sanitize.pass} />
       <primitive object={fx.dissolve} />
+      {/* tyre smoke, drawn in its own pass against the scene's depth (soft particles) */}
+      <primitive object={fx.smokePass} />
       {mobile ? (
         <></>
       ) : (

@@ -4,12 +4,14 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   Color,
+  CustomBlending,
   DynamicDrawUsage,
   InstancedBufferAttribute,
-  type InstancedMesh,
+  InstancedMesh,
   MathUtils,
   type Mesh,
-  NormalBlending,
+  OneFactor,
+  OneMinusSrcAlphaFactor,
   type PerspectiveCamera,
   PlaneGeometry,
   ShaderMaterial,
@@ -21,8 +23,13 @@ import { DRIFT } from '@/lib/chapters';
 import { carState, getCloudCenter } from '@/lib/motion';
 import { chapterState, rainLevel } from '@/lib/chapterRuntime';
 import { cameraState } from './CameraRig';
+import { lampHeads } from './city/StreetLights';
+import { smokeLayer } from './postfx/SoftSmokeEffect';
+import { coastLampHeads } from './Track';
 import { createSmokeTexture } from '@/lib/textures';
 import { isMobile } from '@/lib/device';
+
+const LAMPS = 4;
 
 /* -------------------------------------------------------------- shaders */
 
@@ -34,8 +41,9 @@ attribute float aAngle;
 attribute float aShade;
 uniform vec3 uTailPos;
 uniform float uTailRadius;
-uniform float uProjScale;
-uniform float uMaxCover;
+uniform vec3 uLampPos[${LAMPS}];
+uniform vec3 uLampColor;
+uniform float uLampLit;
 uniform vec3 uHeadPos0;
 uniform vec3 uHeadPos1;
 uniform vec3 uHeadDir;
@@ -48,6 +56,8 @@ varying float vTail;
 varying float vDepth;
 varying float vGroundY;
 varying float vHead;
+varying vec3 vLamp;
+varying float vSize;
 
 float headCone(vec3 p, vec3 hp) {
   vec3 d = p - hp;
@@ -71,10 +81,14 @@ void main() {
   vec2 offset = mat2(c, s, -s, c) * position.xy * aSize;
   mv.xy += offset;
   vDepth = -mv.z;
-  // Coverage guard: a puff may only cover uMaxCover of the frame height (before shot IV
-  // the smoke must never fill the screen); bigger ones fade instead of growing.
-  float cover = aSize * uProjScale / max(vDepth, 0.05);
-  vAlpha *= 1.0 - smoothstep(uMaxCover * 0.55, uMaxCover, cover);
+  vSize = aSize;
+  // sodium street lamps light the smoke from above (the nearest few)
+  vec3 lamp = vec3(0.0);
+  for (int i = 0; i < ${LAMPS}; i++) {
+    vec3 d = uLampPos[i] - aCenter;
+    lamp += uLampColor / (1.0 + dot(d, d) * 0.018);
+  }
+  vLamp = lamp * uLampLit;
   // tyre spray and mist pick up the headlight beams
   float fwd = 0.5 + 1.5 * pow(max(dot(uHeadDir, normalize(cameraPosition - aCenter)), 0.0), 2.0);
   vHead = (headCone(aCenter, uHeadPos0) + headCone(aCenter, uHeadPos1)) * uHeadLit * fwd;
@@ -89,7 +103,15 @@ void main() {
 `;
 
 const particleFrag = /* glsl */ `
+#include <packing>
 uniform sampler2D uMap;
+uniform sampler2D uDepth;
+uniform vec2 uRes;
+uniform float uNear;
+uniform float uFar;
+uniform float uSoft;
+uniform float uSoftOn;
+uniform float uGroundY;
 uniform vec3 uColor;
 uniform vec3 uTailColor;
 uniform float uTailTint;
@@ -102,20 +124,28 @@ varying float vTail;
 varying float vDepth;
 varying float vGroundY;
 varying float vHead;
+varying vec3 vLamp;
+varying float vSize;
 
 void main() {
   vec4 tex = texture2D(uMap, vUv);
-  // fade puffs that reach the lens instead of clipping them on the near plane
-  // (per shot: close-ups let the smoke come right up to the glass)
-  float nearFade = smoothstep(uNearFade.x, uNearFade.y, vDepth);
-  // fake soft particles against the ground plane (no depth texture needed)
-  float groundFade = smoothstep(0.0, 0.9, vGroundY);
-  float a = tex.a * vAlpha * uOpacity * nearFade * groundFade;
-  if (a < 0.003) discard;
-  vec3 col = uColor * vShade + vec3(1.0, 0.95, 0.86) * vHead;
+  // Near the lens a puff fades out by its own size (a big one from further away), so
+  // nothing close to the camera fills the frame; the shot can let it in closer still.
+  float nearFade = smoothstep(uNearFade.x, uNearFade.y, vDepth) * smoothstep(0.3 + 0.25 * vSize, 0.9 + 0.75 * vSize, vDepth);
+  // soft against the ground under the car...
+  float groundFade = smoothstep(uGroundY, uGroundY + 0.9, vGroundY);
+  // ...and against everything else: fade where the puff meets the scene's depth
+  float soft = 1.0;
+  if (uSoftOn > 0.5) {
+    float sceneZ = -perspectiveDepthToViewZ(texture2D(uDepth, gl_FragCoord.xy / uRes).x, uNear, uFar);
+    soft = clamp((sceneZ - vDepth) / (uSoft * (0.25 + 0.15 * vSize)), 0.0, 1.0);
+  }
+  float a = tex.a * vAlpha * uOpacity * nearFade * groundFade * soft;
+  if (a < 0.002) discard;
+  vec3 col = uColor * vShade + vec3(1.0, 0.95, 0.86) * vHead + vLamp;
   col = mix(col, uTailColor, clamp(vTail * uTailTint, 0.0, 1.0));
-  gl_FragColor = vec4(col, a);
-  #include <colorspace_fragment>
+  // premultiplied: laid over the frame by SoftSmokeEffect
+  gl_FragColor = vec4(col * a, a);
 }
 `;
 
@@ -210,6 +240,7 @@ function claim(pool: Pool) {
 /* ------------------------------------------------------------ component */
 
 const _tmp = new Vector3();
+const _far = new Vector3(0, -1e4, 0);
 const _cam = new Vector3();
 const _camDir = new Vector3();
 const _cloud = new Vector3();
@@ -245,8 +276,16 @@ export function Smoke() {
         uTailTint: { value: CONFIG.smoke.tailTint },
         uOpacity: { value: CONFIG.smoke.opacity },
         uNearFade: { value: new Vector2(0.35, 2) },
-        uProjScale: { value: 1 },
-        uMaxCover: { value: 100 },
+        uLampPos: { value: Array.from({ length: LAMPS }, () => new Vector3(0, -1e4, 0)) },
+        uLampColor: { value: new Color(CONFIG.coast.sodium) },
+        uLampLit: { value: 0 },
+        uDepth: { value: null },
+        uRes: { value: new Vector2(1, 1) },
+        uNear: { value: 0.1 },
+        uFar: { value: 2000 },
+        uSoft: { value: CONFIG.smoke.soft },
+        uSoftOn: { value: 0 },
+        uGroundY: { value: 0 },
         uHeadPos0: { value: new Vector3() },
         uHeadPos1: { value: new Vector3() },
         uHeadDir: { value: new Vector3(0, 0, 1) },
@@ -257,10 +296,29 @@ export function Smoke() {
       fragmentShader: particleFrag,
       transparent: true,
       depthWrite: false,
-      blending: NormalBlending,
+      depthTest: false, // (its own pass, with no depth buffer: the soft fade does the occlusion)
+      blending: CustomBlending,
+      blendSrc: OneFactor,
+      blendDst: OneMinusSrcAlphaFactor,
+      blendSrcAlpha: OneFactor,
+      blendDstAlpha: OneMinusSrcAlphaFactor,
     });
     return { geometry, material, attrs };
   }, [max]);
+
+  // the particles render in the smoke pass (postfx/SoftSmokeEffect.ts), not the main scene
+  const particles = useMemo(() => {
+    const m = new InstancedMesh(geometry, material, max);
+    m.frustumCulled = false;
+    m.count = 0;
+    return m;
+  }, [geometry, material, max]);
+  useLayoutEffect(() => {
+    smokeLayer.scene.add(particles);
+    return () => {
+      smokeLayer.scene.remove(particles);
+    };
+  }, [particles]);
 
   const veilMaterial = useMemo(
     () =>
@@ -282,13 +340,12 @@ export function Smoke() {
   );
 
   const pool = useMemo(() => createPool(max), [max]);
-  const mesh = useRef<InstancedMesh>(null!);
   const veil = useRef<Mesh>(null!);
+  const lampOrder = useMemo(() => [] as { p: Vector3; d: number }[], []);
 
   useLayoutEffect(() => {
     // Layer 1 = main camera only. Keeps the full-screen veil out of the ground reflection.
     veil.current.layers.set(1);
-    mesh.current.count = 0;
   }, []);
 
   useFrame((state, rawDt) => {
@@ -298,12 +355,13 @@ export function Smoke() {
     const p = s.progress;
     const t = state.clock.elapsedTime;
     // Outside the drift the chapter beats own the smoke cover (chapter IV thins it out).
-    // Before shot IV (cfg.fullScreenFrom) the smoke stays low and may never fill the frame.
-    const fillFrom = Math.max(cfg.fillStart, cfg.fullScreenFrom);
+    // The full-screen cover belongs to the III -> IV handover only (fillStart..fillFull);
+    // the rest of the time puffs near the lens fade by distance (see the fragment shader).
+    const fillFrom = cfg.fillStart;
     const fillTo = Math.max(fillFrom + 1e-3, cfg.fillFull);
     const after = !chapterState.drift && p >= DRIFT.localEnd - 1e-3; // chapters IV and V
     const fill = after ? chapterState.look.smoke : MathUtils.smoothstep(p, fillFrom, fillTo);
-    const guarded = !after && p < cfg.fullScreenFrom;
+    const ground = s.position.y;
     if (chapterState.jumped) {
       // a mini-map jump: drop the old smoke instead of leaving it hanging where it was
       pool.life.fill(0);
@@ -315,8 +373,9 @@ export function Smoke() {
 
     /* 1. tyre smoke: rate follows slip, spread along the wheel's path this frame */
     if (s.carReady) {
-      // burnout = straight-line wheelspin at the finale launch (0 during the drift)
-      const rate = cfg.rate * scale * Math.pow(Math.max(s.slip, s.burnout), 1.3);
+      // emission follows the slip angle, with a floor while the car is sliding at all
+      const slide = Math.max(s.slip, s.burnout);
+      const rate = cfg.rate * scale * (slide > 0.04 ? Math.max(Math.pow(slide, 1.3), cfg.floor) : 0);
       const side = s.slip > 0.05 ? 1 : 0.25; // a launch throws smoke back, not sideways
       const inherit = MathUtils.clamp(s.speed, -15, 15) * 0.2;
       for (let w = 0; w < 2; w++) {
@@ -330,7 +389,7 @@ export function Smoke() {
           const i = claim(pool);
           const o = i * 3;
           pool.pos[o] = _tmp.x + rand(-0.15, 0.15);
-          pool.pos[o + 1] = rand(0.12, 0.25);
+          pool.pos[o + 1] = _tmp.y + rand(0.1, 0.22);
           pool.pos[o + 2] = _tmp.z + rand(-0.15, 0.15);
           const kick = cfg.kick * rand(0.4, 1) * side;
           const back = rand(0.8, 1.8);
@@ -358,7 +417,7 @@ export function Smoke() {
           const i = claim(pool);
           const o = i * 3;
           pool.pos[o] = cur.x - s.forward.x * 0.35 + rand(-0.12, 0.12);
-          pool.pos[o + 1] = rand(0.08, 0.2);
+          pool.pos[o + 1] = cur.y + rand(0.06, 0.18);
           pool.pos[o + 2] = cur.z - s.forward.z * 0.35 + rand(-0.12, 0.12);
           const carry = s.speed * rand(0.15, 0.45); // water leaves the tyre slower than the car
           const sideways = rand(-0.6, 0.6);
@@ -388,7 +447,7 @@ export function Smoke() {
         const o = i * 3;
         _tmp.lerpVectors(_cloud, _cam, Math.random() * 0.75 * f2);
         pool.pos[o] = _tmp.x + rand(-1, 1) * radius;
-        pool.pos[o + 1] = MathUtils.clamp(_tmp.y + rand(-0.5, 0.8) * radius * 0.5, 0.6, 6);
+        pool.pos[o + 1] = MathUtils.clamp(_tmp.y + rand(-0.5, 0.8) * radius * 0.5, ground + 0.6, ground + 6);
         pool.pos[o + 2] = _tmp.z + rand(-1, 1) * radius;
         pool.vel[o] = rand(-0.4, 0.4);
         pool.vel[o + 1] = rand(0, 0.3);
@@ -402,6 +461,10 @@ export function Smoke() {
 
     /* 3. simulate */
     const drag = Math.exp(-cfg.drag * dt);
+    // the rain's wind carries the smoke off (it eases into the particles' own motion)
+    const windX = CONFIG.rain.windX * cfg.wind;
+    const windZ = CONFIG.rain.windZ * cfg.wind;
+    const windPull = 1 - Math.exp(-0.8 * dt);
     const ageRate = 1 - 0.7 * fill; // the cloud lingers once it starts filling the frame
     let alive = 0;
     for (let i = 0; i < pool.max; i++) {
@@ -425,6 +488,8 @@ export function Smoke() {
       let vx = pool.vel[o] * drag + nx * cfg.noise * dt;
       let vy = pool.vel[o + 1] * drag + (cfg.rise - pool.grav[i] + ny * 0.3 * cfg.noise) * dt;
       let vz = pool.vel[o + 2] * drag + nz * cfg.noise * dt;
+      vx += (windX - vx) * windPull * (pool.grav[i] > 0 ? 0.2 : 1);
+      vz += (windZ - vz) * windPull * (pool.grav[i] > 0 ? 0.2 : 1);
 
       // filling: everything drifts toward the lens
       if (fill > 0) {
@@ -444,7 +509,7 @@ export function Smoke() {
       const tl = pool.age[i] / life;
       const grow = 1 - (1 - tl) * (1 - tl);
       const sz = (pool.size0[i] + (pool.size1[i] - pool.size0[i]) * grow) * (1 + fill * fill * cfg.fillGrow);
-      py = Math.max(py, sz * 0.25); // keep most of the billboard above the asphalt (the shader fades the rest)
+      py = Math.max(py, ground + sz * 0.25); // keep most of the billboard above the asphalt (the shader fades the rest)
 
       pool.pos[o] = px;
       pool.pos[o + 1] = py;
@@ -485,7 +550,7 @@ export function Smoke() {
       a.addUpdateRange(0, Math.max(1, alive) * a.itemSize);
       a.needsUpdate = true;
     }
-    mesh.current.count = alive;
+    particles.count = alive;
 
     const u = material.uniforms;
     (u.uColor.value as Color).set(cfg.color);
@@ -493,11 +558,23 @@ export function Smoke() {
     u.uTailTint.value = cfg.tailTint * s.slip;
     (u.uTailPos.value as Vector3).copy(s.tailLight);
     (u.uNearFade.value as Vector2).set(cameraState.nearFade[0], cameraState.nearFade[1]);
-    u.uProjScale.value = 1 / (2 * Math.tan(MathUtils.degToRad((camera as PerspectiveCamera).fov) / 2));
-    // the guard eases off across the cut into shot IV
-    u.uMaxCover.value = guarded
-      ? MathUtils.lerp(cfg.maxCover, 100, MathUtils.smoothstep(p, cfg.fullScreenFrom - 0.02, cfg.fullScreenFrom))
-      : 100;
+    // soft particles: the main render's depth, from the smoke pass
+    const cam = camera as PerspectiveCamera;
+    u.uDepth.value = smokeLayer.depth;
+    u.uSoftOn.value = smokeLayer.depth ? 1 : 0;
+    (u.uRes.value as Vector2).copy(smokeLayer.resolution);
+    u.uNear.value = cam.near;
+    u.uFar.value = cam.far;
+    u.uSoft.value = cfg.soft;
+    u.uGroundY.value = ground;
+    // the nearest street lamps (waterfront or city)
+    const heads = chapterState.stage === 'city' ? lampHeads : coastLampHeads;
+    lampOrder.length = 0;
+    for (const h of heads) lampOrder.push({ p: h, d: h.distanceToSquared(s.position) });
+    lampOrder.sort((a, b) => a.d - b.d);
+    const lp = u.uLampPos.value as Vector3[];
+    for (let k = 0; k < LAMPS; k++) lp[k].copy(lampOrder[k]?.p ?? _far);
+    u.uLampLit.value = cfg.lampLit * chapterState.env.lamps;
     (u.uHeadPos0.value as Vector3).copy(s.headPos[0]);
     (u.uHeadPos1.value as Vector3).copy(s.headPos[1]);
     (u.uHeadDir.value as Vector3).copy(s.headDir);
@@ -519,7 +596,6 @@ export function Smoke() {
 
   return (
     <>
-      <instancedMesh ref={mesh} args={[geometry, material, max]} frustumCulled={false} renderOrder={10} />
       <mesh ref={veil} frustumCulled={false} renderOrder={20} material={veilMaterial}>
         <planeGeometry args={[2, 2]} />
       </mesh>

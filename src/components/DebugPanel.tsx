@@ -15,6 +15,7 @@ import { cameraState } from '@/scene/CameraRig';
 import { engine } from '@/lib/engineAudio';
 import { powertrain } from '@/lib/powertrain';
 import { reflectionUniforms } from '@/scene/city/cityReflection';
+import { smokeLayer } from '@/scene/postfx/SoftSmokeEffect';
 import { director, getSchedule } from '@/scene/city/director';
 import { driftAt } from '@/lib/cityDrive';
 
@@ -147,6 +148,7 @@ export function DebugPanel() {
       director,
       reflection: reflectionUniforms,
       engine,
+      smokeLayer,
       powertrain,
       // the camera director's cuts with the slide at each (none should land above ~0.3)
       schedule: () => getSchedule().map((c) => ({ ...c, drift: +driftAt(c.s).toFixed(2) })),

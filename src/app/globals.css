@@ -116,7 +116,19 @@ button {
 }
 
 /* chapter cards: numeral, title, one line. One at a time, in the slot the layout solver
-   picks (Overlay.tsx), faded by --gate (calm, settled) and --slotfade (moving slots) */
+   picks (Overlay.tsx), faded by --gate (calm, settled) and --slotfade (moving slots).
+   Both change many frames in a row and only .cards reads them: registered as not
+   inherited, a change restyles .cards alone instead of every card under it */
+@property --gate {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+@property --slotfade {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
 .cards {
   --gate: 1;
   --slotfade: 1;
@@ -1862,14 +1874,6 @@ li:last-child .mm-track {
 }
 
 /* -------------------------------------------- stop panels: one side column (desktop) */
-
-/* panels wait for the camera to settle on the stop (--gate from Stops.tsx) */
-.stops {
-  --gate: 0;
-}
-.stops > .d-block:not(.d-finale) {
-  opacity: var(--gate);
-}
 
 /* a glide (a mini-map jump, src/lib/playhead.ts) hides the titles and panels on the way; they
    come back as it slows into the destination */

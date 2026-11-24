@@ -150,7 +150,18 @@ export function Overlay() {
     const cardsEl = q('.cards')[0] as HTMLElement;
     const titleEl = q('.title-block')[0] as HTMLElement;
     const cardEls = q('.chapter-card') as HTMLElement[];
-    const lay = { gate: 1, slot: 'tl' as Slot, pending: null as Slot | null, fadeUntil: 0, titleSlot: 'tc' as Slot, px: 0, py: 0 };
+    const lay = {
+      gate: 1,
+      slot: 'tl' as Slot,
+      pending: null as Slot | null,
+      fadeUntil: 0,
+      titleSlot: 'tc' as Slot,
+      px: 0,
+      py: 0,
+      pxOn: null as HTMLElement | null,
+      pxAt: '',
+      pyAt: '',
+    };
     let raf = 0;
     let last = performance.now();
     const loop = () => {
@@ -195,11 +206,19 @@ export function Overlay() {
           titleEl.dataset.slot = ts;
         }
       }
-      // depth parallax (the line moves more than the numeral)
+      // depth parallax (the line moves more than the numeral), on the card that is up: set
+      // on .cards it would restyle every card each frame the pointer eases
       lay.px += (pointer.x - lay.px) * (1 - Math.exp(-dt / 0.4));
       lay.py += (pointer.y - lay.py) * (1 - Math.exp(-dt / 0.4));
-      cardsEl.style.setProperty('--px', lay.px.toFixed(3));
-      cardsEl.style.setProperty('--py', lay.py.toFixed(3));
+      const px = lay.px.toFixed(3);
+      const py = lay.py.toFixed(3);
+      if (active && (active !== lay.pxOn || px !== lay.pxAt || py !== lay.pyAt)) {
+        active.style.setProperty('--px', px);
+        active.style.setProperty('--py', py);
+        lay.pxOn = active;
+        lay.pxAt = px;
+        lay.pyAt = py;
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);

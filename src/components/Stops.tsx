@@ -545,8 +545,10 @@ export function Stops() {
     const unsubscribe = useStore.subscribe((s) => tl?.progress(s.view));
     window.addEventListener('resize', measure);
 
-    // layout: panels wait for the camera to settle on the stop, sit on whichever side keeps
-    // them off the car and the billboard, and the competition strip opens only at the stop
+    // layout: panels sit on whichever side keeps them off the car and the billboard, and
+    // tell the title solver where they are once the camera has settled on the stop; the
+    // competition strip opens only at the stop. (Their fades are the timeline's, on the
+    // stop's slow zone.)
     const comp = el.querySelector<HTMLElement>('.d-competitions');
     const lay = { gate: 0, side: 'left' as 'left' | 'right', open: '0', until: 0 };
     let raf = 0;
@@ -559,7 +561,6 @@ export function Stops() {
       const id = CHAPTERS[chapterState.chapter].stop;
       const want = !id ? 0 : id === 'finale' ? 1 : L.atStop ? 1 : 0;
       lay.gate += (want - lay.gate) * (1 - Math.exp(-dt / (want > lay.gate ? 0.3 : 0.15)));
-      el.style.setProperty('--gate', lay.gate.toFixed(3));
       if (id && id !== 'finale' && now > lay.until) {
         const col = el.querySelector<HTMLElement>(`.d-${id} .col`);
         if (col && col.offsetWidth) {

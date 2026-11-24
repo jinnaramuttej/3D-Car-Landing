@@ -8,7 +8,11 @@ import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { getWipeTexture, interaction, isUiTarget, WIPE_H, WIPE_W } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
+import { togglePlay } from '@/lib/useScrollTimeline';
 import { cycleShot } from './city/director';
+
+/** A Space press shorter than this is a tap (play / pause); longer, a rev. */
+const TAP_MS = 220;
 import { LIVERIES } from './livery';
 
 /** Flips the headlights against whatever they show right now (H key and the navbar button). */
@@ -39,6 +43,7 @@ export function Interaction() {
       y: 0,
       moved: 0,
       space: false,
+      spaceAt: 0,
       last: null as Vector2 | null,
       wipeDirty: false,
       decay: 0,
@@ -105,8 +110,15 @@ export function Interaction() {
     const onKey = (e: KeyboardEvent) => {
       if (editable(e.target)) return;
       if (e.code === 'Space') {
-        e.preventDefault(); // hold Space to rev, not to scroll
-        state.space = e.type === 'keydown';
+        // tap Space to play / pause, hold it to rev (and never to scroll)
+        e.preventDefault();
+        if (e.type === 'keydown') {
+          if (!e.repeat) state.spaceAt = performance.now();
+          state.space = true;
+        } else {
+          if (performance.now() - state.spaceAt <= TAP_MS) togglePlay();
+          state.space = false;
+        }
       } else if (e.type === 'keydown' && !e.repeat && e.code === 'KeyH') {
         toggleHeadlights();
       } else if (e.type === 'keydown' && e.code === 'KeyC') {
@@ -145,7 +157,7 @@ export function Interaction() {
     const c = CONFIG.interaction;
     // hold (after a short delay, so a click on the car doesn't rev) or Space
     const pressHeld = state.down && !mobile && (performance.now() - state.downAt) / 1000 >= c.holdDelay && state.moved < 40;
-    interaction.holding = pressHeld || state.space;
+    interaction.holding = pressHeld || (state.space && performance.now() - state.spaceAt > TAP_MS);
     const target = interaction.holding ? 1 : 0;
     const tau = target > interaction.rev ? c.revRise : c.revFall;
     interaction.rev += (target - interaction.rev) * (1 - Math.exp(-dt / Math.max(0.01, tau)));

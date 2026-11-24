@@ -6,14 +6,20 @@ const [BRAND, YEAR] = SITE.name.split(' ');
 import { chapterState } from '@/lib/chapterRuntime';
 import { engine } from '@/lib/engineAudio';
 import { useStore } from '@/lib/store';
-import { scrollToProgress } from '@/lib/useScrollTimeline';
+import { scrollToProgress, togglePlay } from '@/lib/useScrollTimeline';
 import { cycleShot } from '@/scene/city/director';
 import { toggleHeadlights } from '@/scene/Interaction';
+import { CinemaIcon, PlayIcon } from './PlayControls';
 
-/** Minimal bar: the name (back to the top), headlights, the next camera shot, sound, and the way out to techfest.org. */
+/**
+ * Minimal bar: the name (back to the top), Play (the whole journey by itself), cinematic
+ * mode, headlights, the next camera shot, sound, and the way out to techfest.org.
+ */
 export function Navbar() {
   const muted = useStore((s) => s.muted);
   const headlights = useStore((s) => s.headlights);
+  const auto = useStore((s) => s.auto);
+  const cinematic = useStore((s) => s.cinematic);
   const lightsOn = headlights === 'on' || (headlights === 'auto' && chapterState.ignition > 0.5);
 
   const toggleSound = () => {
@@ -30,7 +36,22 @@ export function Navbar() {
         <em>{CONCEPT}</em>
       </button>
 
+      <button type="button" className={`play-btn${auto === 'playing' ? ' is-on' : ''}`} onClick={togglePlay} aria-pressed={auto === 'playing'} title="Play the whole journey (Space)">
+        <PlayIcon playing={auto === 'playing'} />
+        <span>{auto === 'playing' ? 'Pause' : auto === 'paused' ? 'Resume' : 'Play'}</span>
+      </button>
+
       <div className="nav-actions">
+        <button
+          type="button"
+          className={`icon-btn${cinematic ? ' is-on' : ''}`}
+          onClick={() => useStore.getState().setCinematic(!cinematic)}
+          aria-pressed={cinematic}
+          aria-label="Cinematic mode: hide the navbar and the mini-map"
+          title="Cinematic mode"
+        >
+          <CinemaIcon />
+        </button>
         <button
           type="button"
           className={`icon-btn${headlights === 'auto' ? '' : lightsOn ? ' is-on' : ' is-off'}`}

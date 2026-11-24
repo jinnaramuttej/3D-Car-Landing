@@ -14,6 +14,8 @@ import { create } from 'zustand';
  */
 export type Headlights = 'auto' | 'on' | 'off';
 export type LoadStage = 'assets' | 'warming' | 'ready';
+/** The Play button: off (the visitor scrolls), playing, or paused part-way. */
+export type Auto = 'off' | 'playing' | 'paused';
 
 type ExperienceState = {
   /** Global 0..1 over the whole page (see src/lib/chapters.ts): the scroll target. */
@@ -31,6 +33,9 @@ type ExperienceState = {
   load: LoadStage;
   /** 0..1 inside the warm-up. */
   warm: number;
+  auto: Auto;
+  /** Cinematic mode: the navbar and the mini-map step aside. */
+  cinematic: boolean;
   setProgress: (progress: number) => void;
   setView: (view: number) => void;
   setManual: (manual: boolean) => void;
@@ -38,6 +43,8 @@ type ExperienceState = {
   setHeadlights: (headlights: Headlights) => void;
   setLivery: (livery: number) => void;
   setLoad: (load: LoadStage, warm: number) => void;
+  setAuto: (auto: Auto) => void;
+  setCinematic: (cinematic: boolean) => void;
 };
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -51,6 +58,8 @@ export const useStore = create<ExperienceState>()((set) => ({
   livery: 0,
   load: 'assets',
   warm: 0,
+  auto: 'off',
+  cinematic: false,
   setProgress: (progress) => set({ progress: clamp01(progress) }),
   setView: (view) => set({ view: clamp01(view) }),
   setManual: (manual) => set({ manual }),
@@ -58,4 +67,6 @@ export const useStore = create<ExperienceState>()((set) => ({
   setHeadlights: (headlights) => set({ headlights }),
   setLivery: (livery) => set({ livery }),
   setLoad: (load, warm) => set({ load, warm }),
+  setAuto: (auto) => set({ auto }),
+  setCinematic: (cinematic) => set({ cinematic }),
 }));

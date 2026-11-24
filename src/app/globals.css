@@ -1546,3 +1546,126 @@ li:last-child .mm-track {
   transform-origin: left;
   transition: transform 0.25s linear;
 }
+
+/* -------------------------------------------------------------- play, cinema */
+
+.play-btn {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 18px 0 14px;
+  border: 1px solid var(--accent-glow);
+  border-radius: 999px;
+  background: rgba(255, 42, 26, 0.14);
+  backdrop-filter: blur(10px);
+  color: var(--fg);
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+.play-btn:hover,
+.play-btn:focus-visible,
+.play-btn.is-on {
+  background: rgba(255, 42, 26, 0.3);
+}
+
+.play-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 25;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 0;
+  transition: opacity 0.4s;
+  pointer-events: none;
+}
+.play-bar.is-on {
+  opacity: 1;
+}
+.play-bar > div {
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transform: scaleX(0);
+}
+
+.navbar,
+.minimap {
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s ease;
+}
+.is-cinematic .navbar {
+  opacity: 0;
+  transform: translateY(-16px);
+  pointer-events: none;
+}
+.is-cinematic .minimap {
+  opacity: 0;
+  transform: translate(16px, -50%);
+  pointer-events: none;
+}
+.is-cinematic .hints {
+  display: none;
+}
+
+.play-dock {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  z-index: 26;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border: 1px solid var(--glass-line);
+  border-radius: 999px;
+  background: var(--glass);
+  backdrop-filter: blur(12px);
+  transform: translate(-50%, 12px);
+  opacity: 0;
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s ease;
+}
+.play-dock.is-awake {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.play-time {
+  min-width: 86px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.play-exit {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 767px) {
+  .play-btn {
+    position: static;
+    transform: none;
+    padding: 0 12px;
+  }
+  .play-btn span {
+    display: none;
+  }
+}

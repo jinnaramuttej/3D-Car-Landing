@@ -13,6 +13,7 @@ import { Loader } from './Loader';
 import { MiniMap } from './MiniMap';
 import { Navbar } from './Navbar';
 import { Overlay } from './Overlay';
+import { PlayControls } from './PlayControls';
 import { Stops } from './Stops';
 
 /**
@@ -49,6 +50,7 @@ export default function Experience() {
       <Stops />
       <Navbar />
       <MiniMap />
+      <PlayControls />
       <div ref={trackRef} className="scroll-track" style={{ height: `${PAGES * 100}vh` }} />
 
       <Loader />

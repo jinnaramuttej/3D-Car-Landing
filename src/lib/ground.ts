@@ -67,8 +67,28 @@ const _o = new Vector3();
 (ray as unknown as { firstHitOnly: boolean }).firstHitOnly = true;
 const hits: { point: Vector3; distance: number }[] = [];
 
-/** Road height under (x, z), looking from yHint + 1.5 m down to 4 m; null if there is no road. */
+/**
+ * Road height under (x, z), looking from yHint + 1.5 m down to 4 m; null if there is no road.
+ * A hairline crack between two of the model's road tiles (a centimetre or two) doesn't count
+ * as no road: a miss is tried again a few centimetres to each side.
+ */
 export function roadHeight(x: number, z: number, yHint: number) {
+  const y = roadHeightAt(x, z, yHint);
+  if (y !== null) return y;
+  for (const [dx, dz] of CRACK) {
+    const v = roadHeightAt(x + dx, z + dz, yHint);
+    if (v !== null) return v;
+  }
+  return null;
+}
+const CRACK = [
+  [0.05, 0],
+  [-0.05, 0],
+  [0, 0.05],
+  [0, -0.05],
+];
+
+function roadHeightAt(x: number, z: number, yHint: number) {
   _o.set(x, yHint + 1.5, z);
   ray.set(_o, down);
   ray.near = 0;

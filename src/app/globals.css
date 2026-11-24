@@ -1502,3 +1502,47 @@ li:last-child .mm-track {
     transition: none;
   }
 }
+
+/* ------------------------------------------------------------------ loader */
+
+.loader {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-content: center;
+  gap: 14px;
+  background: #04050a;
+  transition: opacity 1.2s ease, visibility 1.2s;
+}
+.loader.is-done {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.loader-label {
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  min-width: min(320px, 70vw);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+.loader-label span {
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+.loader-bar {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.loader-bar i {
+  display: block;
+  height: 100%;
+  background: #ff2a1a;
+  transform-origin: left;
+  transition: transform 0.25s linear;
+}

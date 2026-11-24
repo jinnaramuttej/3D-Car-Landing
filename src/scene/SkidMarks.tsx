@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import {
   BufferAttribute,
@@ -15,6 +15,7 @@ import {
 import { CONFIG } from '@/lib/config';
 import { carState } from '@/lib/motion';
 import { isMobile } from '@/lib/device';
+import { onWarmupEnd } from '@/lib/warmup';
 
 const vert = /* glsl */ `
 attribute float aAlpha;
@@ -113,6 +114,18 @@ export function SkidMarks() {
   useLayoutEffect(() => {
     mesh.current.layers.set(1); // not needed in the ground reflection
   }, []);
+
+  // the warm-up drives through the drift: wipe what it laid down
+  useEffect(
+    () =>
+      onWarmupEnd(() => {
+        state.cursor = 0;
+        state.used = 0;
+        for (const r of state.ribbons) r.started = false;
+        geometry.setDrawRange(0, 0);
+      }),
+    [state, geometry],
+  );
 
   useFrame(() => {
     const s = carState;

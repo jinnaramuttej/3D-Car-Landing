@@ -2,12 +2,13 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Loader } from '@react-three/drei';
 import { Leva } from 'leva';
 import { PAGES } from '@/lib/chapters';
 import { useScrollTimeline } from '@/lib/useScrollTimeline';
 import { Scene } from '@/scene/Scene';
+import { Warmup } from '@/scene/Warmup';
 import { DebugPanel } from './DebugPanel';
+import { Loader } from './Loader';
 
 import { MiniMap } from './MiniMap';
 import { Navbar } from './Navbar';
@@ -39,6 +40,7 @@ export default function Experience() {
         >
           <Suspense fallback={null}>
             <Scene />
+            <Warmup />
           </Suspense>
         </Canvas>
       </div>
@@ -49,11 +51,7 @@ export default function Experience() {
       <MiniMap />
       <div ref={trackRef} className="scroll-track" style={{ height: `${PAGES * 100}vh` }} />
 
-      <Loader
-        containerStyles={{ background: '#04050a' }}
-        barStyles={{ background: '#ff2a1a' }}
-        dataInterpolation={(p) => `Waiting out the rain ${p.toFixed(0)}%`}
-      />
+      <Loader />
       <Leva hidden={!debug} collapsed={false} titleBar={{ title: 'GT3 R tuning' }} />
       {debug && <DebugPanel />}
     </>

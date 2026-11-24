@@ -237,7 +237,9 @@ export function Billboards() {
                 : b.id === 'expo'
                   ? `${art.expoIndex}`
                   : 'static';
-        const anim = b.id === 'competitions' ? art.competitionAnim.toFixed(2) : b.id === 'dkms' ? (Math.round(art.pulse * 8) / 8).toFixed(3) : '';
+        // (animated art redraws the canvas: only while its own stop is the one on screen)
+        const own = CHAPTERS.findIndex((c) => c.stop === b.id) === chapterState.chapter;
+        const anim = !own ? b.anim : b.id === 'competitions' ? art.competitionAnim.toFixed(2) : b.id === 'dkms' ? (Math.round(art.pulse * 8) / 8).toFixed(3) : '';
         if (key !== b.key || anim !== b.anim) {
           const fresh = key !== b.key;
           b.key = key;

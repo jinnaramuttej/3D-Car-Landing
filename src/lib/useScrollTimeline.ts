@@ -51,6 +51,11 @@ export function useScrollTimeline(trackRef: RefObject<HTMLElement | null>) {
     gsap.ticker.lagSmoothing(0);
     lenisRef = lenis;
     trackEl = track;
+    // no scrolling behind the loader: the warm-up is driving
+    if (useStore.getState().load !== 'ready') lenis.stop();
+    const unready = useStore.subscribe((s, prev) => {
+      if (s.load === 'ready' && prev.load !== 'ready') lenis.start();
+    });
 
     const proxy = { progress: 0 };
     const write = () => {
@@ -78,6 +83,7 @@ export function useScrollTimeline(trackRef: RefObject<HTMLElement | null>) {
 
     return () => {
       unsubscribe();
+      unready();
       tl.scrollTrigger?.kill();
       tl.kill();
       gsap.ticker.remove(raf);

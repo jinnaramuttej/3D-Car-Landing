@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   Color,
@@ -25,6 +25,7 @@ import { cameraState } from './CameraRig';
 import { lampHeads } from './city/StreetLights';
 import { smokeLayer } from './postfx/SoftSmokeEffect';
 import { createSmokeTexture } from '@/lib/textures';
+import { onWarmupEnd } from '@/lib/warmup';
 import { isMobile } from '@/lib/device';
 
 const LAMPS = 4;
@@ -273,6 +274,16 @@ export function Smoke() {
   }, [particles]);
 
   const pool = useMemo(() => createPool(max), [max]);
+  // the warm-up drives through the drift: none of its smoke stays behind
+  useEffect(
+    () =>
+      onWarmupEnd(() => {
+        pool.life.fill(0);
+        pool.hasPrev = false;
+        particles.count = 0;
+      }),
+    [pool, particles],
+  );
   const lampOrder = useMemo(() => [] as { p: Vector3; d: number }[], []);
 
   useFrame((state, rawDt) => {

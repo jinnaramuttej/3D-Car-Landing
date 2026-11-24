@@ -13,6 +13,7 @@ import { create } from 'zustand';
  *   Never subscribe to `progress` in a React render: it changes every frame.
  */
 export type Headlights = 'auto' | 'on' | 'off';
+export type LoadStage = 'assets' | 'warming' | 'ready';
 
 type ExperienceState = {
   /** Global 0..1 over the whole page (see src/lib/chapters.ts): the scroll target. */
@@ -26,12 +27,17 @@ type ExperienceState = {
   headlights: Headlights;
   /** Index into LIVERIES (src/scene/livery.ts). */
   livery: number;
+  /** The loader: downloading, then the warm-up (src/scene/Warmup.tsx), then ready. */
+  load: LoadStage;
+  /** 0..1 inside the warm-up. */
+  warm: number;
   setProgress: (progress: number) => void;
   setView: (view: number) => void;
   setManual: (manual: boolean) => void;
   setMuted: (muted: boolean) => void;
   setHeadlights: (headlights: Headlights) => void;
   setLivery: (livery: number) => void;
+  setLoad: (load: LoadStage, warm: number) => void;
 };
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -43,10 +49,13 @@ export const useStore = create<ExperienceState>()((set) => ({
   muted: true,
   headlights: 'auto',
   livery: 0,
+  load: 'assets',
+  warm: 0,
   setProgress: (progress) => set({ progress: clamp01(progress) }),
   setView: (view) => set({ view: clamp01(view) }),
   setManual: (manual) => set({ manual }),
   setMuted: (muted) => set({ muted }),
   setHeadlights: (headlights) => set({ headlights }),
   setLivery: (livery) => set({ livery }),
+  setLoad: (load, warm) => set({ load, warm }),
 }));

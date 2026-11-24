@@ -6,6 +6,7 @@ import { getRoute, routeCurvature, sampleRoute, STOPS } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
 import { carState, forwardOf, leftOf } from '@/lib/motion';
 import { stopAnchor } from '@/lib/stops';
+import { onWarmupEnd } from '@/lib/warmup';
 import { bridgeInfo } from './Bridge';
 import type { CityShot } from './cityCamera';
 
@@ -106,8 +107,9 @@ export function getSchedule() {
 }
 
 function scheduledAt(s: number): Cue {
-  let cue: Cue = { s: 0, rig: 'chase', side: 1 };
-  for (const c of getSchedule()) {
+  const sch = getSchedule();
+  let cue: Cue = sch[0];
+  for (const c of sch) {
     if (c.s > s) break;
     cue = c;
   }
@@ -476,6 +478,13 @@ const state = {
   b: makePose(),
 };
 
+// after the warm-up drive (behind the loader): start fresh where the page is, no blend
+onWarmupEnd(() => {
+  state.init = false;
+  director.manual = null;
+  director.panKey = '';
+});
+
 const _la = new Vector3();
 const _lb = new Vector3();
 const _lo = new Vector3();
@@ -562,8 +571,10 @@ export function directShot(out: CityShot) {
   } else if (want.id !== st.current.id) {
     const peak = carState.slip > 0.5;
     const held = now - st.since < MIN_HOLD * 1000;
+    // a stop's camera stands still in the street: once the car pulls away, follow it at once
+    const leaving = st.current.rig === 'stop';
     // (the opening is one continuous move: anything after it waits for the slide to end)
-    if (!peak && (force || !held)) startBlend(want, now);
+    if (!peak && (force || leaving || !held)) startBlend(want, now);
   }
 
   // evaluate: the current rig, blended in from the previous one

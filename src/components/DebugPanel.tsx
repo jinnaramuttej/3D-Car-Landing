@@ -17,6 +17,7 @@ import { reflectionUniforms } from '@/scene/city/cityReflection';
 import { smokeLayer } from '@/scene/postfx/SoftSmokeEffect';
 import { director, getSchedule } from '@/scene/city/director';
 import { driftAt } from '@/lib/cityDrive';
+import { warmup } from '@/lib/warmup';
 
 type LevaSchema = Exclude<Parameters<typeof useControls>[0], string | ((...args: never[]) => unknown)>;
 type Range = readonly [number, number, number?];
@@ -142,6 +143,7 @@ export function DebugPanel() {
       engine,
       smokeLayer,
       powertrain,
+      warmup,
       // where the director's scheduled rigs start, with the slide at each (none above ~0.3)
       schedule: () => getSchedule().map((c) => ({ ...c, drift: +driftAt(c.s).toFixed(2) })),
     };

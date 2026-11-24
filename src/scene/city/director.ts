@@ -89,8 +89,11 @@ function buildSchedule(): Cue[] {
   for (let k = 0; k < holds.length; k++) {
     const a = holds[k] + 8;
     const b = k + 1 < holds.length ? holds[k + 1] - 10 : route.bridgeStart - 10;
-    out.push({ s: a, rig: ORDER[k % ORDER.length], side: k % 2 ? -1 : 1 });
-    if (b - a > 70) out.push({ s: a + (b - a) / 2, rig: ORDER[(k + 3) % ORDER.length], side: k % 2 ? 1 : -1 });
+    // (a drone flying over a gantry ends up with the board in its face)
+    const gantry = CHAPTERS.some((c) => c.stop && mountOf(c.stop) === 'gantry' && boardS(c.stop) > a - 10 && boardS(c.stop) < b + 30);
+    const pick = (r: DriveRig) => (gantry && r === 'drone' ? 'chase' : r);
+    out.push({ s: a, rig: pick(ORDER[k % ORDER.length]), side: k % 2 ? -1 : 1 });
+    if (b - a > 70) out.push({ s: a + (b - a) / 2, rig: pick(ORDER[(k + 3) % ORDER.length]), side: k % 2 ? 1 : -1 });
   }
   // over the water: the drone shows the bridge and the sea, then a pan past the first pylon
   const pyl = bridgeInfo.pylons[0] ?? route.bridgeStart + 240;
@@ -241,10 +244,12 @@ const RUN_KEYS: Key[] = [
   { at: 128, pos: [2.0, 0.52, 9.5], look: [0, 0.56, 1.4], fov: 31 },
   { at: 146, pos: [-1.6, 0.5, 10.5], look: [0.2, 0.55, 1.2], fov: 30 },
   { at: 164, pos: [-2.8, 0.55, 10.5], look: [0.3, 0.6, 1.2], fov: 30 },
-  // the plaza is wide open: swing out for the flick
-  { at: 184, pos: [-8.5, 0.8, 7.5], look: [0, 0.6, 0.6], fov: 31 },
+  // the plaza is wide open: swing out for the flick (the camera is ~6 m ahead, still in it)
+  { at: 178, pos: [-6.0, 0.8, 6.0], look: [0, 0.6, 0.6], fov: 31 },
+  // past it the right side closes in: back across to the left
+  { at: 192, pos: [3.0, 2.1, 9.5], look: [0, 0.5, 0.6], fov: 32 },
   // down the long left-hander on a long lens, the car coming at it sideways
-  { at: 206, pos: [-2.2, 0.75, 12.5], look: [0, 0.6, 0.6], fov: 32 },
+  { at: 206, pos: [-1.5, 0.75, 12.5], look: [0, 0.6, 0.6], fov: 32 },
   { at: 250, pos: [-1.2, 1.1, 13.5], look: [0, 0.65, 0.4], fov: 34 },
   { at: 300, pos: [2.4, 0.9, 11.0], look: [0, 0.62, 0.2], fov: 33 },
   { at: 345, pos: [1.2, 1.6, 15.5], look: [0, 0.7, 0], fov: 32 },
@@ -416,7 +421,8 @@ function stopRig(stop: ReturnType<typeof nearestStop>, out: Pose) {
     };
     put();
     let fov = need();
-    for (let i = 0; i < 6 && fov > CONFIG.camera.fovMax && back + 7 <= maxBack; i++) {
+    // (at most two steps back: past ~29 m the car is a speck; the board may crop instead)
+    for (let i = 0; i < 2 && fov > CONFIG.camera.fovMax && back + 7 <= maxBack; i++) {
       back += 7;
       put();
       fov = need();
@@ -628,8 +634,18 @@ export function directShot(out: CityShot) {
   // the parked car), so check the road at the camera's own place along the route
   forwardOf(carState.pathHeading, _f);
   const along = carState.s + _d.subVectors(out.pos, carState.pathPoint).dot(_f);
-  sampleRoute(along, _c);
+  const hAlong = sampleRoute(along, _c);
   if (out.pos.y < _c.y + 0.32) out.pos.y = _c.y + 0.32;
+  // and inside the street: a rig set relative to the car can land beside the road where
+  // it narrows ahead (only near the ground: a drone above the roofs is fine)
+  if (rig !== 'stop' && rig !== 'sidepan' && out.pos.y - _c.y < 5 && along < getRoute().bridgeStart) {
+    leftOf(hAlong, _l);
+    const lat = _d.subVectors(out.pos, _c).dot(_l);
+    const [roomL, roomR] = getRoute().room(along);
+    const max = Math.max(0.6, roomL - 0.5);
+    const min = -Math.max(0.6, roomR - 0.5);
+    if (lat > max || lat < min) out.pos.addScaledVector(_l, clamp(lat, min, max) - lat);
+  }
   out.look.copy(o.look);
   out.fov = driving ? clamp(o.fov + smoothstep(speed, 8, 60) * 4, CONFIG.camera.fovMin, CONFIG.camera.fovMax) : o.fov;
   out.focus.copy(o.focus);

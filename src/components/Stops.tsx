@@ -419,15 +419,23 @@ function DkmsPanel() {
   // starts on its own the first time you arrive here; "start again" any time
   useEffect(() => {
     let raf = 0;
+    // (the DOM is touched only while the stop is on screen, and only with what changed: a
+    // clock rewritten every frame, even with the same text, re-lays out every stop panel,
+    // about 1.7 ms a frame for the whole journey)
+    const last = { dash: '', text: '', beat: '' };
     const tick = () => {
-      if (started === null && stopWeight('dkms') > 0.85) setStarted(performance.now());
+      const w = stopWeight('dkms');
+      if (started === null && w > 0.85) setStarted(performance.now());
       const t = started === null ? 0 : Math.min(SWAB, (performance.now() - started) / 1000);
-      if (ring.current) ring.current.style.strokeDasharray = `${((t / SWAB) * 100).toFixed(2)} 100`;
-      if (clock.current) {
+      if (w > 0) {
+        const dash = `${((t / SWAB) * 100).toFixed(2)} 100`;
+        if (ring.current && dash !== last.dash) ring.current.style.strokeDasharray = last.dash = dash;
         const left = Math.ceil(SWAB - t);
-        clock.current.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+        const text = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+        if (clock.current && text !== last.text) clock.current.textContent = last.text = text;
+        const beat = heartbeatPulse(performance.now() / 1000).toFixed(3);
+        if (wrap.current && beat !== last.beat) wrap.current.style.setProperty('--beat', (last.beat = beat));
       }
-      if (wrap.current) wrap.current.style.setProperty('--beat', heartbeatPulse(performance.now() / 1000).toFixed(3));
       if (started !== null && t >= SWAB && !done) setDone(true);
       raf = requestAnimationFrame(tick);
     };

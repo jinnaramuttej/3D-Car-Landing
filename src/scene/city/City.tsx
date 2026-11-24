@@ -3,7 +3,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
-import { Euler, type Group, MathUtils, type Mesh, type Object3D, type PerspectiveCamera, type Texture, Vector3 } from 'three';
+import { Box3, Euler, type FogExp2, type Group, MathUtils, type Mesh, type Object3D, type PerspectiveCamera, type Texture, Vector3 } from 'three';
+import { warmup } from '@/lib/warmup';
 import { feel } from '@/lib/feel';
 import { chapterState } from '@/lib/chapterRuntime';
 import { CITY_ORIGIN, getRoute, SEA_LEVEL } from '@/lib/cityRoute';
@@ -16,6 +17,10 @@ import { setCityMeshes } from '@/lib/collide';
 import { disposeReflection, reflectionUniforms, renderReflection } from './cityReflection';
 
 export const CITY_URL = '/models/city.glb';
+
+/** How many of the city's meshes there are, and how many are hidden in the fog right now (the debug HUD). */
+export const cityDraw = { meshes: 0, inFog: 0 };
+const _camPos = new Vector3();
 
 /**
  * Everything in the city lives on its own layer: the main camera sees it, the
@@ -88,6 +93,37 @@ export function City() {
   }, [gltf.scene]);
 
   useEffect(() => () => disposeReflection(), []);
+
+  // Tiles beyond the fog: the model is joined by material into a 2 x 2 grid of tiles, so each
+  // mesh is one material over a quarter of the city. Besides the frustum culling every mesh
+  // gets, a mesh whose nearest point is past where the fog is all but opaque is hidden (it
+  // could only draw the fog colour). Everything shows during the warm-up, so every material
+  // compiles behind the loader.
+  const tiles = useRef<{ mesh: Mesh; box: Box3 }[] | null>(null);
+  const tileFrame = useRef(0);
+  useFrame(({ camera, scene }) => {
+    if (!tiles.current) {
+      const list: { mesh: Mesh; box: Box3 }[] = [];
+      gltf.scene.updateWorldMatrix(true, true);
+      gltf.scene.traverse((o) => {
+        const m = o as Mesh;
+        if (m.isMesh) list.push({ mesh: m, box: new Box3().setFromObject(m) });
+      });
+      tiles.current = list;
+    }
+    if (tileFrame.current++ % 6) return;
+    const fog = scene.fog as FogExp2 | null;
+    // (exp2 fog: 99.5% at sqrt(ln 200) / density)
+    const far = warmup.active || !fog || fog.density <= 0 ? Infinity : Math.sqrt(Math.log(200)) / fog.density;
+    camera.getWorldPosition(_camPos);
+    let shown = 0;
+    for (const t of tiles.current) {
+      t.mesh.visible = t.box.distanceToPoint(_camPos) < far;
+      if (t.mesh.visible) shown++;
+    }
+    cityDraw.meshes = tiles.current.length;
+    cityDraw.inFog = tiles.current.length - shown;
+  });
 
   useFrame((state) => {
     const e = chapterState.env;

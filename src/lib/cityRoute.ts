@@ -4,13 +4,12 @@ import { ROUTE_LENGTH, ROUTE_POINTS, ROUTE_ROOM } from './cityRoute.data';
 /**
  * THE CITY ROUTE
  * ==============
- * Chapters V to the finale drive one curve: down through the city (the points come
- * from scripts/build-route.mjs, which follows the road surfaces of the model), out over
- * the southern edge and across the sea on the bridge.
+ * The whole journey drives one curve: through the city (the points come from
+ * scripts/build-route.mjs, which follows the road surfaces of the model), up onto the
+ * flyover, out over the southern edge and across the sea on the bridge.
  *
- * Coordinates: the city stage sits at CITY_ORIGIN in the world, far from the seafront
- * of chapters I-IV (the move between them goes through cloud, see chapters.ts). Route
- * points are city-local metres; `sampleRoute` returns world positions.
+ * Coordinates: the city model sits at CITY_ORIGIN in the world. Route points are
+ * city-local metres; `sampleRoute` returns world positions.
  */
 
 export const CITY_ORIGIN = new Vector3(6000, 0, 0);
@@ -45,30 +44,48 @@ export type StopSpec = {
 };
 
 /**
- * The eight stops. `s` is in route metres: 0 is the start of the drive, the city part
- * ends at ROUTE_LENGTH and the bridge starts there. Each city stop sits where a scan of
- * the model found a flat, road-facing wall big enough for its billboard (side 1 = left of
- * the road, -1 = right); the billboard finds that wall by itself (raycast, Billboards.tsx)
- * and stands on legs if it can't. Between robowars and competitions there is no such wall
- * for 200 m (the big curve), so that leg is a longer drive.
+ * The eight stops. `s` is in route metres: 0 is the start of the route, the city part
+ * ends at ROUTE_LENGTH and the bridge starts there. The first 460 m are chapters I-IV
+ * (parked, the drive-off, the drift down the long left-hander, the wake); the stops come
+ * after. Each city stop sits where a scan of the model found a flat, road-facing wall big
+ * enough for its billboard (side 1 = left of the road, -1 = right; `node
+ * scripts/find-walls.mjs` lists them); the billboard finds that wall by itself (raycast,
+ * Billboards.tsx) and stands on legs if it can't.
  */
-export const STOPS = {
-  arrival: { s: 58, side: -1, width: 16, height: 9, lift: 9.5 },
-  robowars: { s: 134, side: 1, width: 16, height: 9, lift: 6.5 },
-  competitions: { s: 336, side: -1, width: 14, height: 7.9, lift: 6.5, arrive: 0.34 },
-  speakers: { s: 462, side: -1, width: 16, height: 9, lift: 6.5 },
-  expo: { s: 562, side: -1, width: 16, height: 9, lift: 6.5 },
-  dkms: { s: 638, side: -1, width: 14, height: 7.9, lift: 6.5 },
+export const STOPS: Record<'arrival' | 'robowars' | 'competitions' | 'speakers' | 'expo' | 'dkms' | 'twmun' | 'finale', StopSpec> = {
+  arrival: { s: 462, side: -1, width: 16, height: 9, lift: 6.5 },
+  robowars: { s: 510, side: -1, width: 16, height: 9, lift: 6.5 },
+  competitions: { s: 562, side: -1, width: 14, height: 7.9, lift: 6.5 },
+  speakers: { s: 596, side: -1, width: 16, height: 9, lift: 6.5 },
+  expo: { s: 638, side: -1, width: 16, height: 9, lift: 6.5 },
+  dkms: { s: 678, side: -1, width: 14, height: 7.9, lift: 6.5 },
   twmun: { s: 746, side: -1, width: 16, height: 9, lift: 6.5 },
   finale: { s: ROUTE_LENGTH + 340, side: 1, width: 18, height: 10, lift: 0 },
-} satisfies Record<string, StopSpec>;
+};
 
 export type StopKey = keyof typeof STOPS;
+
+/**
+ * Billboards the car drives past without stopping (each with a small card in the DOM):
+ *   catalyst  on the wall just ahead of where the car is parked (chapters I and II)
+ *   also      a gantry over the bridge deck, just past the ramp
+ *   ces       across the first pylon of the bridge
+ * `mount` 'wall' hangs on a facade like a stop's; 'gantry' spans the deck on two posts;
+ * 'pylon' sits on the pylon's cross-beam.
+ */
+export type ExtraSpec = StopSpec & { mount: 'wall' | 'gantry' | 'pylon' };
+export const EXTRAS: Record<'catalyst' | 'also' | 'ces', ExtraSpec> = {
+  catalyst: { s: 134, side: 1, width: 16, height: 9, lift: 6.5, mount: 'wall' },
+  also: { s: ROUTE_LENGTH + 92, side: 1, width: 20, height: 6.4, lift: 7.4, mount: 'gantry' },
+  ces: { s: ROUTE_LENGTH + BRIDGE.pylons[0], side: 1, width: 18, height: 10, lift: 30, mount: 'pylon' },
+};
+
+export type ExtraId = keyof typeof EXTRAS;
 
 export type Route = {
   curve: CatmullRomCurve3;
   length: number;
-  /** Where the bridge deck starts (end of the city data). */
+  /** Where the bridge deck starts (end of the city data, the top of the ramp). */
   bridgeStart: number;
   /** Free road either side [left, right] at route metres s (city part only). */
   room: (s: number) => [number, number];

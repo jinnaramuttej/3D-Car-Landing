@@ -66,8 +66,6 @@ type Rig = {
   tail: GlowMat[];
   paint: MeshPhysicalMaterial | null;
   glass: MeshPhysicalMaterial[];
-  /** Outer windows, with their real (transmissive) and cheap (tinted) glass. */
-  outerGlass: { meshes: Mesh[]; real: MeshPhysicalMaterial | null; cheap: MeshPhysicalMaterial | null };
   tyre: MeshPhysicalMaterial | null;
   rims: MeshStandardMaterial[];
   calipers: MeshStandardMaterial[];
@@ -186,7 +184,6 @@ function buildRig(source: Object3D, livery: Texture, mobile: boolean): Rig {
   let glassOuter = null as MeshPhysicalMaterial | null;
   let glassInner = null as MeshPhysicalMaterial | null;
   let tyre = null as MeshPhysicalMaterial | null;
-  const outerMeshes: Mesh[] = [];
   // Wheels, discs and calipers were re-parented under `wheels` above, so walk both.
   const visit = (o: Object3D) => {
     const m = o as Mesh;
@@ -199,11 +196,11 @@ function buildRig(source: Object3D, livery: Texture, mobile: boolean): Rig {
       m.material = paint;
       return;
     }
-    // Outer windows: real transmissive glass (cheap tinted glass on mobile)
+    // Outer windows: tinted glass. (Transmissive glass would re-render the whole city
+    // behind it every frame.)
     if (/^EXT_Windows/.test(name)) {
-      glassOuter ??= createGlassMaterial(first, !mobile);
+      glassOuter ??= createGlassMaterial(first, false);
       m.material = glassOuter;
-      outerMeshes.push(m);
       return;
     }
     // Inner glass layers: tinted only, so there's one transmission render, not two
@@ -246,7 +243,6 @@ function buildRig(source: Object3D, livery: Texture, mobile: boolean): Rig {
     tail: [...tail].map(([mat, factor]) => ({ mat, factor })),
     paint,
     glass: [glassOuter, glassInner].filter(Boolean) as MeshPhysicalMaterial[],
-    outerGlass: { meshes: outerMeshes, real: glassOuter, cheap: glassInner ?? glassOuter },
     tyre,
     rims: roles.rims,
     calipers: roles.calipers,
@@ -317,13 +313,7 @@ export function Car() {
     const dt = Math.min(rawDt, 1 / 20);
     const ui = useStore.getState();
 
-    // Transmissive glass re-renders the whole scene behind it every frame: worth it on the
-    // waterfront, too much on top of the city, so the city gets the tinted glass instead.
-    const og = rig.outerGlass;
-    const glassWant = chapterState.stage === 'city' ? og.cheap : og.real;
-    if (glassWant && og.meshes[0] && og.meshes[0].material !== glassWant) for (const m of og.meshes) m.material = glassWant;
-
-    // road height and slope come from the route in the city (0 and flat on the waterfront)
+    // road height and slope come from the route
     g.position.set(s.position.x, s.position.y - rig.groundOffset, s.position.z);
     g.rotation.set(-s.pitch, s.heading, 0, 'YXZ');
 

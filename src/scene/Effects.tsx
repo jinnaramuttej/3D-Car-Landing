@@ -30,7 +30,6 @@ import { AnamorphicEffect } from './postfx/AnamorphicEffect';
 import { createTealOrangeLut } from './postfx/gradeLut';
 import { LensDropsEffect } from './postfx/LensDropsEffect';
 import { MotionBlurEffect } from './postfx/MotionBlurEffect';
-import { DissolvePass } from './postfx/DissolvePass';
 import { FilmGrainEffect } from './postfx/FilmGrainEffect';
 import { createSanitizePass } from './postfx/SanitizePass';
 import { SoftSmokeEffect } from './postfx/SoftSmokeEffect';
@@ -39,7 +38,6 @@ import { SoftSmokeEffect } from './postfx/SoftSmokeEffect';
  * The post chain, in order (the composer splits it into passes where effects that
  * sample neighbouring pixels would collide):
  *   sanitize     NaN/Inf scrub (the reflector throws the odd NaN), chapter exposure
- *   dissolve     holds the last frame over a cut and fades it out
  *   smoke        the tyre smoke, soft against the scene's depth (postfx/SoftSmokeEffect)
  *   DOF          focused on the car during the drift, on the section's subject after
  *   motion blur  camera reprojection, with the car carried by its own motion
@@ -66,7 +64,6 @@ export function Effects() {
     const smoke = new SoftSmokeEffect(camera, 0.5);
     return {
       sanitize: createSanitizePass(),
-      dissolve: new DissolvePass(),
       smoke,
       smokePass: new EffectPass(camera, smoke),
       motionBlur: new MotionBlurEffect(camera, carState, p.motionBlurSamples),
@@ -84,7 +81,6 @@ export function Effects() {
       fx.drops.dispose();
       fx.lut.dispose();
       fx.grain.dispose();
-      fx.dissolve.dispose();
       fx.smokePass.dispose();
     },
     [fx],
@@ -99,7 +95,6 @@ export function Effects() {
       push: new Vector2(),
       radial: 0,
       clock: 0,
-      mode: 'beat' as 'drift' | 'beat' | 'city',
     }),
     [],
   );
@@ -141,16 +136,7 @@ export function Effects() {
 
     fx.sanitize.exposure.value = chapterState.env.exposure;
 
-    // Cross-dissolve: a mini-map jump, or the camera jumping between the drift and the
-    // chapter cameras. District hops are real camera moves (fast ones included), and the
-    // drift's own hard cuts stay hard.
     camera.getWorldPosition(_pos);
-    fx.dissolve.duration = p.dissolve;
-    const modeChanged = motion.mode !== cameraState.mode;
-    const jumped = motion.has && _pos.distanceTo(motion.prev) > p.cutDistance;
-    // (the stage switch happens inside the cloud: grey on grey, nothing to dissolve)
-    if (motion.has && !chapterState.stageChanged && (chapterState.cut || (jumped && modeChanged))) fx.dissolve.trigger();
-    motion.mode = cameraState.mode;
 
     const mb = fx.motionBlur;
     mb.strength = p.motionBlur;
@@ -197,7 +183,6 @@ export function Effects() {
   return (
     <EffectComposer multisampling={mobile ? 0 : 4}>
       <primitive object={fx.sanitize.pass} />
-      <primitive object={fx.dissolve} />
       {/* tyre smoke, drawn in its own pass against the scene's depth (soft particles) */}
       <primitive object={fx.smokePass} />
       {mobile ? (

@@ -205,12 +205,6 @@ export function Billboards() {
   );
 
   useFrame((state, dt) => {
-    const on = chapterState.stage === 'city';
-    group.current.visible = on || chapterState.cloud > 0.2;
-    if (!on) {
-      spill.current.intensity = 0;
-      return;
-    }
     const t = state.clock.elapsedTime;
     const ui = useStops.getState();
     if (ui.competitionFilter !== art.competitionFilter) {

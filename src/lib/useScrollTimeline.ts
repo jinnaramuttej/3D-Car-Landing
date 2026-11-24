@@ -5,17 +5,17 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import Lenis from 'lenis';
 import { CONFIG } from './config';
-import { SHOTS } from './script';
-import { CHAPTERS, fromDriftLocal } from './chapters';
+import { CHAPTERS } from './chapters';
 import { useStore } from './store';
 
 let lenisRef: Lenis | null = null;
 let trackEl: HTMLElement | null = null;
 
 /**
- * Scrolls (through Lenis) to a global progress value. `immediate` jumps there in one
- * frame (the mini-map: the scene snaps and cross-dissolves); otherwise it glides.
- * If the debug slider owns progress, it hands control back to the scroll first.
+ * Scrolls (through Lenis) to a global progress value. `immediate` moves the scroll there in
+ * one frame (the mini-map); the scene still drives there (the journey driver never jumps).
+ * Otherwise the scroll itself glides. If the debug slider owns progress, it hands control
+ * back to the scroll first.
  */
 export function scrollToProgress(p: number, immediate = false, duration = 2.4) {
   if (!lenisRef || !trackEl) return;
@@ -68,9 +68,8 @@ export function useScrollTimeline(trackRef: RefObject<HTMLElement | null>) {
       },
     });
     tl.to(proxy, { progress: 1, duration: 1, onUpdate: write }, 0);
-    // Labels: every chapter and every drift shot (mapped to global progress)
+    // Labels: every chapter
     for (const chapter of CHAPTERS) tl.addLabel(chapter.id, chapter.start);
-    for (const shot of SHOTS) if (shot.from <= 0.78) tl.addLabel(`shot:${shot.id}`, fromDriftLocal(shot.from));
 
     // Leaving manual mode: hand progress back to the scroll position.
     const unsubscribe = useStore.subscribe((state, prev) => {

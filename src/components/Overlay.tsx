@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { chapters, credits, hints, SITE, UI } from '@/content';
-import { beatById, CHAPTERS, chapterById, type ChapterId, fromDriftLocal } from '@/lib/chapters';
+import { CHAPTERS, chapterById, type ChapterId } from '@/lib/chapters';
+import { useStore } from '@/lib/store';
+import { LIVERIES } from '@/scene/livery';
 
 const [TITLE_WORD, TITLE_YEAR] = SITE.name.split(' ');
 const TITLE_META = [SITE.edition, SITE.dates, SITE.venue];
-import { PHASES } from '@/lib/script';
-import { useStore } from '@/lib/store';
-import { LIVERIES } from '@/scene/livery';
 
 /** Global progress at a fraction of a chapter, and a duration in chapter fractions. */
 const at = (id: ChapterId, f: number) => {
@@ -23,9 +22,10 @@ const len = (id: ChapterId, f: number) => {
 
 /**
  * Page-wide DOM layer: the chapter cards (numeral, title, one line), the first-screen
- * hints, the cinema bars during the drift, the Techfest title that forms in chapter IV,
- * the progress line, the livery toast and the footer credit. One paused GSAP timeline on
- * the global progress scale, so it scrubs both ways (and with the debug slider).
+ * hints, the cinema bars during the drift, the Techfest title that forms in the smoke in
+ * chapter IV, the progress line, the livery toast and the footer credit. One paused GSAP
+ * timeline on the global progress scale, played by the journey on screen (store.view), so
+ * it scrubs both ways and never runs ahead of the car.
  */
 export function Overlay() {
   const root = useRef<HTMLDivElement>(null);
@@ -53,21 +53,16 @@ export function Overlay() {
     // II
     cardIn('ignition', 0.06);
     cardOut('ignition', 0.5);
-    // III: over the cold open, gone as the flank shot starts; cinema bars through shots 1-5
-    tl.fromTo(q('.letterbox'), { scaleY: 0 }, { scaleY: 1, duration: len('turn', 0.015), ease: 'power2.out' }, at('turn', 0) - len('turn', 0.015));
-    cardIn('turn', -0.035, 0.03); // lands as the launch hands over to the cold open
-    tl.to(card('turn'), { autoAlpha: 0, y: -14, filter: 'blur(8px)', duration: fromDriftLocal(PHASES.introOutTo) - fromDriftLocal(PHASES.introOutFrom) }, fromDriftLocal(PHASES.introOutFrom));
-    tl.to(
-      q('.letterbox'),
-      { scaleY: 0, duration: fromDriftLocal(PHASES.letterboxOutTo) - fromDriftLocal(PHASES.letterboxOutFrom), ease: 'power2.inOut' },
-      fromDriftLocal(PHASES.letterboxOutFrom),
-    );
-    // IV: the card, then the title forms out of the smoke as it clears
-    const clearing = beatById('clearing');
-    const cl = (f: number) => clearing.start + f * (clearing.end - clearing.start);
-    const cll = (f: number) => f * (clearing.end - clearing.start);
-    cardIn('clearing', 0.04);
-    cardOut('clearing', 0.32);
+    // III: lands as the car reaches the plaza, gone before the flick; cinema bars through the slide
+    tl.fromTo(q('.letterbox'), { scaleY: 0 }, { scaleY: 1, duration: len('turn', 0.03), ease: 'power2.out' }, at('turn', -0.02));
+    cardIn('turn', -0.02, 0.03);
+    cardOut('turn', 0.06, 0.05);
+    tl.to(q('.letterbox'), { scaleY: 0, duration: len('turn', 0.1), ease: 'power2.inOut' }, at('turn', 0.86));
+    // IV: the card, then the title forms in the smoke the drift left behind
+    const cl = (f: number) => at('wake', f);
+    const cll = (f: number) => len('wake', f);
+    cardIn('wake', 0.04);
+    cardOut('wake', 0.22);
     tl.fromTo(q('.title-block'), { autoAlpha: 0 }, { autoAlpha: 1, duration: cll(0.04) }, cl(0.24));
     tl.fromTo(
       q('.title-word'),
@@ -97,8 +92,8 @@ export function Overlay() {
       tl.progress(p);
       if (bar) bar.style.transform = `scaleX(${p})`;
     };
-    render(useStore.getState().progress);
-    const unsubscribe = useStore.subscribe((s) => render(s.progress));
+    render(useStore.getState().view);
+    const unsubscribe = useStore.subscribe((s) => render(s.view));
     return () => {
       unsubscribe();
       tl.kill();

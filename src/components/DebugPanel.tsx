@@ -6,8 +6,7 @@ import { button, useControls } from 'leva';
 import { advance } from '@react-three/fiber';
 import { CONFIG, RANGES, type Config } from '@/lib/config';
 import { carState } from '@/lib/motion';
-import { SHOTS } from '@/lib/script';
-import { BEATS, CHAPTERS, DRIFT, fromDriftLocal } from '@/lib/chapters';
+import { chapterAnchor, chapterAt, CHAPTERS } from '@/lib/chapters';
 import { chapterState } from '@/lib/chapterRuntime';
 import { interaction } from '@/lib/interaction';
 import { useStore } from '@/lib/store';
@@ -70,19 +69,13 @@ export function DebugPanel() {
         st.setProgress(v);
       },
     },
-    // One button per beat and per drift shot (no dots in leva keys: a dot means "nested folder")
-    ...Object.fromEntries(
-      BEATS.map((b) => {
-        const c = CHAPTERS.find((ch) => ch.id === b.chapter)!;
-        return [`${c.numeral}: ${b.id}`, button(() => jump(b.start + (b.anchor ?? 0.05) * (b.end - b.start)))];
-      }),
-    ),
-    ...Object.fromEntries(
-      SHOTS.filter((shot) => shot.from < DRIFT.localEnd).map((shot, i) => [
-        `III shot ${i + 1}: ${shot.title}`,
-        button(() => jump(fromDriftLocal(shot.from + 0.002))),
-      ]),
-    ),
+    // One button per chapter, plus the moments of the opening (no dots in leva keys: a
+    // dot means "nested folder")
+    ...Object.fromEntries(CHAPTERS.map((c) => [`${c.numeral}: ${c.title}`, button(() => jump(chapterAnchor(c.id)))])),
+    'II: engine catches': button(() => jump(chapterAt('ignition', 0.17))),
+    'III: the flick': button(() => jump(chapterAt('turn', 0.07))),
+    'III: mid-drift': button(() => jump(chapterAt('turn', 0.5))),
+    'IV: in the smoke': button(() => jump(chapterAt('wake', 0.15))),
     'play 0 to 1 (60 s)': button(() => play()),
     'back to scroll': button(() => {
       tween.current?.kill();
@@ -118,7 +111,8 @@ export function DebugPanel() {
     });
   }
 
-  useControls('Cold-open drift', configSchema('introDrift'), { collapsed: true });
+  useControls('Drive', configSchema('drive'), { collapsed: true });
+  useControls('Director', configSchema('director'), { collapsed: true });
   useControls('Drift', configSchema('drift'), { collapsed: true });
   useControls('Camera', configSchema('camera'), { collapsed: true });
   useControls('Smoke', configSchema('smoke'), { collapsed: true });
@@ -129,8 +123,6 @@ export function DebugPanel() {
   useControls('Post', configSchema('post'), { collapsed: true });
   useControls('Rain', configSchema('rain'), { collapsed: true });
   useControls('City', configSchema('city'), { collapsed: true });
-  useControls('Coast', configSchema('coast'), { collapsed: true });
-  useControls('Track', configSchema('track'), { collapsed: true });
   useControls('Scroll', configSchema('scroll'), { collapsed: true });
 
   useEffect(() => {
@@ -150,24 +142,16 @@ export function DebugPanel() {
       engine,
       smokeLayer,
       powertrain,
-      // the camera director's cuts with the slide at each (none should land above ~0.3)
+      // where the director's scheduled rigs start, with the slide at each (none above ~0.3)
       schedule: () => getSchedule().map((c) => ({ ...c, drift: +driftAt(c.s).toFixed(2) })),
     };
 
-    // HUD: which drift shot or section is on screen right now
+    // HUD: chapter, camera rig (and the blend into it), route metres, speed, scroll vs screen
     const id = window.setInterval(() => {
       if (!hud.current) return;
-      const g = useStore.getState().progress.toFixed(3);
       const c = CHAPTERS[chapterState.chapter];
-      if (chapterState.stage === 'city') {
-        hud.current.textContent = `${c.numeral} ${c.title.toUpperCase()} / ${cameraState.shotId}  route ${carState.s.toFixed(0)} m  ${(carState.speed * 3.6).toFixed(0)} km/h   global ${g}`;
-      } else if (!chapterState.drift) {
-        const b = BEATS[Math.max(0, chapterState.beat)];
-        hud.current.textContent = `${c.numeral} ${c.title.toUpperCase()} / ${b.id}  ${(chapterState.beatLocal * 100).toFixed(0)}%   global ${g}`;
-      } else {
-        const shot = SHOTS[Math.max(0, cameraState.shot)];
-        hud.current.textContent = `${c.numeral} / SHOT ${cameraState.shot + 1}  ${shot.title.toUpperCase()}   drift ${carState.progress.toFixed(3)}  global ${g}`;
-      }
+      const blend = director.blend < 1 ? ` (blend ${(director.blend * 100).toFixed(0)}%)` : '';
+      hud.current.textContent = `${c.numeral} ${c.title.toUpperCase()} ${(chapterState.chapterLocal * 100).toFixed(0)}% / ${cameraState.shotId}${blend}  route ${carState.s.toFixed(0)} m  ${(carState.speed * 3.6).toFixed(0)} km/h  slip ${carState.slip.toFixed(2)}   scroll ${useStore.getState().progress.toFixed(3)} screen ${chapterState.progress.toFixed(3)}`;
     }, 100);
     return () => {
       window.clearInterval(id);

@@ -458,14 +458,14 @@ export function Stops() {
     const mm = gsap.matchMedia();
     mm.add({ mobile: MOBILE_Q, desktop: DESKTOP_Q }, (ctx) => {
       tl = buildTimeline(q, Boolean(ctx.conditions?.mobile));
-      tl.progress(useStore.getState().progress);
+      tl.progress(useStore.getState().view);
       measure();
       return () => {
         tl?.kill();
         tl = null;
       };
     });
-    const unsubscribe = useStore.subscribe((s) => tl?.progress(s.progress));
+    const unsubscribe = useStore.subscribe((s) => tl?.progress(s.view));
     window.addEventListener('resize', measure);
     return () => {
       unsubscribe();

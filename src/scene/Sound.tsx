@@ -25,7 +25,7 @@ export function Sound() {
         engineOn: chapterState.engineOn,
         speed: carState.speed,
         accel: carState.accel,
-        slip: Math.max(carState.slip, carState.burnout),
+        slip: carState.slip,
         rev: interaction.rev,
       },
       dt,
@@ -34,7 +34,7 @@ export function Sound() {
     // a whoosh for each stay cable the car passes (not too close together), more for a pylon
     let whoosh: 0 | 1 | 2 = 0;
     const s = carState.s;
-    if (chapterState.stage === 'city' && Math.abs(carState.speed) > 8 && s > state.lastS && s - state.lastS < 30) {
+    if (Math.abs(carState.speed) > 8 && s > state.lastS && s - state.lastS < 30) {
       for (const p of bridgeInfo.pylons) if (p > state.lastS && p <= s) whoosh = 2;
       if (!whoosh)
         for (const a of bridgeInfo.anchors)

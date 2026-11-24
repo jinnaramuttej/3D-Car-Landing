@@ -31,9 +31,6 @@ export function Sea() {
   const normalScale = useMemo(() => new Vector2(0.32, 0.32), []);
 
   useFrame(({ scene }, dt) => {
-    const on = chapterState.stage === 'city';
-    group.current.visible = on || chapterState.cloud > 0.2;
-    if (!on) return;
     const m = mat.current;
     // three ignores envMapIntensity for materials that fall back to scene.environment
     if (scene.environment && m.envMap !== scene.environment) {
@@ -41,8 +38,8 @@ export function Sea() {
       m.needsUpdate = true;
     }
     m.envMapIntensity = chapterState.env.seaEnv;
-    waves.offset.x += CONFIG.coast.waveSpeed * dt;
-    waves.offset.y += CONFIG.coast.waveSpeed * 0.6 * dt;
+    waves.offset.x += CONFIG.city.waveSpeed * dt;
+    waves.offset.y += CONFIG.city.waveSpeed * 0.6 * dt;
   }, -1);
 
   return (

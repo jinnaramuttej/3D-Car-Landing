@@ -19,13 +19,11 @@ import {
   Vector3,
 } from 'three';
 import { CONFIG } from '@/lib/config';
-import { DRIFT } from '@/lib/chapters';
-import { carState, getCloudCenter } from '@/lib/motion';
+import { carState } from '@/lib/motion';
 import { chapterState, rainLevel } from '@/lib/chapterRuntime';
 import { cameraState } from './CameraRig';
 import { lampHeads } from './city/StreetLights';
 import { smokeLayer } from './postfx/SoftSmokeEffect';
-import { coastLampHeads } from './Track';
 import { createSmokeTexture } from '@/lib/textures';
 import { isMobile } from '@/lib/device';
 
@@ -149,50 +147,6 @@ void main() {
 }
 `;
 
-const veilVert = /* glsl */ `
-varying vec2 vUv;
-void main() {
-  vUv = uv;
-  gl_Position = vec4(position.xy, 0.0, 1.0); // clip-space full-screen quad
-}
-`;
-
-const veilFrag = /* glsl */ `
-uniform float uOpacity;
-uniform float uTime;
-uniform float uAspect;
-uniform float uPush;
-uniform vec3 uColor;
-varying vec2 vUv;
-
-float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float noise(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
-             mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
-}
-float fbm(vec2 p) {
-  float v = 0.0;
-  float a = 0.5;
-  for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; }
-  return v;
-}
-
-void main() {
-  // zoom into the noise as the camera pushes forward
-  vec2 p = (vUv - 0.5) * vec2(uAspect, 1.0) * mix(3.0, 1.6, uPush);
-  float n = fbm(p + vec2(uTime * 0.05, -uTime * 0.08));
-  float m = fbm(p * 1.7 + n * 1.6 - vec2(uTime * 0.07, uTime * 0.03));
-  float dens = smoothstep(0.2, 0.8, m);
-  float a = uOpacity * mix(0.7, 1.0, dens);
-  vec3 col = uColor * (0.68 + 0.55 * dens);
-  gl_FragColor = vec4(col, a);
-  #include <colorspace_fragment>
-}
-`;
-
 /* ----------------------------------------------------------------- pool */
 
 function createPool(max: number) {
@@ -215,7 +169,7 @@ function createPool(max: number) {
     alpha: new Float32Array(max),
     depth: new Float32Array(max),
     order: new Uint16Array(max),
-    acc: [0, 0, 0, 0, 0], // fractional emission carry: left tyre, right tyre, cloud, left spray, right spray
+    acc: [0, 0, 0, 0], // fractional emission carry: left tyre, right tyre, left spray, right spray
     prev: [new Vector3(), new Vector3()],
     hasPrev: false,
   };
@@ -243,11 +197,9 @@ const _tmp = new Vector3();
 const _far = new Vector3(0, -1e4, 0);
 const _cam = new Vector3();
 const _camDir = new Vector3();
-const _cloud = new Vector3();
 
 export function Smoke() {
   const camera = useThree((s) => s.camera);
-  const size = useThree((s) => s.size);
   const mobile = useMemo(() => isMobile(), []);
   const scale = mobile ? 0.5 : 1;
   const max = useMemo(() => Math.max(32, Math.round(CONFIG.smoke.maxParticles * scale)), [scale]);
@@ -277,7 +229,7 @@ export function Smoke() {
         uOpacity: { value: CONFIG.smoke.opacity },
         uNearFade: { value: new Vector2(0.35, 2) },
         uLampPos: { value: Array.from({ length: LAMPS }, () => new Vector3(0, -1e4, 0)) },
-        uLampColor: { value: new Color(CONFIG.coast.sodium) },
+        uLampColor: { value: new Color(CONFIG.city.sodium) },
         uLampLit: { value: 0 },
         uDepth: { value: null },
         uRes: { value: new Vector2(1, 1) },
@@ -320,53 +272,15 @@ export function Smoke() {
     };
   }, [particles]);
 
-  const veilMaterial = useMemo(
-    () =>
-      new ShaderMaterial({
-        uniforms: {
-          uOpacity: { value: 0 },
-          uTime: { value: 0 },
-          uAspect: { value: 1 },
-          uPush: { value: 0 },
-          uColor: { value: new Color(CONFIG.smoke.veilColor) },
-        },
-        vertexShader: veilVert,
-        fragmentShader: veilFrag,
-        transparent: true,
-        depthTest: false,
-        depthWrite: false,
-      }),
-    [],
-  );
-
   const pool = useMemo(() => createPool(max), [max]);
-  const veil = useRef<Mesh>(null!);
   const lampOrder = useMemo(() => [] as { p: Vector3; d: number }[], []);
-
-  useLayoutEffect(() => {
-    // Layer 1 = main camera only. Keeps the full-screen veil out of the ground reflection.
-    veil.current.layers.set(1);
-  }, []);
 
   useFrame((state, rawDt) => {
     const dt = Math.min(rawDt, 1 / 30);
     const cfg = CONFIG.smoke;
     const s = carState;
-    const p = s.progress;
     const t = state.clock.elapsedTime;
-    // Outside the drift the chapter beats own the smoke cover (chapter IV thins it out).
-    // The full-screen cover belongs to the III -> IV handover only (fillStart..fillFull);
-    // the rest of the time puffs near the lens fade by distance (see the fragment shader).
-    const fillFrom = cfg.fillStart;
-    const fillTo = Math.max(fillFrom + 1e-3, cfg.fillFull);
-    const after = !chapterState.drift && p >= DRIFT.localEnd - 1e-3; // chapters IV and V
-    const fill = after ? chapterState.look.smoke : MathUtils.smoothstep(p, fillFrom, fillTo);
     const ground = s.position.y;
-    if (chapterState.jumped) {
-      // a mini-map jump: drop the old smoke instead of leaving it hanging where it was
-      pool.life.fill(0);
-      pool.hasPrev = false;
-    }
 
     camera.getWorldPosition(_cam);
     camera.getWorldDirection(_camDir);
@@ -374,7 +288,7 @@ export function Smoke() {
     /* 1. tyre smoke: rate follows slip, spread along the wheel's path this frame */
     if (s.carReady) {
       // emission follows the slip angle, with a floor while the car is sliding at all
-      const slide = Math.max(s.slip, s.burnout);
+      const slide = s.slip;
       const rate = cfg.rate * scale * (slide > 0.04 ? Math.max(Math.pow(slide, 1.3), cfg.floor) : 0);
       const side = s.slip > 0.05 ? 1 : 0.25; // a launch throws smoke back, not sideways
       const inherit = MathUtils.clamp(s.speed, -15, 15) * 0.2;
@@ -433,43 +347,16 @@ export function Smoke() {
       }
     }
 
-    /* 2. after fillStart: seed the cloud between its centre and the camera */
-    if (fill > 0) {
-      // Eased: the cloud swells around its centre first, only reaches the lens near fillFull.
-      const f2 = fill * fill;
-      getCloudCenter(_cloud);
-      pool.acc[2] += cfg.fillRate * scale * f2 * dt;
-      const n = Math.floor(pool.acc[2]);
-      pool.acc[2] -= n;
-      const radius = 2 + 5 * fill;
-      for (let k = 0; k < n; k++) {
-        const i = claim(pool);
-        const o = i * 3;
-        _tmp.lerpVectors(_cloud, _cam, Math.random() * 0.75 * f2);
-        pool.pos[o] = _tmp.x + rand(-1, 1) * radius;
-        pool.pos[o + 1] = MathUtils.clamp(_tmp.y + rand(-0.5, 0.8) * radius * 0.5, ground + 0.6, ground + 6);
-        pool.pos[o + 2] = _tmp.z + rand(-1, 1) * radius;
-        pool.vel[o] = rand(-0.4, 0.4);
-        pool.vel[o + 1] = rand(0, 0.3);
-        pool.vel[o + 2] = rand(-0.4, 0.4);
-        pool.life[i] = rand(cfg.lifeMin, Math.max(cfg.lifeMin, cfg.lifeMax)) * 1.4;
-        pool.size0[i] = rand(2.4, 4.2);
-        pool.size1[i] = pool.size0[i] * rand(1.8, 2.6);
-        pool.alpha0[i] = 0.75;
-      }
-    }
-
     /* 3. simulate */
     const drag = Math.exp(-cfg.drag * dt);
     // the rain's wind carries the smoke off (it eases into the particles' own motion)
     const windX = CONFIG.rain.windX * cfg.wind;
     const windZ = CONFIG.rain.windZ * cfg.wind;
     const windPull = 1 - Math.exp(-0.8 * dt);
-    const ageRate = 1 - 0.7 * fill; // the cloud lingers once it starts filling the frame
     let alive = 0;
     for (let i = 0; i < pool.max; i++) {
       if (pool.life[i] <= 0) continue;
-      pool.age[i] += dt * ageRate;
+      pool.age[i] += dt;
       const life = pool.life[i];
       if (pool.age[i] >= life) {
         pool.life[i] = 0;
@@ -491,24 +378,13 @@ export function Smoke() {
       vx += (windX - vx) * windPull * (pool.grav[i] > 0 ? 0.2 : 1);
       vz += (windZ - vz) * windPull * (pool.grav[i] > 0 ? 0.2 : 1);
 
-      // filling: everything drifts toward the lens
-      if (fill > 0) {
-        const dx = _cam.x - px;
-        const dy = _cam.y - py;
-        const dz = _cam.z - pz;
-        const inv = (cfg.fillPull * fill * fill * dt) / (Math.hypot(dx, dy, dz) + 1e-3);
-        vx += dx * inv;
-        vy += dy * inv;
-        vz += dz * inv;
-      }
-
       px += vx * dt;
       py += vy * dt;
       pz += vz * dt;
 
       const tl = pool.age[i] / life;
       const grow = 1 - (1 - tl) * (1 - tl);
-      const sz = (pool.size0[i] + (pool.size1[i] - pool.size0[i]) * grow) * (1 + fill * fill * cfg.fillGrow);
+      const sz = pool.size0[i] + (pool.size1[i] - pool.size0[i]) * grow;
       py = Math.max(py, ground + sz * 0.25); // keep most of the billboard above the asphalt (the shader fades the rest)
 
       pool.pos[o] = px;
@@ -567,10 +443,9 @@ export function Smoke() {
     u.uFar.value = cam.far;
     u.uSoft.value = cfg.soft;
     u.uGroundY.value = ground;
-    // the nearest street lamps (waterfront or city)
-    const heads = chapterState.stage === 'city' ? lampHeads : coastLampHeads;
+    // the nearest street lamps
     lampOrder.length = 0;
-    for (const h of heads) lampOrder.push({ p: h, d: h.distanceToSquared(s.position) });
+    for (const h of lampHeads) lampOrder.push({ p: h, d: h.distanceToSquared(s.position) });
     lampOrder.sort((a, b) => a.d - b.d);
     const lp = u.uLampPos.value as Vector3[];
     for (let k = 0; k < LAMPS; k++) lp[k].copy(lampOrder[k]?.p ?? _far);
@@ -580,25 +455,7 @@ export function Smoke() {
     (u.uHeadDir.value as Vector3).copy(s.headDir);
     u.uHeadCos.value = Math.cos(CONFIG.car.headBeamAngle * 0.9);
     u.uHeadLit.value = s.carReady ? cfg.headLit * s.headLevel : 0;
-
-    /* 6. veil: guarantees full coverage by fillFull, independent of particle count */
-    const veilOpacity = after
-      ? MathUtils.smoothstep(fill, 0.1, 1) * cfg.veilOpacity
-      : MathUtils.smoothstep(p, fillFrom + (fillTo - fillFrom) * 0.55, fillTo) * cfg.veilOpacity;
-    const vu = veilMaterial.uniforms;
-    vu.uOpacity.value = veilOpacity;
-    vu.uTime.value = t;
-    vu.uAspect.value = size.width / Math.max(1, size.height);
-    vu.uPush.value = MathUtils.smoothstep(p, cfg.fillFull, 1);
-    (vu.uColor.value as Color).set(cfg.veilColor);
-    veil.current.visible = veilOpacity > 0.001;
   }, -1);
 
-  return (
-    <>
-      <mesh ref={veil} frustumCulled={false} renderOrder={20} material={veilMaterial}>
-        <planeGeometry args={[2, 2]} />
-      </mesh>
-    </>
-  );
+  return null;
 }

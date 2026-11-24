@@ -6,47 +6,36 @@
  * setup, press "copy config" in the panel and paste the JSON back over this object.
  *
  * Values marked (mount) are read once when the scene mounts; reload after changing them.
- * Values in `track` rebuild the path on the fly.
  */
 export const CONFIG = {
   scroll: {
     lenisLerp: 0.09, // (mount) Lenis smoothing, lower = floatier
-    progressSmooth: 0.12, // seconds; maath damp applied to progress before anything reads it
   },
 
   /**
-   * Centre line of the road: lead straight, bend A (the cold-open slide), a straight,
-   * bend B (the main drift), exit straight. Degrees: positive = left, negative = right.
-   * The car starts `startInto` metres into bend A and stops at the end of `straightOut`.
+   * The journey driver (src/lib/chapterRuntime.ts): what is on screen chases the scroll with
+   * a speed and acceleration limit, so any jump is a fast, continuous drive.
    */
-  track: {
-    lead: 80, // road behind bend A (only ever seen, never driven)
-    arcARadius: 28,
-    arcADeg: -50,
-    startInto: 8,
-    straightMid: 56,
-    arcBRadius: 35,
-    arcBDeg: 100,
-    straightOut: 48,
-    tail: 160, // road visible after the car's last position
-    halfWidth: 7.5,
+  drive: {
+    maxSpeed: 110, // m/s: the car never drives faster than this to catch the scroll up
+    maxRate: 0.25, // journey (0..1) per second at most (where the car is parked or creeping)
+    maxAccel: 0.42, // journey per second per second
+    settle: 0.12, // seconds; the last bit of a move eases in like a damped spring
   },
 
-  /** Cold-open slide through bend A: already sideways when the page loads. */
-  introDrift: {
-    start: -0.02,
-    peakAt: 0,
-    holdUntil: 0.04,
-    end: 0.12,
-    yawPeakDeg: 30,
+  /** The camera director (src/scene/city/director.ts). */
+  director: {
+    blendMin: 1.2, // seconds for the smallest move between two rigs...
+    blendMax: 2, // ...and for the biggest (round to the other side of the car)
   },
 
-  /** Main drift through bend B. Yaw direction follows each bend. */
+  /** The Play button: the whole journey by itself. */
+  autoplay: {
+    seconds: 150, // total length
+  },
+
+  /** The car's slides: the big one in chapter III (src/lib/cityDrive.ts sets where). */
   drift: {
-    start: 0.4, // yaw starts building (the tyre shot)
-    peakAt: 0.5, // full yaw reached
-    holdUntil: 0.64, // yaw held
-    end: 0.72, // back to straight
     yawPeakDeg: 38,
     slipRefDeg: 34, // yaw that counts as "full slip" for smoke, skids and shake
     rollDeg: 4, // body roll away from the turn at full slip
@@ -64,8 +53,6 @@ export const CONFIG = {
     headlightEmissive: 7,
     tailLightEmissive: 5,
     brakeBoost: 1.6, // tail lights brighten by this factor at full slip or under braking
-    brakeAt: 0.37, // brake flare before turn-in (seen in the tail shot)
-    brakeWidth: 0.025,
     headBeam: 110, // spot light intensity of each headlight
     headBeamAngle: 0.5,
     tailGlow: 1.2, // red point light behind the car
@@ -89,22 +76,18 @@ export const CONFIG = {
     rimBlurTo: 40,
   },
 
-  /** Global camera knobs. The shots themselves (framing, cuts, timing) are in src/lib/script.ts. */
+  /** Global camera knobs. The rigs themselves are in src/scene/city/director.ts. */
   camera: {
     fovMin: 24, // long-lens rule: vertical FOV is clamped to [fovMin, fovMax]
     fovMax: 40, // (wider requests pull the camera back to keep the framing)
     fovScale: 1, // multiplies every shot's FOV
-    anchorP: 0.62, // where along the path the final shot is anchored (the smoke cloud)
-    shakePeak: 0.07, // metres, at shakeAt and full slip
-    shakeAt: 0.56,
-    shakeWidth: 0.075, // width of the bell around shakeAt
+    shakePeak: 0.07, // metres of shake at full slip
     shakeRollDeg: 0.7,
     shakeSpeed: 1,
     handheld: 0.02, // metres of slow float at handheld = 1
     dofScale: 1, // multiplies every shot's bokeh (0 = depth of field off)
     portraitFit: 0.75, // camera pulls back by (1/aspect)^portraitFit on portrait screens
-    sectionSmooth: 0.45, // seconds; maath damp on the camera between section waypoints
-    parallax: 0.25, // metres of mouse parallax in the sections (desktop)
+    parallax: 0.25, // metres of mouse parallax (desktop)
   },
 
   smoke: {
@@ -129,33 +112,12 @@ export const CONFIG = {
     sprayRate: 26, // wet-road spray per rear wheel at speed (scaled by rain.intensity)
     spraySize: 0.28,
     sprayOpacity: 0.55,
-    fillStart: 0.66, // smoke starts swelling toward the camera
-    fillFull: 0.82, // screen is covered
-    fillRate: 140, // extra particles/s spawned into the cloud at full fill
-    fillGrow: 1.8,
-    fillPull: 2.6,
-    veilOpacity: 0.93,
-    veilColor: '#5c626c',
   },
 
   skid: {
     opacity: 0.55,
     width: 0.3,
     minSlip: 0.15,
-  },
-
-  /** Rainy waterfront (chapters I-IV): sea wall on the road's left, city on the right. */
-  coast: {
-    seaWallOffset: 11.5, // (mount) metres from the centre line to the sea wall (sea side = left)
-    seaLevel: -1.4, // (mount)
-    sodium: '#ffa24d', // street lamp colour
-    sodiumEmissive: 7,
-    windowGlow: 0.7, // lit windows in the city
-    neonGlow: 5, // neon signs
-    shoreLights: 3.5, // the far shoreline "necklace" across the bay
-    bridgeLights: 4,
-    haze: 0.0026, // distance haze on the far city and bridge (they skip the normal fog)
-    waveSpeed: 0.015,
   },
 
   /** Rain: streaks around the camera, splashes around the car, haze in the headlight beams. */
@@ -198,11 +160,12 @@ export const CONFIG = {
     liveryTime: 0.6, // seconds to change livery
   },
 
-  /** Chapters V on: the drive through the city and over the bridge (src/scene/city). */
+  /** The city, the sea and the bridge (src/scene/city). */
   city: {
-    cloudFog: 0.085, // fog density at the thickest point of the climb into the city
-    cloudColor: '#4c4f58',
-    driftYawDeg: 30, // drift angle at full slide in the city corners
+    sodium: '#ffa24d', // street lamp colour
+    sodiumEmissive: 7,
+    waveSpeed: 0.015,
+    driftYawDeg: 30, // drift angle at full slide in the corners after the stops begin
     driftFrom: 7, // lateral acceleration (m/s^2, at a steady scroll) where a corner starts to slide
     driftFull: 16, // ... and where it is fully sideways
     showRoute: false, // draw the route, its waypoints and the stops (debug)
@@ -235,7 +198,6 @@ export const CONFIG = {
     lensDrops: 0.75, // rain drops on the lens (scaled by rain.intensity)
     lensDropRefract: 0.035,
     lensDropStreak: 0.09, // how far camera motion stretches the drops
-    dissolve: 0.9, // seconds a chapter cross-dissolve takes
   },
 
   look: {
@@ -259,29 +221,10 @@ type Range = readonly [min: number, max: number, step?: number];
 
 /** Slider ranges for the leva panel. Anything missing gets a plain number field. */
 export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } } = {
-  scroll: { progressSmooth: [0, 1, 0.01] },
-  track: {
-    arcARadius: [10, 80, 1],
-    arcADeg: [-150, 150, 1],
-    startInto: [0, 40, 0.5],
-    straightMid: [10, 150, 1],
-    arcBRadius: [10, 80, 1],
-    arcBDeg: [-150, 150, 1],
-    straightOut: [10, 150, 1],
-    halfWidth: [4, 14, 0.1],
-  },
-  introDrift: {
-    start: [-0.2, 0.5, 0.005],
-    peakAt: [-0.2, 0.5, 0.005],
-    holdUntil: [-0.2, 0.5, 0.005],
-    end: [0, 0.5, 0.005],
-    yawPeakDeg: [0, 60, 0.5],
-  },
+  drive: { maxSpeed: [10, 400, 1], maxRate: [0.02, 2, 0.01], maxAccel: [0.02, 4, 0.01], settle: [0.01, 1, 0.01] },
+  director: { blendMin: [0.2, 4, 0.05], blendMax: [0.2, 4, 0.05] },
+  autoplay: { seconds: [30, 600, 5] },
   drift: {
-    start: [0, 1, 0.005],
-    peakAt: [0, 1, 0.005],
-    holdUntil: [0, 1, 0.005],
-    end: [0, 1, 0.005],
     yawPeakDeg: [0, 60, 0.5],
     slipRefDeg: [5, 60, 0.5],
     rollDeg: [0, 10, 0.1],
@@ -298,8 +241,6 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     headlightEmissive: [0, 30, 0.1],
     tailLightEmissive: [0, 30, 0.1],
     brakeBoost: [0, 5, 0.05],
-    brakeAt: [0, 1, 0.005],
-    brakeWidth: [0.005, 0.2, 0.005],
     headBeam: [0, 400, 1],
     headBeamAngle: [0.1, 1.2, 0.01],
     tailGlow: [0, 20, 0.1],
@@ -320,16 +261,12 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     fovMin: [10, 40, 0.5],
     fovMax: [24, 70, 0.5],
     fovScale: [0.5, 1.5, 0.01],
-    anchorP: [0.4, 0.8, 0.01],
     shakePeak: [0, 0.3, 0.005],
-    shakeAt: [0, 1, 0.005],
-    shakeWidth: [0.01, 0.3, 0.005],
     shakeRollDeg: [0, 4, 0.05],
     shakeSpeed: [0, 3, 0.05],
     handheld: [0, 0.1, 0.001],
     dofScale: [0, 3, 0.05],
     portraitFit: [0, 1.5, 0.01],
-    sectionSmooth: [0.05, 2, 0.01],
     parallax: [0, 1, 0.01],
   },
   smoke: {
@@ -352,23 +289,8 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     sprayRate: [0, 120, 1],
     spraySize: [0.05, 1.5, 0.01],
     sprayOpacity: [0, 1.5, 0.01],
-    fillStart: [0, 1, 0.005],
-    fillFull: [0, 1, 0.005],
-    fillRate: [0, 400, 1],
-    fillGrow: [0, 5, 0.05],
-    fillPull: [0, 10, 0.1],
-    veilOpacity: [0, 1, 0.01],
   },
   skid: { opacity: [0, 1, 0.01], width: [0.05, 0.8, 0.01], minSlip: [0, 1, 0.01] },
-  coast: {
-    sodiumEmissive: [0, 20, 0.1],
-    windowGlow: [0, 6, 0.05],
-    neonGlow: [0, 15, 0.1],
-    shoreLights: [0, 12, 0.1],
-    bridgeLights: [0, 12, 0.1],
-    haze: [0, 0.01, 0.0001],
-    waveSpeed: [0, 0.1, 0.001],
-  },
   rain: {
     intensity: [0, 2, 0.01],
     fallSpeed: [1, 20, 0.1],
@@ -390,7 +312,8 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     beamLength: [2, 40, 0.5],
   },
   city: {
-    cloudFog: [0, 0.2, 0.001],
+    sodiumEmissive: [0, 20, 0.1],
+    waveSpeed: [0, 0.1, 0.001],
     driftYawDeg: [0, 50, 0.5],
     driftFrom: [0, 40, 0.5],
     driftFull: [1, 60, 0.5],
@@ -419,7 +342,6 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
     liveryTime: [0.05, 3, 0.05],
   },
   post: {
-    dissolve: [0, 3, 0.05],
     motionBlur: [0, 1.5, 0.01],
     motionBlurMax: [0, 0.1, 0.001],
     cutDistance: [0.2, 10, 0.1],

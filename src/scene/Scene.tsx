@@ -9,11 +9,10 @@ import { chapterById, type Env } from '@/lib/chapters';
 import { chapterState, stepChapters, sunDirection } from '@/lib/chapterRuntime';
 import { stepCityDrive } from '@/lib/cityDrive';
 import { CONFIG } from '@/lib/config';
-import { carState, stepDrive } from '@/lib/motion';
+import { carState } from '@/lib/motion';
 import { useStore } from '@/lib/store';
 import { Car } from './Car';
 import { CameraRig } from './CameraRig';
-import { ChapterProps } from './ChapterProps';
 import { Billboards } from './city/Billboards';
 import { Bridge } from './city/Bridge';
 import { City } from './city/City';
@@ -22,15 +21,14 @@ import { RouteDebug } from './city/RouteDebug';
 import { Sea } from './city/Sea';
 import { StreetLights } from './city/StreetLights';
 import './fogLayers';
-import { Cityscape } from './Cityscape';
 import { createDayEnvironment } from './dayEnvironment';
 import { Effects } from './Effects';
 import { Interaction } from './Interaction';
 import { Rain } from './Rain';
 import { SkidMarks } from './SkidMarks';
 import { Sound } from './Sound';
+import { Sky } from './Sky';
 import { Smoke } from './Smoke';
-import { Track } from './Track';
 
 /** Night waterfront street (Shanghai Bund, Poly Haven, CC0), for reflections. */
 export const NIGHT_HDRI = '/hdri/shanghai_bund_1k.hdr';
@@ -40,10 +38,10 @@ const _sun = new Vector3();
 /**
  * Frame order (lower priority runs first; none are > 0, so R3F still owns the loop
  * and the EffectComposer renders):
- *   -3  Scene      global progress -> chapterState (stepChapters), then the car's
- *                  kinematics (stepDrive), then the chapter's light, fog and env map
+ *   -3  Scene      the scroll -> the journey driver -> chapterState (stepChapters), then
+ *                  the car's kinematics (stepCityDrive), then the light, fog and env map
  *   -2  Car        applies carState, publishes wheel contacts and headlight beams
- *   -1  Smoke, Rain, SkidMarks, ChapterProps, the city, CameraRig, Interaction
+ *   -1  Smoke, Rain, SkidMarks, the city, CameraRig, Interaction
  */
 export function Scene() {
   const camera = useThree((s) => s.camera);
@@ -74,7 +72,7 @@ export function Scene() {
     // the dawn over the sea (finale), generated once
     const fin = chapterById('finale');
     const dawn = { ...fin.env, ...fin.envEnd } as Env;
-    const day = createDayEnvironment(gl, dawn, sunDirection(dawn.sunAzimuth, dawn.sunElevation, new Vector3(), 'city'));
+    const day = createDayEnvironment(gl, dawn, sunDirection(dawn.sunAzimuth, dawn.sunElevation, new Vector3()));
     envs.current.day = day;
     return () => {
       day.dispose();
@@ -99,12 +97,11 @@ export function Scene() {
 
   useFrame((state, rawDt) => {
     const dt = Math.min(rawDt, 1 / 20);
-    const raw = useStore.getState().progress;
-    stepChapters(raw, dt, state.camera.position);
-    // land exactly where a jump (or the other stage) puts the car
-    if (chapterState.jumped || chapterState.stageChanged) carState.initialized = false;
-    if (chapterState.stage === 'city') stepCityDrive(chapterState.progress, dt, chapterState.jumped);
-    else stepDrive(chapterState.driftRaw, dt, chapterState.extraS);
+    const store = useStore.getState();
+    stepChapters(store.progress, dt);
+    stepCityDrive(chapterState.progress, dt);
+    // the DOM follows what is on screen, not the scroll
+    if (Math.abs(store.view - chapterState.progress) > 1e-6) store.setView(chapterState.progress);
 
     const e = chapterState.env;
     background.set(CONFIG.look.background);
@@ -149,14 +146,12 @@ export function Scene() {
       <directionalLight ref={sun} intensity={0.25} color="#9fc2d6" />
       <primitive object={sunTarget} />
 
-      <Cityscape />
-      <Track />
+      <Sky />
       <Car />
       <SkidMarks />
       <Smoke />
       <Rain />
-      <ChapterProps />
-      {/* chapters V on: the city, the sea and the bridge (src/scene/city) */}
+      {/* the world: the city, its lights and billboards, the sea and the bridge (src/scene/city) */}
       <Suspense fallback={null}>
         <City />
         <StreetLights />

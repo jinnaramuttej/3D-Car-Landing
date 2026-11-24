@@ -5,7 +5,6 @@ import { Canvas } from '@react-three/fiber';
 import { Loader } from '@react-three/drei';
 import { Leva } from 'leva';
 import { PAGES } from '@/lib/chapters';
-import { SHOTS } from '@/lib/script';
 import { useScrollTimeline } from '@/lib/useScrollTimeline';
 import { Scene } from '@/scene/Scene';
 import { DebugPanel } from './DebugPanel';
@@ -36,7 +35,7 @@ export default function Experience() {
         <Canvas
           dpr={[1, 1.5]}
           gl={{ antialias: false, powerPreference: 'high-performance', stencil: false }}
-          camera={{ fov: SHOTS[0].keys[0].fov, near: 0.1, far: 2200, position: [6, 1, 6] }}
+          camera={{ fov: 34, near: 0.1, far: 2200, position: [6, 1, 6] }}
         >
           <Suspense fallback={null}>
             <Scene />

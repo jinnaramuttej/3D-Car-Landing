@@ -43,7 +43,7 @@ export function StreetLights() {
   const headMat = useRef<MeshStandardMaterial>(null!);
   const lights = useRef<(PointLight | null)[]>([]);
   const glow = useMemo(() => createGlowTexture(), []);
-  const sodium = useMemo(() => new Color(CONFIG.coast.sodium), []);
+  const sodium = useMemo(() => new Color(CONFIG.city.sodium), []);
 
   const lamps = useMemo(() => {
     const r = getRoute();
@@ -95,14 +95,12 @@ export function StreetLights() {
   const order = useMemo(() => [] as { i: number; d: number }[], []);
 
   useFrame((state) => {
-    const on = chapterState.stage === 'city';
-    group.current.visible = on || chapterState.cloud > 0.2;
     const e = chapterState.env;
-    headMat.current.emissiveIntensity = CONFIG.coast.sodiumEmissive * e.lamps;
+    headMat.current.emissiveIntensity = CONFIG.city.sodiumEmissive * e.lamps;
     // real lights: the lamps nearest to what the camera is looking at
     _focus.copy(state.camera.position).lerp(carState.position, 0.6);
     order.length = 0;
-    if (on) for (let i = 0; i < lampHeads.length; i++) order.push({ i, d: lampHeads[i].distanceToSquared(_focus) });
+    for (let i = 0; i < lampHeads.length; i++) order.push({ i, d: lampHeads[i].distanceToSquared(_focus) });
     order.sort((a, b) => a.d - b.d);
     for (let k = 0; k < count; k++) {
       const light = lights.current[k];

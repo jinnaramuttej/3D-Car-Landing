@@ -199,9 +199,6 @@ export function Bridge() {
   }, [build]);
 
   useFrame((state) => {
-    const on = chapterState.stage === 'city';
-    group.current.visible = on || chapterState.cloud > 0.2;
-    if (!on) return;
     const t = state.clock.elapsedTime;
     // the deck takes the sky the way the wet city streets do: faint (three ignores
     // envMapIntensity for materials that fall back to scene.environment)
@@ -213,7 +210,7 @@ export function Bridge() {
     if (d) d.envMapIntensity = chapterState.env.groundEnv * 1.4;
     // aviation lights: one second on, one off
     warnMat.emissiveIntensity = (Math.sin(t * Math.PI) > 0 ? 9 : 0.4) * (0.5 + 0.5 * chapterState.env.city);
-    lampMat.current.emissiveIntensity = CONFIG.coast.sodiumEmissive * chapterState.env.lamps;
+    lampMat.current.emissiveIntensity = CONFIG.city.sodiumEmissive * chapterState.env.lamps;
   }, -1);
 
   return (

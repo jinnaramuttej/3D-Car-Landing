@@ -137,7 +137,6 @@ export function EdgeSeal() {
   }, [ends]);
 
   useFrame((state) => {
-    group.current.visible = chapterState.stage === 'city' || chapterState.cloud > 0.2;
     (wallMat.uniforms.uColor.value as Color).copy(chapterState.env.fogColor);
     wallMat.uniforms.uTime.value = state.clock.elapsedTime;
     blinkMat.emissiveIntensity = Math.sin(state.clock.elapsedTime * 3.2) > 0 ? 6 : 0.6;

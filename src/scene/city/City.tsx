@@ -15,7 +15,7 @@ import { disposeReflection, reflectionUniforms, renderReflection } from './cityR
 export const CITY_URL = '/models/city.glb';
 
 /**
- * Everything on the city stage lives on its own layer: the main camera sees it, the
+ * Everything in the city lives on its own layer: the main camera sees it, the
  * street-reflection camera sees only it (and the sky), and the car's contact-shadow pass
  * (layer 0) never has to draw the city. Layer 1 stays "main camera only" (rain, pools).
  */
@@ -31,15 +31,8 @@ export function useCityLayer(ref: React.RefObject<Object3D | null>) {
   });
 }
 
-/** Draw the city stage only while it is the one on screen (and through the cloud). */
-export function useCityStage(ref: React.RefObject<Group | null>) {
-  useFrame(() => {
-    if (ref.current) ref.current.visible = chapterState.stage === 'city' || chapterState.cloud > 0.2;
-  }, -1);
-}
-
 /**
- * The city of chapters V onwards: "city" by golukumar (CC BY 4.0), rebuilt by
+ * The world the whole journey happens in: "city" by golukumar (CC BY 4.0), rebuilt by
  * scripts/optimize-city.mjs (metres, joined by material into tiles, meshopt + WebP).
  * Material names carry a kind ("road:", "window:", "sign:" ...): cityMaterials.ts turns
  * them into a wet city at night, and cityReflection.ts renders the street reflection
@@ -49,12 +42,10 @@ export function City() {
   const gltf = useGLTF(CITY_URL);
   const group = useRef<Group>(null!);
   const gl = useThree((s) => s.gl);
-  const camera = useThree((s) => s.camera);
   const scene = useThree((s) => s.scene);
   const mobile = useMemo(() => isMobile(), []);
   const mats = useRef<{ mat: import('three').MeshStandardMaterial; kind: CityKind }[]>([]);
   const envMap = useRef<Texture | null>(null);
-  useCityStage(group);
   useCityLayer(group);
 
   useLayoutEffect(() => {
@@ -71,7 +62,6 @@ export function City() {
   useEffect(() => () => disposeReflection(), []);
 
   useFrame((state) => {
-    const on = chapterState.stage === 'city';
     const e = chapterState.env;
     const c = CONFIG.city;
     const u = cityUniforms;
@@ -87,20 +77,18 @@ export function City() {
     // three ignores envMapIntensity for materials that fall back to scene.environment, so
     // hand the map over explicitly: wet ground gets a faint sky (the street reflection does
     // the rest), facades a little more
-    if (on && state.scene.environment !== envMap.current) {
+    if (state.scene.environment !== envMap.current) {
       envMap.current = state.scene.environment;
       for (const { mat } of mats.current) {
         mat.envMap = envMap.current;
         mat.needsUpdate = true;
       }
     }
-    if (on) {
-      for (const { mat, kind } of mats.current) {
-        mat.envMapIntensity = kind === 'road' || kind === 'ground' ? e.groundEnv * 1.6 : kind === 'metal' ? e.env * 0.8 : e.env * 0.35;
-      }
+    for (const { mat, kind } of mats.current) {
+      mat.envMapIntensity = kind === 'road' || kind === 'ground' ? e.groundEnv * 1.6 : kind === 'metal' ? e.env * 0.8 : e.env * 0.35;
     }
     // the street reflection: at the road under the car, at sea level once on the bridge
-    if (!on || mobile || c.reflection <= 0) {
+    if (mobile || c.reflection <= 0) {
       reflectionUniforms.uReflOn.value = 0;
       return;
     }
@@ -108,17 +96,6 @@ export function City() {
     const planeY = overSea ? CITY_ORIGIN.y + SEA_LEVEL : carState.position.y - 0.02;
     renderReflection(gl, scene, state.camera as PerspectiveCamera, planeY, c.reflectionScale, 420);
   }, -0.5);
-
-  // compile the city's shaders while the waterfront plays, not at the switch
-  useEffect(() => {
-    const g = group.current;
-    if (!g) return;
-    const was = g.visible;
-    g.visible = true;
-    void gl.compileAsync(g, camera).finally(() => {
-      g.visible = was;
-    });
-  }, [gl, camera, gltf.scene]);
 
   return (
     <group ref={group} position={CITY_ORIGIN}>

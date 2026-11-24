@@ -6,8 +6,8 @@ import { useStore } from '@/lib/store';
 import { scrollToProgress } from '@/lib/useScrollTimeline';
 
 /**
- * Chapter mini-map: one dot per chapter down the right edge, filled as you scroll
- * through it. Clicking jumps straight there (the scene cross-dissolves over the jump).
+ * Chapter mini-map: one dot per chapter down the right edge, filled as the journey goes
+ * through it. Clicking drives there (fast, but a drive: the scene never jumps).
  */
 export function MiniMap() {
   const root = useRef<HTMLElement>(null);
@@ -28,8 +28,8 @@ export function MiniMap() {
         else d.removeAttribute('aria-current');
       });
     };
-    render(useStore.getState().progress);
-    return useStore.subscribe((s) => render(s.progress));
+    render(useStore.getState().view);
+    return useStore.subscribe((s) => render(s.view));
   }, []);
 
   return (

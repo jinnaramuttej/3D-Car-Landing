@@ -111,11 +111,11 @@ export const CONCEPT = 'Unofficial concept';
 
 /** One line per chapter. */
 export const chapters: Record<ChapterId, { line: string }> = {
-  stillness: { line: 'Midnight on the waterfront. Nothing moves but the rain.' },
+  stillness: { line: 'Midnight in the city. Nothing moves but the rain.' },
   ignition: { line: 'One turn of the key, and the night holds its breath.' },
   turn: { line: 'Thirty editions in, we still take the corner sideways.' },
-  clearing: { line: 'The smoke settles. Above the cloud, a city is waiting.' },
-  arrival: { line: 'Down through the cloud. The lights are on.' },
+  wake: { line: 'The smoke hangs in the street. The city is waiting.' },
+  arrival: { line: 'Into the city. The lights are on.' },
   robowars: { line: 'Steel, sparks and machines built to hit back.' },
   competitions: { line: 'Seven competitions. Pick a lane.' },
   speakers: { line: 'Presidents, founders, champions and laureates have spoken here.' },

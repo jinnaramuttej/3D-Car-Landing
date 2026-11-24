@@ -4,13 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "tsx scripts/check-route.ts",
+    "prebuild": "tsx scripts/check-route.ts && tsx scripts/check-contact.ts && tsx scripts/check-corridor.ts",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "check:route": "tsx scripts/check-route.ts",
+    "check:contact": "tsx scripts/check-contact.ts",
+    "check:corridor": "tsx scripts/check-corridor.ts",
     "car": "node scripts/optimize-car.mjs",
-    "city": "node scripts/optimize-city.mjs && node scripts/build-route.mjs && node scripts/trim-city.mjs && tsx scripts/check-route.ts",
+    "city": "node scripts/optimize-city.mjs && node scripts/build-route.mjs && node scripts/trim-city.mjs && tsx scripts/clear-corridor.ts && tsx scripts/check-route.ts",
     "pacing": "tsx scripts/pacing-report.ts"
   },
   "dependencies": {

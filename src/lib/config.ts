@@ -139,7 +139,7 @@ export const CONFIG = {
     nearFade: 0.35, // streaks fade out this close to the lens (metres)
     color: '#9db3c9',
     ambient: 0.32, // city glow on the drops
-    headGain: 5, // extra glow inside the headlight beams
+    headGain: 3.5, // extra glow inside the headlight beams
     tailGain: 0.8, // red glow from the tail lights
     splashLife: 0.38, // seconds
     splashRadius: 11, // metres around the car

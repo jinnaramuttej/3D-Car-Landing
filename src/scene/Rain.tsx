@@ -60,7 +60,7 @@ vec3 rainLight(vec3 p) {
   vec3 col = uRainColor * uAmbient;
   float hl = headCone(p, uHeadPos0) + headCone(p, uHeadPos1);
   // drops glow far more when the beam points at the lens
-  float fwd = 0.45 + 1.8 * pow(max(dot(uHeadDir, normalize(cameraPosition - p)), 0.0), 3.0);
+  float fwd = 0.45 + 0.75 * pow(max(dot(uHeadDir, normalize(cameraPosition - p)), 0.0), 3.0);
   col += vec3(1.0, 0.95, 0.86) * hl * uHeadGain * uHeadLevel * fwd;
   float td = distance(p, uTailPos);
   col += vec3(1.0, 0.09, 0.05) * uTailGlow / (1.0 + td * td * 1.2);

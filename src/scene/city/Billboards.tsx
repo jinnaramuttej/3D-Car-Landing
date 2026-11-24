@@ -23,7 +23,7 @@ import { chapterState, stopWeight } from '@/lib/chapterRuntime';
 import { getRoute, sampleRoute, STOPS } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
-import { leftOf } from '@/lib/motion';
+import { carState, leftOf } from '@/lib/motion';
 import { expoIndexAt, heartbeatPulse, stopAnchor, stopFx, useStops } from '@/lib/stops';
 import { ART_H, ART_W, type ArtState, drawStop, resolveFont } from './billboardArt';
 import { CITY_URL, useCityLayer } from './City';
@@ -50,6 +50,7 @@ uniform vec2 uGrid;
 uniform float uBright;
 uniform float uTime;
 uniform float uAnim;
+uniform float uWake;
 varying vec2 vUv;
 void main() {
   // one LED per grid cell: sample the canvas at the cell centre, draw a round dot
@@ -64,6 +65,11 @@ void main() {
   // a slow refresh band and per-LED sparkle (desktop only)
   float scan = 1.0 + uAnim * (0.06 * sin(vUv.y * 22.0 - uTime * 2.2) + 0.04 * (fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453 + uTime * 0.6) - 0.5));
   vec3 col = c * (led * 1.15 + 0.05) * uBright * scan;
+  // waking up as the car comes: the rows come on top-down with a stutter, then settle
+  float row = 1.0 - vUv.y;
+  float lit = smoothstep(row, row + 0.05, uWake * 1.2 - 0.1);
+  float stutter = mix(0.3 + 0.7 * step(0.45, fract(sin(floor(uTime * 20.0) * 12.9898 + floor(g.y * 0.25)) * 43758.5453)), 1.0, smoothstep(0.7, 1.0, uWake));
+  col *= mix(0.03, 1.0, lit * stutter);
   gl_FragColor = vec4(col, 1.0);
   #include <fog_fragment>
 }
@@ -86,6 +92,8 @@ type Board = {
   height: number;
   /** Mounted on a facade, or standing on its own legs. */
   onWall: boolean;
+  /** 0 asleep .. 1 fully on (it wakes as the car comes, sleeps once it is well past). */
+  wake: number;
 };
 
 const _ray = new Raycaster();
@@ -164,6 +172,7 @@ export function Billboards() {
           uBright: { value: 2.2 },
           uTime: { value: 0 },
           uAnim: { value: mobile ? 0 : 1 },
+          uWake: { value: 0 },
           fogColor: { value: new Color() },
           fogDensity: { value: 0 },
         },
@@ -171,7 +180,7 @@ export function Billboards() {
         fragmentShader: ledFrag,
         fog: true,
       });
-      return { id, canvas, ctx, tex, mat, key: '', anim: '', tint: new Color(), centre: new Vector3(), normal: new Vector3(0, 0, 1), width: spec.width, height: spec.height, onWall: false };
+      return { id, canvas, ctx, tex, mat, key: '', anim: '', tint: new Color(), centre: new Vector3(), normal: new Vector3(0, 0, 1), width: spec.width, height: spec.height, onWall: false, wake: 0 };
     });
   }, [mobile]);
 
@@ -251,6 +260,10 @@ export function Billboards() {
       }
       const u = b.mat.uniforms;
       u.uTime.value = t;
+      const ahead = STOPS[b.id].s - carState.s;
+      const want = ahead < 120 && ahead > -70 ? 1 : 0;
+      b.wake += (want - b.wake) * (1 - Math.exp(-dt / (want > b.wake ? 0.9 : 2)));
+      u.uWake.value = mobile ? want : b.wake;
       const dk = b.id === 'dkms' ? 0.8 + 0.25 * stopFx.heartbeat : 1;
       u.uBright.value = CONFIG.city.billboardGlow * chapterState.env.city * dk;
       if (w > bestW) {

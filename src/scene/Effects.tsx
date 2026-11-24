@@ -33,6 +33,7 @@ import { MotionBlurEffect } from './postfx/MotionBlurEffect';
 import { FilmGrainEffect } from './postfx/FilmGrainEffect';
 import { createSanitizePass } from './postfx/SanitizePass';
 import { SoftSmokeEffect } from './postfx/SoftSmokeEffect';
+import { SpeedStreaksEffect } from './postfx/SpeedStreaksEffect';
 
 /**
  * The post chain, in order (the composer splits it into passes where effects that
@@ -41,6 +42,7 @@ import { SoftSmokeEffect } from './postfx/SoftSmokeEffect';
  *   smoke        the tyre smoke, soft against the scene's depth (postfx/SoftSmokeEffect)
  *   DOF          focused on the car during the drift, on the section's subject after
  *   motion blur  camera reprojection, with the car carried by its own motion
+ *   streaks      light-speed streaks and a zoom smear, only when the car is flat out
  *   bloom        + anamorphic streaks on the brightest lights
  *   lens drops   rain on the glass, streaked by camera motion
  *   tone map     ACES, then the teal/orange LUT
@@ -67,6 +69,7 @@ export function Effects() {
       smoke,
       smokePass: new EffectPass(camera, smoke),
       motionBlur: new MotionBlurEffect(camera, carState, p.motionBlurSamples),
+      streaks: new SpeedStreaksEffect(),
       anamorphic: new AnamorphicEffect(),
       drops: new LensDropsEffect(),
       lut,
@@ -77,6 +80,7 @@ export function Effects() {
   useEffect(
     () => () => {
       fx.motionBlur.dispose();
+      fx.streaks.dispose();
       fx.anamorphic.dispose();
       fx.drops.dispose();
       fx.lut.dispose();
@@ -138,6 +142,10 @@ export function Effects() {
 
     camera.getWorldPosition(_pos);
 
+    // flat out (a long catch-up drive): the frame streaks
+    fx.streaks.amount = MathUtils.smoothstep(Math.abs(carState.speed), 60, 105) * p.streaks;
+    fx.streaks.time = motion.clock;
+
     const mb = fx.motionBlur;
     mb.strength = p.motionBlur;
     mb.maxBlur = p.motionBlurMax;
@@ -191,6 +199,7 @@ export function Effects() {
         <>
           <DepthOfField ref={dof} focusDistance={5} focusRange={3} bokehScale={0} resolutionScale={0.5} />
           <primitive object={fx.motionBlur} />
+          <primitive object={fx.streaks} />
         </>
       )}
       <Bloom

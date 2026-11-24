@@ -190,6 +190,7 @@ export const CONFIG = {
     motionBlur: 0.45, // share of each frame's motion that gets smeared (0.5 ~ 180 degree shutter)
     motionBlurMax: 0.025, // longest smear, in screen heights
     motionBlurSamples: 8, // (mount)
+    streaks: 1, // light-speed streaks when the car is flat out (60-105 m/s)
     cutDistance: 2.5, // metres the camera jumps in one frame that count as a cut (no blur that frame)
     anamorphic: 0.5, // horizontal lens streaks on the brightest lights
     anamorphicThreshold: 2.2, // HDR level where the streaks start
@@ -348,6 +349,7 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
   post: {
     motionBlur: [0, 1.5, 0.01],
     motionBlurMax: [0, 0.1, 0.001],
+    streaks: [0, 2, 0.01],
     cutDistance: [0.2, 10, 0.1],
     anamorphic: [0, 3, 0.01],
     anamorphicThreshold: [0, 10, 0.05],

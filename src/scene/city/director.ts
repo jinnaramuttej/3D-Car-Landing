@@ -546,17 +546,17 @@ function zoneRig(id: ZoneId, out: Pose) {
   out.shake = 0.35;
   out.nearFade[0] = 0.35;
   out.nearFade[1] = 2;
-  if (ACROSS[id]) acrossBoard(z, a, u, out);
+  if (ACROSS(id)) acrossBoard(z, a, u, out);
 }
 
 /**
- * Stops whose billboard stands too far off the road for the trailing shot to hold all of
- * it (the Stage's facade is 22 m out and there is no closer one): while the panel plays,
+ * Stops whose billboard the trailing shot can't hold all of (a high board on a wall over
+ * the car's side of the road: the trailing camera sees its lower half): while the panel plays,
  * the camera cranes forward and across to the far side of the road, rises, and turns to
  * face the board, the lens sized so the whole board fits, pushing in a little while it
  * holds; then it settles back behind the car for the launch.
  */
-const ACROSS: Record<ZoneId, boolean> = { robowars: false, competitions: false, catalyst: false, workshops: false, speakers: true, dkms: false };
+const ACROSS = (id: ZoneId) => STOPS[id].across === true;
 
 const _ap = new Vector3();
 const _ax = new Vector3();

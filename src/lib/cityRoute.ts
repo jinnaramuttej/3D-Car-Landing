@@ -45,6 +45,11 @@ export type StopSpec = {
   mount?: 'wall' | 'gantry' | 'pylon';
   /** Route metres where the billboard stands, when that isn't `s` (a gantry up ahead). */
   boardS?: number;
+  /**
+   * The camera crosses the road and turns to face the board while the panel plays (a high
+   * board on the car's side of the road, which the trailing shot sees only the bottom of).
+   */
+  across?: boolean;
 };
 
 /**
@@ -59,15 +64,15 @@ export type StopSpec = {
  */
 export const STOPS: Record<'robowars' | 'competitions' | 'catalyst' | 'workshops' | 'speakers' | 'dkms' | 'finale', StopSpec> = {
   /** The Arena: down the east road. */
-  robowars: { s: 420, side: -1, width: 16, height: 9, lift: 6.5 },
+  robowars: { s: 420, side: -1, width: 16, height: 9, lift: 6.5, across: true },
   /** The Pit Lane: round onto the south ring. */
-  competitions: { s: 560, side: -1, width: 16, height: 9, lift: 6.5 },
+  competitions: { s: 560, side: -1, width: 16, height: 9, lift: 6.5, across: true },
   /** Catalyst: up the west curve (a smaller wall: a smaller board). */
-  catalyst: { s: 922, side: -1, width: 12, height: 6.75, lift: 6 },
+  catalyst: { s: 922, side: -1, width: 12, height: 6.75, lift: 6, across: true },
   /** Workshops and Techfest World MUN: on the way back down, on the left. */
   workshops: { s: 1338, side: 1, width: 16, height: 9, lift: 6.5 },
-  /** The Stage: past speakers, and the TechExpo / Ignite exhibits; up on the ramp. */
-  speakers: { s: 1530, side: -1, width: 16, height: 9, lift: 6.5 },
+  /** The Stage: past speakers, and the TechExpo / Ignite exhibits; up on the ramp, on a clear facade (the next one along has a terrace awning in front of it). */
+  speakers: { s: 1468, side: -1, width: 16, height: 9, lift: 6.5, across: true },
   /** The Heartbeat: where the ramp turns for the bridge. */
   dkms: { s: 1700, side: -1, width: 16, height: 9, lift: 6.5 },
   finale: { s: ROUTE_LENGTH + 340, side: 1, width: 18, height: 10, lift: 0 },

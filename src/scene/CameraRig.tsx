@@ -12,9 +12,10 @@ import { interaction } from '@/lib/interaction';
 import { layoutState, type Rect } from '@/lib/layout';
 import { carState, forwardOf, leftOf } from '@/lib/motion';
 import { pointer, trackPointer } from '@/lib/pointer';
+import { useStore } from '@/lib/store';
 import { EXTRAS, type ExtraId } from '@/lib/cityRoute';
 import { type BoardId, stopAnchor } from '@/lib/stops';
-import { applyCityShot, cityShotState } from './city/cityCamera';
+import { applyCityShot, cityShotState, lens } from './city/cityCamera';
 import { director, directShot } from './city/director';
 
 /**
@@ -76,6 +77,21 @@ function project(cam: PerspectiveCamera, pts: Vector3[], w: number, h: number, o
   return out;
 }
 
+/** Cinematic mode's bars, 0..1 (eased like their CSS transition: 0.9 s, ease-in-out cubic). */
+const bars = { t: 0 };
+const BARS_SECONDS = 0.9;
+const BARS_ASPECT = 2.39;
+
+function updateBars(dt: number, w: number, h: number) {
+  const on = useStore.getState().cinematic;
+  bars.t = MathUtils.clamp(bars.t + ((on ? 1 : -1) * Math.min(dt, 0.1)) / BARS_SECONDS, 0, 1);
+  const t = bars.t;
+  const e = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+  const aspect = w / Math.max(1, h);
+  // (no bars on a tall screen, as in the CSS)
+  lens.visible = aspect < 1.2 ? 1 : 1 - (1 - Math.min(1, aspect / BARS_ASPECT)) * e;
+}
+
 const carBox = Array.from({ length: 8 }, () => new Vector3());
 const boardBox = Array.from({ length: 4 }, () => new Vector3());
 const carRect: Rect = { x0: 0, y0: 0, x1: 0, y1: 0 };
@@ -133,6 +149,7 @@ export function CameraRig() {
     const dt = Math.min(rawDt, 1 / 20);
     const t = state.clock.elapsedTime;
     directShot(shot);
+    updateBars(rawDt, state.size.width, state.size.height);
     applyCityShot(cam, shot, t);
     const rev = applyExtras(cam, parallax, dt, t, shot.id.startsWith('stop') ? 1 : 0.6, mobile);
     cameraState.shotId = shot.id;

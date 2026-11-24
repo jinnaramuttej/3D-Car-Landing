@@ -2,7 +2,14 @@ import { MathUtils, type PerspectiveCamera, Vector3 } from 'three';
 import { CONFIG } from '@/lib/config';
 import { carState } from '@/lib/motion';
 
-const { clamp, degToRad } = MathUtils;
+const { clamp, degToRad, radToDeg } = MathUtils;
+
+/**
+ * How much of the canvas height shows: cinematic mode's 2.39:1 bars cover the rest (set by
+ * CameraRig). The lens widens to match, so the strip between the bars holds the shot the
+ * director framed, at the vertical angle it asked for.
+ */
+export const lens = { visible: 1 };
 
 /** One frame of the camera, as the director (director.ts) asks for it. World space. */
 export type CityShot = {
@@ -75,8 +82,9 @@ export function applyCityShot(cam: PerspectiveCamera, shot: CityShot, t: number)
     cam.translateY((Math.sin(ts * 19.7 + 0.7) * 0.5 + Math.sin(ts * 41.9 + 2.6) * 0.3 + Math.sin(ts * 67.1) * 0.2) * a * 0.7);
     cam.rotateZ(degToRad(c.shakeRollDeg) * (a / Math.max(1e-3, c.shakePeak)) * Math.sin(ts * 13.3));
   }
-  if (Math.abs(cam.fov - fov) > 1e-3) {
-    cam.fov = fov;
+  const full = lens.visible < 0.999 ? radToDeg(2 * Math.atan(Math.tan(degToRad(fov) / 2) / lens.visible)) : fov;
+  if (Math.abs(cam.fov - full) > 1e-3) {
+    cam.fov = full;
     cam.updateProjectionMatrix();
   }
 }

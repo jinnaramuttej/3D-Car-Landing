@@ -76,6 +76,43 @@ button {
   transform-origin: bottom;
 }
 
+/* cinematic mode: 2.39:1 bars (CameraRig widens the lens over the same 0.9 s, so the strip
+   between them holds the whole shot); the drift's own bars step aside under them */
+.cine-bars {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.cine-bars > i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: max(0px, calc((100% - 100vw / 2.39) / 2));
+  background: #000;
+  transform: scaleY(0);
+  transition: transform 0.9s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.cine-bars > i:first-child {
+  top: 0;
+  transform-origin: top;
+}
+.cine-bars > i:last-child {
+  bottom: 0;
+  transform-origin: bottom;
+}
+.is-cinematic .cine-bars > i {
+  transform: scaleY(1);
+}
+.is-cinematic .letterbox {
+  visibility: hidden;
+}
+@media (max-aspect-ratio: 6/5) {
+  .cine-bars {
+    display: none;
+  }
+}
+
 /* chapter cards: numeral, title, one line. One at a time, in the slot the layout solver
    picks (Overlay.tsx), faded by --gate (calm, settled) and --slotfade (moving slots) */
 .cards {

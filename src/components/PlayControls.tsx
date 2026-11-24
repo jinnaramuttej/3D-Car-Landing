@@ -27,7 +27,7 @@ export function CinemaIcon() {
 /**
  * The Play button's other half: the progress bar along the top while it runs (time and
  * total), cinematic mode (the navbar and the mini-map step aside; Esc or the dock brings
- * them back), and a small dock with play/pause and the way out of cinematic mode, which
+ * them back, and 2.39:1 bars come in), and a small dock with play/pause and the way out of cinematic mode, which
  * wakes up on mouse movement.
  */
 export function PlayControls() {
@@ -75,6 +75,11 @@ export function PlayControls() {
     <>
       <div className={`play-bar${on || cinematic ? ' is-on' : ''}`} aria-hidden>
         <div ref={bar} />
+      </div>
+      {/* 2.39:1 bars in cinematic mode (the camera widens its lens to match, CameraRig) */}
+      <div className="cine-bars" aria-hidden>
+        <i />
+        <i />
       </div>
       {cinematic && (
         <div className={`play-dock${awake || auto !== 'playing' ? ' is-awake' : ''}`} role="toolbar" aria-label="Playback">

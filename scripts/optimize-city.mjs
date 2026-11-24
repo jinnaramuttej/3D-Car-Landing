@@ -1,5 +1,6 @@
 /**
- * Builds public/models/city.glb from the source model.
+ * Builds assets/city-full.glb from the source model (trim-city.mjs then cuts it down to
+ * public/models/city.glb, what the journey can see).
  *
  *   node scripts/optimize-city.mjs [source.glb] [out.glb]
  *
@@ -29,7 +30,7 @@ import sharp from 'sharp';
 import { ledPalm, ledSign, ledTree } from './city-textures.mjs';
 
 const SRC = process.argv[2] ?? path.join(os.homedir(), 'Downloads', 'city', 'source', 'Untitled.glb');
-const OUT = process.argv[3] ?? path.join(process.cwd(), 'public', 'models', 'city.glb');
+const OUT = process.argv[3] ?? path.join(process.cwd(), 'assets', 'city-full.glb');
 
 /** Source lane width (model units) -> 3.5 m. */
 const LANE_SOURCE = 0.06;

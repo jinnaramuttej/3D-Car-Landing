@@ -9,7 +9,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "check:route": "tsx scripts/check-route.ts",
-    "city": "node scripts/optimize-city.mjs && node scripts/build-route.mjs"
+    "city": "node scripts/optimize-city.mjs && node scripts/build-route.mjs && node scripts/trim-city.mjs && tsx scripts/check-route.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import {
@@ -159,6 +159,8 @@ export function Billboards() {
   const group = useRef<Group>(null!);
   useCityLayer(group);
   const spill = useRef<PointLight>(null!);
+  // the boards render once more after they're hung, so the ones on a wall lose their legs
+  const [, setPlaced] = useState(false);
 
   const boards = useMemo<Board[]>(() => {
     resolveFont();
@@ -207,6 +209,7 @@ export function Billboards() {
       a.normal.copy(b.normal);
       a.placed = true;
     }
+    setPlaced(true);
     if (process.env.NODE_ENV !== 'production') {
       (window as unknown as { __boards?: unknown }).__boards = boards.map((b) => ({ id: b.id, onWall: b.onWall, centre: b.centre.toArray().map((v) => +v.toFixed(1)) }));
     }

@@ -30,7 +30,9 @@ import {
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { chapterState } from '@/lib/chapterRuntime';
-import { feel, stepBody } from '@/lib/feel';
+import { feel, ROLL, stepBody } from '@/lib/feel';
+import { carContact, contactState } from '@/lib/cityDrive';
+import { TRAVEL } from '@/lib/ground';
 import { interaction } from '@/lib/interaction';
 import { createGlowTexture } from '@/lib/textures';
 import { COLD, coldHeadlights, coldOpen, coldTailLights, stepColdOpen } from '@/lib/coldOpen';
@@ -63,6 +65,8 @@ type Corner = {
   spin: Group;
   /** Motion-blur discs that ship with the model; faded in with wheel speed. */
   blur: Mesh[];
+  /** Hub height at rest (the wheel moves from here to follow the road's twist). */
+  baseY: number;
 };
 
 type GlowMat = { mat: MeshStandardMaterial; factor: number };
@@ -246,7 +250,7 @@ function buildRig(source: Object3D, livery: Texture, mobile: boolean): Rig {
     });
 
     if (!front) rearContacts.push(new Vector3(hub.x, box.min.y, hub.z));
-    corners.push({ id, front, steer, spin, blur });
+    corners.push({ id, front, steer, spin, blur, baseY: hub.y });
   }
 
   if (!Number.isFinite(groundOffset)) groundOffset = 0;
@@ -436,23 +440,29 @@ export function Car() {
 
     // road height and slope come from the route
     g.position.set(s.position.x, s.position.y - rig.groundOffset, s.position.z);
-    g.rotation.set(-s.pitch, s.heading, 0, 'YXZ');
+    // (height, pitch and roll fitted to the road under the four wheels: src/lib/ground.ts)
+    g.rotation.set(-s.pitch, s.heading, s.groundRoll, 'YXZ');
 
     // Body only: on its springs (pitch, roll, heave: src/lib/feel.ts), the slide's roll, and
     // a little buzz while the rears are lit up, the engine idles or revs
     stepBody(dt);
     const idle = chapterState.engineOn ? 0.0015 : 0;
     const buzz = CONFIG.drift.vibration * s.slip + idle + CONFIG.interaction.revVibration * interaction.rev;
-    body.current.rotation.x = feel.pitch;
-    body.current.rotation.z = s.roll + feel.roll + Math.sin(t * 47) * buzz * 0.5;
-    body.current.position.y = feel.heave + (Math.sin(t * 61) * 0.6 + Math.sin(t * 23.7) * 0.4) * buzz;
+    // (the car's frame sits on the road exactly; the body lags it on its springs, and
+    // squats, dives and rolls with the acceleration: never past 3 degrees of roll in all)
+    body.current.rotation.x = feel.pitch - feel.lagPitch;
+    body.current.rotation.z = MathUtils.clamp(s.roll + feel.roll + feel.lagRoll, -ROLL, ROLL) + Math.sin(t * 47) * buzz * 0.5;
+    body.current.position.y = feel.lagY + feel.heave + (Math.sin(t * 61) * 0.6 + Math.sin(t * 23.7) * 0.4) * buzz;
 
     // exhaust pops (the powertrain's lifts and upshifts, as the audio hears them)
     const flash = feel.pop * CONFIG.feel.popFlash;
     popMat.color.setRGB(1, 0.62, 0.34).multiplyScalar(flash);
     pop.current.scale.set(0.32 + 0.22 * feel.pop, 0.2 + 0.12 * feel.pop, 1);
 
-    for (const k of rig.corners) {
+    for (let i = 0; i < rig.corners.length; i++) {
+      const k = rig.corners[i];
+      // each wheel takes up the road's twist the car's plane can't, within its travel
+      k.steer.position.y = k.baseY + (contactState.ok ? MathUtils.clamp(carContact.residual[i], -TRAVEL, TRAVEL) : 0);
       if (k.front) k.steer.rotation.y = s.steer;
       k.spin.rotation.x = k.front ? s.frontSpin : s.rearSpin;
       const rate = Math.abs(k.front ? s.frontSpinRate : s.rearSpinRate);

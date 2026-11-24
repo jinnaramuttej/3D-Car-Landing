@@ -32,9 +32,12 @@ export const carState = {
   /** Body heading = pathHeading + driftYaw. */
   heading: 0,
   driftYaw: 0,
+  /** The slide's body roll (radians); the ground's own tilt is groundRoll. */
   roll: 0,
-  /** Nose up on a climb (radians). */
+  /** Nose up on a climb (radians), fitted to the road under the four wheels. */
   pitch: 0,
+  /** Left side up (radians), fitted to the road under the four wheels. */
+  groundRoll: 0,
   steer: 0,
   /** 0..1, |driftYaw| / slipRefDeg. Drives smoke, skids, shake, brake lights. */
   slip: 0,

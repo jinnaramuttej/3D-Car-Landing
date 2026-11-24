@@ -5,6 +5,12 @@ import { getRoute, routeCurvature, sampleRoute, STOPS } from './cityRoute';
 import { CONFIG } from './config';
 import { carState, forwardOf, leftOf } from './motion';
 import { DRIFT, PARK_S, sAtTime, speedAtS, timeAtProgress, ZONES, zoneAtS } from './pacing';
+import { fitContacts, hasRoad, makeContact } from './ground';
+
+/** The car's last fit to the road under its wheels (src/lib/ground.ts): the HUD and the wheels read it. */
+export const carContact = makeContact();
+/** Did the last fit find road under the car (false before the city loads: the route line then)? */
+export const contactState = { ok: false };
 
 export { DRIFT, PARK_S };
 
@@ -102,7 +108,75 @@ function buildYaw() {
     const e = driftEnvelope(i * STEP);
     if (e > 0) smooth[i] = big * e;
   }
-  return smooth;
+  return fitToRoad(smooth);
+}
+
+/** Half the car's footprint (m): across and along. */
+const HALF_W = 0.98;
+const HALF_L = 2.32;
+/** How close the car's outline may come to the edge of the street (m). */
+const EDGE = 0.3;
+
+/**
+ * Lateral reach of the car's outline (left positive) at yaw y, from the slide's pose: the
+ * tail swings round a pivot ahead of the centre and the whole car slides out with the slip.
+ */
+function reach(y: number) {
+  const d = CONFIG.drift;
+  const slip = clamp(Math.abs(y) / degToRad(Math.max(1, d.slipRefDeg)), 0, 1);
+  const centre = -d.pivotZ * Math.sin(y) - (Math.sign(y) || 1) * d.widen * slip;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const a of [-HALF_W, HALF_W])
+    for (const b of [-HALF_L, HALF_L]) {
+      const lat = centre + a * Math.cos(y) + b * Math.sin(y);
+      lo = Math.min(lo, lat);
+      hi = Math.max(hi, lat);
+    }
+  return [lo, hi];
+}
+
+/**
+ * Keeps every slide inside the street: where the car's outline would reach past the road's
+ * edge (getRoute().room) the yaw is trimmed until it fits, and the trim eases in and out over
+ * a few metres so the slide doesn't twitch. Without it the tail swung over the kerb islands
+ * and off the road's edge after the plaza, where the street narrows to 2-3.5 m outside.
+ */
+function fitToRoad(yaw: Float32Array) {
+  const r = getRoute();
+  const n = yaw.length;
+  const k = new Float32Array(n).fill(1);
+  for (let i = 0; i < n; i++) {
+    const y0 = yaw[i];
+    if (Math.abs(y0) < 1e-3) continue;
+    const [roomL, roomR] = r.room(i * STEP);
+    let f = 1;
+    for (let it = 0; it < 30; it++) {
+      const [lo, hi] = reach(y0 * f);
+      if (lo >= -(roomR - EDGE) && hi <= roomL - EDGE) break;
+      f *= 0.94;
+    }
+    k[i] = Math.max(0.15, f);
+  }
+  // ease the trim: the tightest within +-8 m, then softened
+  const rad = Math.round(8 / STEP);
+  const tight = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let m = 1;
+    for (let j = Math.max(0, i - rad); j <= Math.min(n - 1, i + rad); j++) m = Math.min(m, k[j]);
+    tight[i] = m;
+  }
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    let cnt = 0;
+    for (let j = Math.max(0, i - rad); j <= Math.min(n - 1, i + rad); j++) {
+      sum += tight[j];
+      cnt++;
+    }
+    out[i] = yaw[i] * Math.min(k[i], sum / cnt);
+  }
+  return out;
 }
 
 /** Drift yaw (radians) the car wants at route metres s. */
@@ -152,7 +226,6 @@ export function stepCityDrive(p: number, dt: number) {
   damp('steer', geomSteer * (1 - st.slip) - slideSign * degToRad(d.counterSteerDeg) * st.slip, d.steerSmooth);
   // (the slide's roll; cornering roll comes from the body's springs, src/lib/feel.ts)
   damp('roll', degToRad(d.rollDeg) * slideSign * st.slip, d.rollSmooth);
-  damp('pitch', pitchOut.pitch, 0.15);
 
   // pose: the tail swings out round a point just ahead of the car's centre
   st.heading = st.pathHeading + st.driftYaw;
@@ -165,6 +238,18 @@ export function stepCityDrive(p: number, dt: number) {
   );
   st.position.addScaledVector(st.outward, d.widen * st.slip);
   forwardOf(st.heading, st.forward);
+
+  // height, pitch and roll: fitted to the road under the four wheels, not the smoothed
+  // route line (that only until the city's road is in)
+  contactState.ok = hasRoad() && fitContacts(st.position.x, st.position.z, st.heading, st.pathPoint.y, carContact);
+  if (contactState.ok) {
+    st.position.y = carContact.y;
+    st.pitch = carContact.pitch;
+    st.groundRoll = carContact.roll;
+  } else {
+    damp('pitch', pitchOut.pitch, 0.15);
+    st.groundRoll = 0;
+  }
 
   // speed, braking and wheels; the rear wheels keep spinning (and smoking) while the car
   // is held sideways, even if the scroll stops mid-drift

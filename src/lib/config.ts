@@ -33,7 +33,7 @@ export const CONFIG = {
   drift: {
     yawPeakDeg: 38,
     slipRefDeg: 34, // yaw that counts as "full slip" for smoke, skids and shake
-    rollDeg: 4, // body roll away from the turn at full slip
+    rollDeg: 3, // body roll away from the turn at full slip (the body never rolls past 3 degrees in all)
     counterSteerDeg: 24, // front wheels steer against the slide
     widen: 1.6, // metres the car slides toward the outside at full slip
     pivotZ: 0.9, // yaw pivot in metres ahead of the car centre (tail swings, nose holds the line)
@@ -90,8 +90,11 @@ export const CONFIG = {
   feel: {
     bodyHz: 1.7, // natural frequency of the body on its springs
     bodyDamping: 0.42, // damping ratio (1 = no bounce)
-    pitchPerAccel: 0.0022, // radians of pitch per m/s² (squat under power, dive on the brakes)
-    rollPerAccel: 0.0011, // radians of roll per m/s² of cornering
+    squatPerAccel: 0.0026, // radians of nose-up per m/s² under power (up to 1.5 degrees)
+    divePerAccel: 0.0035, // radians of nose-down per m/s² on the brakes (up to 2 degrees)
+    rollPerAccel: 0.004, // radians of roll per m/s² of cornering (up to 3 degrees)
+    groundHz: 1.5, // the body's spring onto the road under the wheels
+    groundDamping: 0.85,
     heavePerAccel: 0.004, // metres of heave per m/s² over crests and dips
     bumps: 0.006, // metres of road texture at speed
     followHz: 1.3, // the camera's spring-damped follow: lags the car's acceleration
@@ -263,8 +266,11 @@ export const RANGES: { [G in keyof Config]?: { [K in keyof Config[G]]?: Range } 
   feel: {
     bodyHz: [0.3, 5, 0.05],
     bodyDamping: [0.05, 1.5, 0.01],
-    pitchPerAccel: [0, 0.01, 0.0001],
+    squatPerAccel: [0, 0.01, 0.0001],
+    divePerAccel: [0, 0.01, 0.0001],
     rollPerAccel: [0, 0.01, 0.0001],
+    groundHz: [0.3, 5, 0.05],
+    groundDamping: [0.2, 1.5, 0.01],
     heavePerAccel: [0, 0.02, 0.0005],
     bumps: [0, 0.03, 0.0005],
     followHz: [0.3, 5, 0.05],

@@ -9,7 +9,9 @@ import { CITY_ORIGIN, getRoute, SEA_LEVEL } from '@/lib/cityRoute';
 import { CONFIG } from '@/lib/config';
 import { isMobile } from '@/lib/device';
 import { carState } from '@/lib/motion';
-import { type CityKind, cityUniforms, patchCity } from './cityMaterials';
+import { type CityKind, cityUniforms, kindOf, patchCity } from './cityMaterials';
+import { setRoadMeshes } from '@/lib/ground';
+import { setCityMeshes } from '@/lib/collide';
 import { disposeReflection, reflectionUniforms, renderReflection } from './cityReflection';
 
 export const CITY_URL = '/models/city.glb';
@@ -58,6 +60,24 @@ export function City() {
       if (m.isMesh) m.receiveShadow = false;
     });
     mats.current = patchCity(gltf.scene);
+    // what the wheels stand on: the road and ground surfaces only (src/lib/ground.ts)
+    // and the camera's collision sphere and the debug HUD test against all of it (src/lib/collide.ts)
+    const roads: Mesh[] = [];
+    const all: { mesh: Mesh; road: boolean }[] = [];
+    gltf.scene.traverse((o) => {
+      const m = o as Mesh;
+      if (!m.isMesh) return;
+      const kind = kindOf(Array.isArray(m.material) ? m.material[0] : m.material);
+      const road = kind === 'road' || kind === 'ground';
+      if (road) roads.push(m);
+      all.push({ mesh: m, road });
+    });
+    setRoadMeshes(roads);
+    setCityMeshes(all);
+    return () => {
+      setRoadMeshes([]);
+      setCityMeshes([]);
+    };
   }, [gltf.scene]);
 
   useEffect(() => () => disposeReflection(), []);

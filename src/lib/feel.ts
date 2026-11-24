@@ -25,6 +25,17 @@ import { onWarmupEnd } from './warmup';
  * Every step is allocation-free; Car.tsx steps the body and the pops, CameraRig the rest.
  */
 export const feel = {
+  /** The body's spring onto the road pose (height m, pitch and roll rad) and its speeds. */
+  gy: 0,
+  gyV: 0,
+  gp: 0,
+  gpV: 0,
+  gr: 0,
+  grV: 0,
+  /** How far the body lags the road pose this frame (what Car.tsx puts on the body). */
+  lagY: 0,
+  lagPitch: 0,
+  lagRoll: 0,
   pitch: 0,
   pitchV: 0,
   roll: 0,
@@ -49,14 +60,20 @@ export const feel = {
 
 const noise = new SimplexNoise();
 
+const deg = Math.PI / 180;
+/** Most the body squats under power (nose up), dives on the brakes (nose down) and rolls in a bend. */
+export const SQUAT = 1.5 * deg;
+export const DIVE = 2 * deg;
+export const ROLL = 3 * deg;
+
 /** Layered simplex noise in -1..1 on channel `ch` at time t (three octaves). */
 export function shakeNoise(t: number, ch: number) {
   const y = ch * 17.3;
   return noise.noise(t, y) * 0.6 + noise.noise(t * 2.1 + 3.7, y) * 0.3 + noise.noise(t * 4.3 + 7.1, y) * 0.1;
 }
 
-type Axis = 'pitch' | 'roll' | 'heave';
-const VEL = { pitch: 'pitchV', roll: 'rollV', heave: 'heaveV' } as const;
+type Axis = 'pitch' | 'roll' | 'heave' | 'gy' | 'gp' | 'gr';
+const VEL = { pitch: 'pitchV', roll: 'rollV', heave: 'heaveV', gy: 'gyV', gp: 'gpV', gr: 'grV' } as const;
 
 /** One semi-implicit step of a body axis's damped spring toward `target` (natural frequency hz). */
 function spring(axis: Axis, target: number, hz: number, zeta: number, dt: number) {
@@ -108,23 +125,38 @@ export function stepBody(dt: number) {
   // (a couple of sub-steps keep the springs stable at low frame rates)
   const n = dt > 1 / 45 ? 2 : 1;
   const h = dt / n;
-  // vertical acceleration over a crest or a dip: speed times how fast the road pitch turns
-  const pitchRate = dt > 1e-4 ? (s.pitch - feel.seen.pitch) / dt : 0;
-  feel.seen.pitch = s.pitch;
-  const vert = MathUtils.clamp(s.speed * pitchRate, -12, 12);
+  // the body onto the road pose under the wheels (height, pitch, roll): a spring-damper,
+  // so bumps and changes of slope ease in rather than snap (the wheels and the car's frame
+  // follow the road exactly; the body lags it, within its travel)
+  if (!feel.seen.init || Math.abs(s.position.y - feel.gy) > 2) {
+    feel.gy = s.position.y;
+    feel.gp = s.pitch;
+    feel.gr = s.groundRoll;
+    feel.gyV = feel.gpV = feel.grV = 0;
+  }
+  const vert = 0;
   // road texture at speed, as small kicks to the heave
   const bump = noise.noise(s.s * 0.9, 41.7) * f.bumps * MathUtils.smoothstep(Math.abs(s.speed), 4, 40);
   lateral = s.speed * s.speed * routeCurvature(s.s) * (1 - s.slip);
   const zeta = f.bodyDamping;
+  // squat (nose up) under power up to SQUAT, dive (nose down) on the brakes up to DIVE, roll
+  // away from the bend up to ROLL; the targets are capped (a jump across the page drives far
+  // harder than any real car)
+  const pitchTarget = s.accel > 0 ? -Math.min(SQUAT, s.accel * f.squatPerAccel) : Math.min(DIVE, -s.accel * f.divePerAccel);
   for (let i = 0; i < n; i++) {
-    // (targets capped: a jump across the page drives far harder than any real car)
-    spring('pitch', MathUtils.clamp(-s.accel * f.pitchPerAccel, -0.026, 0.026), f.bodyHz, zeta, h);
-    spring('roll', MathUtils.clamp(lateral * f.rollPerAccel, -0.03, 0.03), f.bodyHz * 0.9, zeta, h);
+    spring('pitch', pitchTarget, f.bodyHz, zeta, h);
+    spring('roll', MathUtils.clamp(lateral * f.rollPerAccel, -ROLL, ROLL), f.bodyHz * 0.9, zeta, h);
     spring('heave', MathUtils.clamp(-vert * f.heavePerAccel, -0.025, 0.025) + bump, f.bodyHz * 1.3, zeta, h);
+    spring('gy', s.position.y, f.groundHz, f.groundDamping, h);
+    spring('gp', s.pitch, f.groundHz, f.groundDamping, h);
+    spring('gr', s.groundRoll, f.groundHz, f.groundDamping, h);
   }
+  feel.lagY = MathUtils.clamp(feel.gy - s.position.y, -0.06, 0.06);
+  feel.lagPitch = MathUtils.clamp(feel.gp - s.pitch, -0.026, 0.026);
+  feel.lagRoll = MathUtils.clamp(feel.gr - s.groundRoll, -0.026, 0.026);
   // (a teleport, the warm-up or a hitch can kick the springs: keep them sane)
-  feel.pitch = MathUtils.clamp(feel.pitch, -0.06, 0.06);
-  feel.roll = MathUtils.clamp(feel.roll, -0.06, 0.06);
+  feel.pitch = MathUtils.clamp(feel.pitch, -SQUAT * 1.2, DIVE * 1.2);
+  feel.roll = MathUtils.clamp(feel.roll, -ROLL * 1.1, ROLL * 1.1);
   feel.heave = MathUtils.clamp(feel.heave, -0.06, 0.06);
 
   // exhaust pops: the same events the audio pops on (engineAudio.ts), above 3000 rpm

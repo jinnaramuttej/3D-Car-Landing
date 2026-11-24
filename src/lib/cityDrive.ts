@@ -4,7 +4,7 @@ import { type StopId } from './chapters';
 import { getRoute, routeCurvature, sampleRoute, STOPS } from './cityRoute';
 import { CONFIG } from './config';
 import { carState, forwardOf, leftOf } from './motion';
-import { DRIFT, PARK_S, sAtTime, speedAtS, timeAtProgress, ZONES, zoneAtS } from './pacing';
+import { DRIFT, journeySeconds, PARK_S, sAtTime, speedAtS, timeAtProgress, ZONES, zoneAtS } from './pacing';
 import { fitContacts, hasRoad, makeContact } from './ground';
 
 /** The car's last fit to the road under its wheels (src/lib/ground.ts): the HUD and the wheels read it. */
@@ -202,6 +202,8 @@ const WHEELBASE = 2.5;
  * Fills carState from journey progress. Pure kinematics, no physics: the drive is never
  * faster than the journey driver (chapterRuntime) lets progress move.
  */
+let lastJourneyT = 0;
+
 export function stepCityDrive(p: number, dt: number) {
   const st = carState;
   const d = CONFIG.drift;
@@ -216,8 +218,14 @@ export function stepCityDrive(p: number, dt: number) {
   const curvature = Math.atan2(Math.sin(h1 - h0), Math.cos(h1 - h0)) / 3;
   const geomSteer = Math.atan(WHEELBASE * curvature);
 
+  // the slide is damped in journey time, not real time: it takes the same shape at any
+  // playback rate (at 4x through a glide it lagged a quarter as far behind the car's place on
+  // the route, and a wheel swung off the road)
+  const tNow = p * journeySeconds();
+  const jdt = snap ? 0 : Math.min(Math.abs(tNow - lastJourneyT), 0.25);
+  lastJourneyT = tNow;
   const damp = (key: 'driftYaw' | 'steer' | 'roll' | 'pitch', target: number, smooth: number) => {
-    if (!snap) easing.damp(st, key, target, smooth, dt);
+    if (!snap) easing.damp(st, key, target, smooth, jdt);
     else st[key] = target;
   };
   damp('driftYaw', driftYawAt(st.s), d.yawSmooth);

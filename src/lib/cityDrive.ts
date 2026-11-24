@@ -292,4 +292,4 @@ export function stepCityDrive(p: number, dt: number) {
   st.initialized = true;
 }
 
-export const HOLD = { arrive: ARRIVE, leave: LEAVE, finaleArrive: FINALE_ARRIVE };
+export const HOLD = { arrive: ARRIVE, leave: LEAVE, finaleArrive: FINALE_ARRIVE, before: HOLD_BEFORE, after: HOLD_AFTER };
